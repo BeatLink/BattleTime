@@ -892,6 +892,24 @@ fn the_chrono_face_runs_its_stopwatch_from_a_tap_and_clears_it_with_a_long_press
     assert!(watch.failures().is_empty());
 }
 
+#[test]
+fn the_fancy_face_switches_between_analog_and_digital_on_a_long_press_and_keeps_the_choice() {
+    let mut watch = TestWatch::open_face("fancy").unwrap();
+    assert!(watch.shows_text("MON"), "{:?}", watch.visible_texts());
+    assert!(!watch.shows_text("2026"), "{:?}", watch.visible_texts());
+    assert_eq!(wakes_in(&watch), Some(1_000));
+
+    watch.long_press(120, 120);
+    assert!(watch.shows_text("MON 5 JAN 2026"), "{:?}", watch.visible_texts());
+    assert_eq!(wakes_in(&watch), Some(60_000));
+
+    watch.reopen();
+    assert!(watch.shows_text("MON 5 JAN 2026"), "{:?}", watch.visible_texts());
+
+    watch.long_press(120, 120);
+    assert!(!watch.shows_text("2026"), "{:?}", watch.visible_texts());
+}
+
 // ============================================================================
 // Notifications
 // ============================================================================

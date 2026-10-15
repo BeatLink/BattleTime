@@ -45,11 +45,17 @@ Faces install and uninstall from the companion app's store like any app, and
 ![The Chrono face](../battletime/harness/snapshots/screens/face-chrono.png){ .screen }
 ![The Waves face](../battletime/harness/snapshots/screens/face-waves.png){ .screen }
 ![The Park Skyline face](../battletime/harness/snapshots/screens/face-park-skyline.png){ .screen }
+![The Pinealog face](../battletime/harness/snapshots/screens/face-pinealog.png){ .screen }
+![The Breeze face](../battletime/harness/snapshots/screens/face-breeze.png){ .screen }
+![The OmegaTime face](../battletime/harness/snapshots/screens/face-omega-time.png){ .screen }
+![The Fancy face, analog](../battletime/harness/snapshots/screens/face-fancy.png){ .screen }
+![The Fancy face, digital](../battletime/harness/snapshots/screens/face-fancy-digital.png){ .screen }
 </div>
 
 In order: Digital, Analog, Terminal, PineTimeStyle, Casio G7710, Infineat, Pride flag, Week clock,
 Dual clock, Fibonacci clock, Word clock, Resistor clock, Lite Digital, Lite Analog, Lite Rings,
-Lite Pong, Lite Photo, Lite Weather, Phrase clock, Digistyle, RGB, Chrono, Waves and Park Skyline.
+Lite Pong, Lite Photo, Lite Weather, Phrase clock, Digistyle, RGB, Chrono, Waves, Park
+Skyline, Pinealog, Breeze, OmegaTime, and Fancy in its analog and digital looks.
 
 ## Every face
 
@@ -81,6 +87,10 @@ The Notes column is also each face's description in the companion app's store.
 | `chrono` | ZephyrLabs Chrono | A chronograph dial with a pine cone, a small globe and two stopwatch subdials; a tap starts or stops the stopwatch and a long press clears it. |
 | `waves` | ZephyrLabs Waves | Big shadowed hours over the minutes, with the date between them, on a beach of sea, surf and sand. |
 | `park-skyline` | jlukanc1 Park Skyline | The date and a big black time on a pale sky, over a black treeline with the heart rate and steps. |
+| `pinealog` | ZephyrLabs Pinealog | A cream and navy dial split on the diagonal, with the Pine64 pine cone, orange hands and numerals, the heart rate and steps. |
+| `breeze` | ZephyrLabs Breeze | KDE Breeze's pale round dial on black, with blue marks, a charcoal, grey and orange set of hands, the heart rate and steps. |
+| `omega-time` | jlukanc1 OmegaTime | A glowing cyan dial of dots and bars with outlined arrow hands, a second hand carrying a dot, and the day and weekday. |
+| `fancy` | jlukanc1 Fancy | A grey and black lattice behind either outlined arrow hands or big digits over the date; a long press switches between the two. |
 
 ## Differences from the originals
 
@@ -104,6 +114,14 @@ The Notes column is also each face's description in the companion app's store.
   its hands use BattleTime's widths.
 - Waves and Park Skyline draw their digits in BattleTime's huge font rather than JetBrains Mono
   ExtraBold, and Waves writes its date in the normal font.
+- Pinealog, Breeze and Fancy drew full-screen pictures too, also redrawn with shapes. Pinealog's two-tone background is one wide band and its pine cone an orange
+  block cut by cream lines. Breeze's dial is a circle with two rings of ticks. Fancy's pattern of
+  pine cones becomes a lattice of black lines on the same grey, and its digits are thinner than the
+  original's extra-bold font.
+- Pinealog and Breeze draw their hands at BattleTime's usual widths, thinner than the originals'.
+  OmegaTime's and Fancy's hour hands step every twelve minutes, so the arrow stays one step wide.
+- Fancy was two faces, one digital and one analog; here it is one face, and a long press switches
+  between them and remembers the choice.
 - Faces that show seconds redraw every second; the others redraw once a minute, as does Analog
   while its second hand is off.
 

@@ -234,3 +234,14 @@ fn the_software_app_refusing_an_app_matches_its_reference_picture() {
 
     assert_all_match(vec![result]);
 }
+
+#[test]
+fn the_fancy_face_in_its_digital_look_matches_its_reference_picture() {
+    let result = check_screen("face-fancy-digital", || {
+        let mut watch = TestWatch::open_face("fancy").unwrap();
+        watch.long_press(120, 120);
+        watch
+    });
+
+    assert_all_match(vec![result]);
+}
