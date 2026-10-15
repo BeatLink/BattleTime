@@ -34,11 +34,11 @@ function BarChart({ bars, goal, selected, onSelect }: {
 
   return (
     <div class="stack">
-      <ThemedText type="small" themeColor="textSecondary" style={{ minHeight: 20 }}>
+      <ThemedText type="small" themeColor="textSecondary" style={{ minHeight: '20px' }}>
         {picked ? `${picked.detail}: ${steps(picked.value)} steps` : 'Tap a bar to read it'}
       </ThemedText>
-      <div class="chart-plot" style={{ height: CHART_HEIGHT }}>
-        {goal ? <div class="chart-goal" style={{ bottom: (goal / top) * CHART_HEIGHT }} /> : null}
+      <div class="chart-plot" style={{ height: `${CHART_HEIGHT}px` }}>
+        {goal ? <div class="chart-goal" style={{ bottom: `${(goal / top) * CHART_HEIGHT}px` }} /> : null}
         {bars.map((bar, index) => (
           <button
             type="button"
@@ -49,7 +49,7 @@ function BarChart({ bars, goal, selected, onSelect }: {
             <div
               class="chart-bar"
               style={{
-                height: Math.max(bar.value > 0 ? 2 : 0, (bar.value / top) * CHART_HEIGHT),
+                height: `${Math.max(bar.value > 0 ? 2 : 0, (bar.value / top) * CHART_HEIGHT)}px`,
                 opacity: selected === null || selected === index ? 1 : 0.45,
               }}
             />

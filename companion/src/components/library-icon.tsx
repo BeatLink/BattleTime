@@ -11,7 +11,7 @@ export function LibraryIcon({ name, size = 28 }: { name: string; size?: number }
   const uri = uris[(LIBRARY_ICON_NAMES as readonly string[]).indexOf(name)];
   if (!uri) {
     return (
-      <ThemedText type="small" oneLine style={{ width: size * 2 }}>
+      <ThemedText type="small" oneLine style={{ width: `${size * 2}px` }}>
         {name}
       </ThemedText>
     );
@@ -23,7 +23,7 @@ export function LibraryIcon({ name, size = 28 }: { name: string; size?: number }
       class="library-icon"
       role="img"
       aria-label={name}
-      style={{ width: size, height: size, maskImage: mask, WebkitMaskImage: mask }}
+      style={{ width: `${size}px`, height: `${size}px`, maskImage: mask, WebkitMaskImage: mask }}
     />
   );
 }

@@ -35,10 +35,10 @@ export default function ConsoleScreen() {
           ))
         )}
       </Card>
-      <div class="line" style={{ gap: 8 }}>
+      <div class="line" style={{ gap: '8px' }}>
         <input
           class="input mono grow"
-          style={{ minHeight: 48, background: 'var(--background-element)' }}
+          style={{ minHeight: '48px', background: 'var(--background-element)' }}
           value={draft}
           onInput={(event) => setDraft(event.currentTarget.value)}
           onKeyDown={(event) => {

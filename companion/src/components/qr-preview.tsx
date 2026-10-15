@@ -16,16 +16,16 @@ export function QrPreview({ bitmap, size = 240 }: QrPreviewProps) {
   const moduleSize = Math.max(1, Math.floor(size / modules));
   const side = moduleSize * modules;
   return (
-    <div class="qr-paper" role="img" aria-label={`QR code, ${bitmap[0]} modules wide`} style={{ width: side, height: side }}>
+    <div class="qr-paper" role="img" aria-label={`QR code, ${bitmap[0]} modules wide`} style={{ width: `${side}px`, height: `${side}px` }}>
       {runs.map((run) => (
         <div
           key={`${run.row}:${run.column}`}
           class="qr-ink"
           style={{
-            left: (run.column + QUIET_MODULES) * moduleSize,
-            top: (run.row + QUIET_MODULES) * moduleSize,
-            width: run.length * moduleSize,
-            height: moduleSize,
+            left: `${(run.column + QUIET_MODULES) * moduleSize}px`,
+            top: `${(run.row + QUIET_MODULES) * moduleSize}px`,
+            width: `${run.length * moduleSize}px`,
+            height: `${moduleSize}px`,
           }}
         />
       ))}

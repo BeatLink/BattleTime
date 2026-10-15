@@ -45,7 +45,7 @@ function AlarmEditor({ alarm, onChange, onRemove }: {
   return (
     <Card>
       <div class="split">
-        <div class="line" style={{ gap: 4 }}>
+        <div class="line" style={{ gap: '4px' }}>
           <TimeField value={alarm.hour} max={23} label="Hour" onChange={(hour) => onChange({ ...alarm, hour })} />
           <ThemedText type="subtitle">:</ThemedText>
           <TimeField value={alarm.minute} max={59} label="Minute" onChange={(minute) => onChange({ ...alarm, minute })} />

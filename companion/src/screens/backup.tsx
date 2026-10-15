@@ -120,7 +120,7 @@ export default function BackupScreen() {
               {path}
             </ThemedText>
           ))}
-          <div class="stack" style={{ marginTop: 8 }}>
+          <div class="stack" style={{ marginTop: '8px' }}>
             <Button
               title="Restore to the watch"
               variant="danger"

@@ -106,7 +106,7 @@ export default function FirmwareScreen() {
 
       {firmware.flashing || firmware.status ? (
         <Card title="Progress">
-          <div class="line" style={{ gap: 8 }}>
+          <div class="line" style={{ gap: '8px' }}>
             {firmware.flashing ? <Spinner color={theme.accent} /> : null}
             <ThemedText type="small" class="grow">
               {firmware.status}

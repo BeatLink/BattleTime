@@ -30,7 +30,7 @@ function duration(seconds: number): string {
 }
 
 // The three media buttons share the row evenly.
-const MEDIA_BUTTON = { flex: 1, paddingLeft: 8, paddingRight: 8 };
+const MEDIA_BUTTON = { flex: 1, paddingLeft: '8px', paddingRight: '8px' };
 
 const stateLabel = {
   disconnected: 'Not connected',
@@ -120,7 +120,7 @@ export default function WatchScreen() {
             {lastError}
           </ThemedText>
         ) : null}
-        <div class="stack" style={{ marginTop: 8 }}>
+        <div class="stack" style={{ marginTop: '8px' }}>
           {connected ? (
             <Button title="Disconnect" variant="secondary" onClick={() => disconnect()} />
           ) : (
@@ -207,7 +207,7 @@ export default function WatchScreen() {
               .join(' · ')}
           />
           {phoneBridge.available ? (
-            <div class="line" style={{ gap: 8 }}>
+            <div class="line" style={{ gap: '8px' }}>
               <Button title="Previous" variant="secondary" style={MEDIA_BUTTON} onClick={() => void phoneBridge.mediaCommand('previous')} />
               <Button
                 title={nowPlaying.playing ? 'Pause' : 'Play'}
