@@ -242,6 +242,48 @@ The harness tests apps; the firmware itself runs in PineTimeEmulator, a Rust emu
 watch. Its suites are in `battletime/tests/emulator`, described in
 [updates.md](updates.md#proving-it-on-the-emulator).
 
+### Trying BattleTime in the emulator
+
+The emulator's window shows the whole watch running the real firmware, with every app and face
+installed, and buttons for the battery, heart rate, steps and wrist. The mouse is a finger on the
+glass, the arrow keys swipe and Tab holds the side button.
+
+Get [PineTimeEmulator](https://github.com/BeatLink/PineTimeEmulator) and clone it beside this
+repository, where the `tools/check_*.py` scripts also look for it. With Nix, `nix run` in that
+checkout builds and opens the window; without Nix, follow its
+[install steps](https://github.com/BeatLink/PineTimeEmulator/blob/main/docs/install.md) and run
+`pinetime-emulator` instead.
+
+From `battletime/`, inside `nix develop`, build the images, the apps and an external flash with
+all of them installed:
+
+```sh
+../tools/build_images.sh                        # dist/bootloader.bin and dist/firmware.bin, with the shared library
+python3 -I ../tools/build_store.py --no-plugins # every app and face into dist/store/
+cargo run --release -p battletime-packages --example filesystem_use -- --image dist/flash.bin --no-theme \
+    $(for app in dist/store/*.ntapp; do echo "$(basename "$app" .ntapp)=$app"; done)
+```
+
+Then start the watch: the bootloader at 0x0, the firmware behind its 256-byte header at 0x8000,
+and the flash image on the external flash.
+
+```sh
+nix run ../../PineTimeEmulator -- --scale 2 \
+    --image dist/bootloader.bin@0x0 --image dist/firmware.bin@0x8000 --flash-image dist/flash.bin
+```
+
+The analog face opens first, as the first face by id; swipe up for the launcher. Leave out
+`--flash-image` to see the firmware with nothing installed. Leave out `--no-theme` and every
+screen draws black. Each build must take its apps from the same commit as its firmware, so
+rebuild all three after pulling.
+
+Add `--bluetooth` and run the `btattach` line it prints to put the emulated watch on the
+computer's Bluetooth, where the companion app can connect to it as `C0:DE:0A:1B:2C:3D`. PineTimeEmulator's `docs/bluetooth.md` has the details.
+
+Without Nix, the watch's toolchain is rustup, which reads `battletime/rust-toolchain.toml` and
+adds the `thumbv7em-none-eabihf` target and `llvm-tools`, plus `cargo install cargo-binutils` for
+`cargo objcopy`, Python 3 and git.
+
 ### Running suites
 
 - A script runs as fast as the computer allows, not at the watch's speed, and a sleeping chip skips

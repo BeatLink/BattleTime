@@ -49,6 +49,9 @@ watch from InfiniTime has run only in the emulator.
 `nix develop` gives the watch's toolchain and `nix develop .#companion` the companion's; both work
 from anywhere in the repository.
 
+To try the firmware without a watch, run it in PineTimeEmulator, as
+[testing.md](docs/testing.md#trying-battletime-in-the-emulator) describes.
+
 ## Documentation
 
 The docs are also on the website, <https://beatlink.github.io/BattleTime/>, in four parts.
