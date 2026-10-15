@@ -25,8 +25,8 @@ use neotime_settings::{Setting, Settings, FILE_BYTES};
 
 use crate::{storage, system_values};
 
-/// Changes the companion app asked for, from the Bluetooth task to the shell.
-pub static CHANGES: Channel<CriticalSectionRawMutex, SettingsChange, 2> = Channel::new();
+/// Changes from the companion app for the shell; the companion waits for each reply before the next.
+pub static CHANGES: Channel<CriticalSectionRawMutex, SettingsChange, 1> = Channel::new();
 
 /// Replies for the companion app, from the shell to the Bluetooth task, kept on the heap only while they wait.
 pub static REPLIES: Channel<CriticalSectionRawMutex, Box<str>, 2> = Channel::new();
