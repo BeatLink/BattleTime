@@ -29,6 +29,8 @@ ${PREVIOUS_SLOT}          ${{ 0x60000000 + 0x001000 }}
 ${ALIVE_MARKER}           0x2000FFF0
 ${ALIVE_MAGIC}            0x4E454F54
 ${BOOT_COUNT}             0x2000FFF4
+# RAM high in the stack, under the alive marker, for code a test pokes and jumps to; flash has no room left for it.
+${SCRATCH_CODE}           0x2000FF40
 ${RESETREAS}              0x40000400
 
 # embassy-boot writes one of these over the first word of the boot state page.
