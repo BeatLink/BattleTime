@@ -49,9 +49,9 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 | Component | Full build | Recovery build |
 |---|---:|---:|
 | Firmware (start-up, shell, tasks) | 137.9 KB | 46.6 KB |
-| App host (with `battletime-ui`) | 92.8 KB | 0.0 KB |
+| App host (with `battletime-ui`) | 92.6 KB | 0.0 KB |
 | App runtime | 36.3 KB | 0.0 KB |
-| Bluetooth (controller and TrouBLE) | 33.7 KB | 43.3 KB |
+| Bluetooth (controller and TrouBLE) | 31.7 KB | 41.3 KB |
 | core, alloc and compiler builtins | 27.8 KB | 15.4 KB |
 | Storage (flash store) | 18.0 KB | 14.4 KB |
 | Settings, companion and notifications (with serde) | 17.7 KB | 2.4 KB |
@@ -61,9 +61,9 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 | Display, graphics and drivers | 5.4 KB | 3.2 KB |
 | Updates (DFU) | 3.1 KB | 2.8 KB |
 | Other constants and padding | 32.6 KB | 14.3 KB |
-| **Code and data** | **431.4 KB** | **152.4 KB** |
+| **Code and data** | **429.1 KB** | **150.5 KB** |
 | Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 0.0 KB | 327.3 KB |
+| Free of the 480 KB region, after its header | 2.4 KB | 329.3 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -319,12 +319,12 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
 | Firmware: task storage, the Bluetooth host's resources and packet pool | 21,139 B | 11,266 B |
-| Bluetooth controller | 2,610 B | 2,610 B |
+| Bluetooth controller | 2,618 B | 2,618 B |
 | Display, graphics and drivers | 372 B | 372 B |
-| App host (with `battletime-ui`) | 364 B | 0 B |
+| App host (with `battletime-ui`) | 368 B | 0 B |
 | Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,528 B** | **24,520 B** |
-| Left for the stack | 9,992 B | 41,000 B |
+| **Static RAM** (`.data` and `.bss`) | **55,544 B** | **24,528 B** |
+| Left for the stack | 9,976 B | 40,992 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
