@@ -43,7 +43,7 @@ const files = readdirSync(source)
 const entries = files.map((file) => {
   const base64 = readFileSync(join(source, file)).toString('base64');
   const id = file.replace(/\.nt(app|lib)$/, '');
-  const description = JSON.stringify(descriptions.get(file) ?? '').replaceAll("'", "\\'").slice(1, -1);
+  const description = JSON.stringify(descriptions.get(file) ?? '').replaceAll('\\"', '"').replaceAll("'", "\\'").slice(1, -1);
   const setup = file.endsWith('.ntlib') || SETUP_IDS.has(id);
   return `  { file: '${file}', setup: ${setup}, description: '${description}', base64: '${base64}' },`;
 });
