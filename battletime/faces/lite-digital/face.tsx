@@ -1,5 +1,5 @@
 // Lite digital watch face, ported from PinetimeLite's WatchFaceDigital.
-// The weekday and day sit over the month and year, above a white band with the time and seconds.
+// The weekday and day sit over the month and year, above a white band with the time, and the seconds and AM or PM in its bottom corners.
 // A blue bar under the band grows with the seconds.
 // Steps, Bluetooth, notifications and battery sit at the bottom.
 
@@ -80,15 +80,17 @@ function LiteDigitalFace() {
       </Column>
 
       <Row x={0} y={BAND_TOP} width={240} height={BAND_HEIGHT} background="#ffffff" />
-      <Row x={0} y={BAND_TOP + 8} width={240} justify="center" gap={4}>
+      <Row x={0} y={BAND_TOP + 8} width={240} justify="center">
         <Label font="huge" color="#000000">{time_text.value}</Label>
-        <Label font="condensed" color={SECONDS_COLOR}>{format_number(second_of(now.value), 2)}</Label>
       </Row>
       {!uses_24_hour_clock.value && (
-        <Label x={204} y={BAND_TOP + 58} font="small" color={SECONDS_COLOR}>
+        <Label x={12} y={BAND_TOP + 70} font="small" color={SECONDS_COLOR}>
           {hour_of(now.value) >= 12 ? "PM" : "AM"}
         </Label>
       )}
+      <Label x={210} y={BAND_TOP + 70} font="small" color={SECONDS_COLOR}>
+        {format_number(second_of(now.value), 2)}
+      </Label>
       <Column
         x={0}
         y={SECONDS_BAR_TOP}
