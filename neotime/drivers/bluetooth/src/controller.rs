@@ -259,54 +259,59 @@ impl<RadioDriver: Radio> Transport for BluetoothController<'_, RadioDriver> {
         let length =
             crate::host_interface::serialise_host_packet(packet, &mut bytes).ok_or(Error::MalformedPacket)?;
         let without_indicator = &bytes[1..length];
+        poll_fn(|context| self.poll_write(Packet::KIND, without_indicator, context)).await
+    }
+}
 
-        match Packet::KIND {
+impl<RadioDriver: Radio> BluetoothController<'_, RadioDriver> {
+    /// Hands a serialised command or data packet to the host interface, or waits for room; one copy serves every packet type.
+    #[inline(never)]
+    fn poll_write(
+        &self,
+        kind: TransportPacketKind,
+        without_indicator: &[u8],
+        context: &mut core::task::Context<'_>,
+    ) -> Poll<Result<(), Error>> {
+        match kind {
             TransportPacketKind::Cmd => {
-                poll_fn(|context| {
-                    self.state.with_host_interface(|host_interface| {
-                        if !host_interface.can_take_command() {
-                            self.state.room_waker.register(context.waker());
-                            return Poll::Pending;
-                        }
+                let written = self.state.with_host_interface(|host_interface| {
+                    if !host_interface.can_take_command() {
+                        self.state.room_waker.register(context.waker());
+                        return Poll::Pending;
+                    }
+                    let now = self.radio.now();
+                    let result = self.radio.with_transmit_buffer(|transmit_buffer| {
+                        host_interface.handle_command(without_indicator, now, transmit_buffer)
+                    });
+                    if let Ok(Some(operation)) = result {
+                        self.radio.run(operation);
+                    }
+                    Poll::Ready(result.map(|_| ()).map_err(Error::from))
+                });
+                if let Poll::Ready(Ok(())) = written {
+                    self.state.host_waker.wake();
+                }
+                written
+            }
+
+            TransportPacketKind::AclData => self.state.with_host_interface(|host_interface| {
+                match host_interface.handle_acl_data(without_indicator) {
+                    Ok(Err(())) => {
+                        self.state.room_waker.register(context.waker());
+                        Poll::Pending
+                    }
+                    Ok(Ok(())) => {
                         let now = self.radio.now();
-                        let result = self.radio.with_transmit_buffer(|transmit_buffer| {
-                            host_interface.handle_command(without_indicator, now, transmit_buffer)
-                        });
-                        if let Ok(Some(operation)) = result {
+                        if let Some(operation) = host_interface.link_layer.resume_skipped_events(now) {
                             self.radio.run(operation);
                         }
-                        Poll::Ready(result.map(|_| ()))
-                    })
-                })
-                .await?;
-                self.state.host_waker.wake();
-                Ok(())
-            }
+                        Poll::Ready(Ok(()))
+                    }
+                    Err(error) => Poll::Ready(Err(Error::from(error))),
+                }
+            }),
 
-            TransportPacketKind::AclData => {
-                poll_fn(|context| {
-                    self.state.with_host_interface(|host_interface| {
-                        match host_interface.handle_acl_data(without_indicator) {
-                            Ok(Err(())) => {
-                                self.state.room_waker.register(context.waker());
-                                Poll::Pending
-                            }
-                            Ok(Ok(())) => {
-                                let now = self.radio.now();
-                                if let Some(operation) = host_interface.link_layer.resume_skipped_events(now)
-                                {
-                                    self.radio.run(operation);
-                                }
-                                Poll::Ready(Ok(()))
-                            }
-                            Err(error) => Poll::Ready(Err(Error::from(error))),
-                        }
-                    })
-                })
-                .await
-            }
-
-            _ => Err(Error::MalformedPacket),
+            _ => Poll::Ready(Err(Error::MalformedPacket)),
         }
     }
 }
