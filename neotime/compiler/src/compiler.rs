@@ -933,7 +933,12 @@ impl<'a> Compiler<'a> {
                     format!(
                         "`{text}` is not a {}; choose one of: {}",
                         set.description(),
-                        set.names().iter().filter(|name| !name.is_empty()).copied().collect::<Vec<_>>().join(", ")
+                        set.names()
+                            .iter()
+                            .filter(|name| !name.is_empty())
+                            .copied()
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ),
                 )
             })?,
