@@ -112,6 +112,9 @@ controller has no connection parameter request of its own. `neotime_companion::l
 | Idle, from 5 s after connecting | 200 to 400 ms (160 to 320) | 2 | 6 s (600) |
 | A BLEFS transfer, a DFU update or a packages command, until 5 s after the last | 15 to 30 ms (12 to 24) | 0 | 6 s (600) |
 
+Both sets carry a 6 s supervision timeout because BlueZ connects with 420 ms, so a computer's link
+would otherwise drop after two or three missed packets and close any temporary app it opened.
+
 A request goes out only when the wanted set changes, from `serve_connection` before it waits for
 the next event, with a timer for the switch back to idle. The central answers with a Connection
 Parameter Update Response; a rejection is ignored and the link stays as it was. A request that

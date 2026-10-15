@@ -147,7 +147,7 @@ document for its part instead.
   - a flicked list glides on and stops naturally, a slow drag lifted gently does not glide, and a
     tap on a gliding list stops it without opening the row;
   - a tap that wakes the screen opens nothing;
-  - a computer's link holds for a whole session once the watch has asked for the 4 s supervision
+  - a computer's link holds for a whole session once the link's pace has asked for its 6 s supervision
     timeout (`btmon` shows the central's connection update);
   - the corners and edges report positions near 0 and 239, or edge swipes need a margin;
   - positions match the display, with column 0 and row 0 at the top left;
