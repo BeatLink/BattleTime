@@ -301,6 +301,22 @@ fn splits_where_memory_wraps() {
 }
 
 #[test]
+fn a_wrapped_run_stops_at_the_bottom_of_a_band_above_fixed_rows() {
+    let mut display = new_display_with_no_commands_recorded();
+    display.set_scroll_area(0, 84).unwrap();
+    display.scroll(49).unwrap();
+    display.take_memory_writes();
+
+    fill_rectangle(&mut display, Point::new(0, 180), Size::new(16, 60));
+
+    assert_eq!(
+        display.take_memory_writes(),
+        vec![write(229, 235), write(0, 48), write(236, 239)]
+    );
+    assert_eq!(display.take_pixel_count(), 960);
+}
+
+#[test]
 fn clips_to_the_screen() {
     let mut display = new_display_with_no_commands_recorded();
 

@@ -451,7 +451,8 @@ where
             let end_of_run = if screen_row < self.top_fixed_rows {
                 self.top_fixed_rows
             } else if screen_row < end_of_scrolling_rows {
-                screen_row + (end_of_scrolling_rows - memory_row)
+                // A run stops where the band's memory wraps and again where the band ends on screen.
+                (screen_row + (end_of_scrolling_rows - memory_row)).min(end_of_scrolling_rows)
             } else {
                 end_of_screen_rows
             };

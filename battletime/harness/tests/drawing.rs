@@ -4,7 +4,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use battletime_app_host::{PAINT_STEP_PIXELS, STRIP_PIXELS, TRANSITION_TIME_IN_MILLISECONDS};
-use battletime_app_testing::{Framebuffer, TestWatch, Touch, Transition, WidgetKind};
+use battletime_app_testing::{Direction, FakeTask, Framebuffer, TestWatch, Touch, Transition, WidgetKind};
 use battletime_display::{Display, PanelInterface};
 use battletime_runtime::ThemeColor;
 use battletime_ui::BufferedScreen;
@@ -822,5 +822,33 @@ fn the_software_list_scrolls_with_the_panel_and_shows_what_drawing_afresh_would(
 
     // The list starts right under the header, so no fixed line sits above its clipped top row.
     assert_eq!(watch.scrolling_band(), (44, 234));
+    assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
+}
+
+#[test]
+fn a_page_wiped_in_over_a_scrolled_page_draws_its_page_bar_only_along_the_bottom() {
+    let mut app = TestWatch::open_app("about").unwrap();
+    let tasks = (0..12)
+        .map(|n| FakeTask {
+            name: format!("task{n}"),
+            runs: 100 + n,
+            busy_milliseconds: 5,
+        })
+        .collect();
+    app.set_tasks(tasks);
+    let mut watch = Watch::new();
+    watch.draw_everything(&mut app);
+    for _ in 0..5 {
+        app.swipe(Direction::Left);
+        watch.draw_everything(&mut app);
+    }
+    drag_drawing_each_move(&mut app, &mut watch, 220, 120);
+
+    // The licence page has no list, so the panel stays turned while its columns wipe in over the page bar.
+    app.swipe(Direction::Left);
+    watch.draw_everything(&mut app);
+
+    assert!(app.shows_text("Licence"), "{:?}", app.visible_texts());
+    assert_ne!(watch.turned_rows(), 0);
     assert_eq!(watch.pixels_unlike(&app.fresh_frame()), 0);
 }
