@@ -35,11 +35,9 @@ document for its part instead.
   Check that raising the wrist and a shake at the usual **Shake strength** still wake the screen
   about as reliably as before, and recalibrate the strength if shakes are missed.
 
-- [ ] **Watchdog checks once a second and DISPLAY_OFF/ON on the PineTime.** The watchdog task now
-  checks, feeds and keeps the clock every second instead of every 500 ms, and the display driver
-  sends DISPLAY_OFF before sleeping the panel and DISPLAY_ON after waking it. Check that the screen
-  turns off and on cleanly with no flash of old content, that a 5 s button hold still reaches the
-  bootloader, and that `neotime debug` shows no watchdog resets over a day.
+- [ ] **DISPLAY_OFF/ON on the PineTime.** The display driver sends DISPLAY_OFF before sleeping the
+  panel and DISPLAY_ON after waking it. Check that the screen turns off and on cleanly with no
+  flash of old content.
 
 - [ ] **Paging on the PineTime.** `Pages` (2f9524a) and the system and steps apps built on it
   (5957275) have run only in the harness and the emulator; the watch still runs 3a5abe9. Flash a

@@ -237,7 +237,7 @@ out by `neotime-crash-record`) and the 8-byte stack overflow count, kept as the 
 flipped. Start-up does not zero `.uninit`, so a panic or HardFault written there survives the reset
 that follows. The kept clock is five words, which `neotime-current-time` writes and checks: "TIME",
 UTC in milliseconds as two halves, the time zone and a check over the four. The watchdog task
-writes it once a second and start-up takes it back, so after a soft or watchdog reset the clock
+writes it twice a second and start-up takes it back, so after a soft or watchdog reset the clock
 counts on from it, and RAM after a power cut fails the check. A restored clock counts as set, the
 same as one a phone set: NeoTime has no separate "set by phone" state, and the step log and alarms
 go by the clock whatever set it, so a reset no longer throws them back to the build date. A kept

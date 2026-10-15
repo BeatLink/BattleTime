@@ -23,7 +23,7 @@ back.
 
 ## Keeping time over a restart
 
-Once a second the watch keeps the time in memory that a restart leaves alone, so after a crash, a
+Twice a second the watch keeps the time in memory that a restart leaves alone, so after a crash, a
 watchdog reset or a restart it counts on from where it was, losing only the moment the bootloader
 takes. After the battery runs flat, or the first start of a new firmware, it starts from the time
 the firmware was built until a phone sets it.
