@@ -6,6 +6,7 @@ import { basename } from 'node:path';
 import { ENTER_DFU_COMMAND, flashFirmware } from '@/dfu/flash';
 import { readFirmwarePackage } from '@/dfu/package';
 import { setWatchTime } from '@/protocol/battletime';
+import { putMissingSystemFiles } from '@/protocol/system-files';
 
 import type { WatchSession } from '../ble';
 import { kilobytes, ProgressBar, say } from '../output';
@@ -14,8 +15,10 @@ export const flashUsage = `battletime flash <package.zip> [--address <mac>]
 
   Sends a Nordic DFU package, such as the zip tools/package_dfu.py makes in
   the BattleTime tree. BattleTime takes it in its running firmware, restarts, and
-  keeps it once this tool reconnects and sets the time. A watch still on
-  wasp-os, taking BattleTime's reloader, is first restarted into its bootloader.`;
+  keeps it once this tool reconnects and sets the time. The tool then puts the
+  files the firmware reads that are not apps, such as the accelerometer's
+  configuration, if the watch lacks them. A watch still on wasp-os, taking
+  BattleTime's reloader, is first restarted into its bootloader.`;
 
 export async function flash(session: WatchSession, path: string): Promise<void> {
   const firmware = readFirmwarePackage(new Uint8Array(readFileSync(path)), basename(path));
@@ -24,6 +27,7 @@ export async function flash(session: WatchSession, path: string): Promise<void> 
   say(`${firmware.name}: ${kilobytes(total)}`);
 
   const bar = new ProgressBar();
+  let confirmed = false;
   await flashFirmware(session, firmware, {
     enterDfu: () => session.send(ENTER_DFU_COMMAND),
     confirm: (link) => setWatchTime(link),
@@ -49,6 +53,7 @@ export async function flash(session: WatchSession, path: string): Promise<void> 
           say('Sent. Waiting for the new firmware to start...');
           break;
         case 'finished':
+          confirmed = step.confirmed;
           say(
             step.confirmed
               ? 'The new firmware is running, and the watch keeps it.'
@@ -58,4 +63,8 @@ export async function flash(session: WatchSession, path: string): Promise<void> 
       }
     },
   });
+  if (confirmed) {
+    const written = await putMissingSystemFiles(await session.files());
+    if (written.length > 0) say(`Put ${written.join(', ')} on the watch.`);
+  }
 }

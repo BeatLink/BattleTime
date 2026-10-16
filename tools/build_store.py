@@ -5,7 +5,9 @@ Every app in `battletime/apps` and face in `battletime/faces` is compiled to `<i
 in `companion/plugins` is packed into `<id>.ntplugin`. `store.json` lists them with a description
 taken from the docs, and `battletime-store.zip` holds all of it in one file, which is what the companion
 downloads from a release. The shared library is written beside them for the companion's bundle, but
-stays out of the list and the zip because it ships inside the firmware.
+stays out of the list and the zip because it ships inside the firmware. The files every watch needs
+that are not apps, such as the accelerometers' configuration, go under `system/` at their paths on
+the watch, for the companion's bundle too.
 
 Run it inside `nix develop`; plugins also need `npm ci` in `companion/`, or `--no-plugins`.
 docs/app-store.md describes the result.
@@ -33,6 +35,12 @@ STORE_FORMAT = 1
 STORE_ZIP = "battletime-store.zip"
 STORE_INDEX = "store.json"
 LIBRARY_FILE = "shared.ntlib"
+# Files every watch needs that are not apps, by their path on the watch, which the companion puts on it.
+SYSTEM_FOLDER = "system"
+SYSTEM_FILES = {
+    "/system/accelerometer/bma421": BATTLETIME / "drivers" / "accelerometer" / "src" / "configuration" / "bma421.bin",
+    "/system/accelerometer/bma425": BATTLETIME / "drivers" / "accelerometer" / "src" / "configuration" / "bma425.bin",
+}
 
 # Folders under apps/ that hold no app of their own: the starting point for new apps.
 NOT_APPS = {"template"}
@@ -216,6 +224,14 @@ def write_zip(out: Path, names: list) -> None:
             archive.writestr(info, (out / name).read_bytes())
 
 
+def copy_system_files(out: Path) -> None:
+    """Copies each system file under `system/`, at its path on the watch, for the companion's bundle."""
+    for watch_path, source in SYSTEM_FILES.items():
+        target = out / watch_path.lstrip("/")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, target)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=BATTLETIME / "dist" / "store", help="the folder to fill")
@@ -231,6 +247,7 @@ def main() -> None:
     compiler = BATTLETIME / "target" / "release" / "battletime-compiler"
     run([str(compiler), "library", "-o", str(out / LIBRARY_FILE)], BATTLETIME)
 
+    copy_system_files(out)
     apps = build_apps(compiler, out)
     plugins = [] if arguments.no_plugins else build_plugins(out)
 
@@ -245,7 +262,11 @@ def main() -> None:
     (out / STORE_INDEX).write_text(json.dumps(index, indent=2, ensure_ascii=False) + "\n")
     write_zip(out, [STORE_INDEX, *(entry["file"] for entry in apps + plugins)])
 
-    sums = [f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}" for path in sorted(out.iterdir())]
+    sums = [
+        f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}"
+        for path in sorted(out.iterdir())
+        if path.is_file()
+    ]
     (out / "SHA256SUMS").write_text("\n".join(sums) + "\n")
     print(f"{len(apps)} apps and faces and {len(plugins)} plugins in {out}")
 

@@ -7,6 +7,7 @@ pub mod files;
 pub mod pass;
 pub mod state_file;
 pub mod store;
+pub mod system_files;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};

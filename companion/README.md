@@ -497,9 +497,13 @@ repository and the shared library, generated from the folder `tools/build_store.
 offers only those the bundle marks for it, and the rest wait in the store. The images must match the
 firmware's runtime, so rebuild the bundle when the widget or instruction numbering changes.
 
-The shared library, with its icons, fonts and the accelerometer's configuration, ships inside the
-firmware image, so a firmware update brings it and the companion never sends it. The bundle keeps
-a copy only so the screens can draw the library's icons.
+The shared library, with its icons and fonts, ships inside the firmware image, so a firmware update
+brings it and the companion never sends it. The bundle keeps a copy only so the screens can draw the
+library's icons. The accelerometers' configuration files left the library for the watch's external
+flash: `npm run import-system-files ../battletime/dist/store` bundles them, into
+`src/bundles/system-files.ts` and `core/system-files/`, and the companion writes any a watch lacks
+each time it connects (`core/src/sync/system_files.rs`; the command line tool's copy is
+`src/protocol/system-files.ts`).
 
 ```bash
 (cd ../battletime && nix develop --command python3 -I ../tools/build_store.py)

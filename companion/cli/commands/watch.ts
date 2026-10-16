@@ -18,6 +18,7 @@ import {
 } from '@/protocol/packages';
 import { readQuickApps, resetQuickApps, writeQuickApps } from '@/protocol/quick-apps';
 import { runSetup, setupItems } from '@/protocol/setup';
+import { putMissingSystemFiles } from '@/protocol/system-files';
 import { encodeForWatch, decodeWatchLine } from '@/protocol/gadgetbridge';
 import {
   fittedRecoverySlot,
@@ -424,6 +425,7 @@ export async function apps(session: WatchSession, args: string[], untilStopped: 
         bar.update(step.sent, step.total, `${step.index + 1}/${step.count} ${step.item.header.name}`),
       );
       bar.done();
+      await putMissingSystemFiles(await session.files());
       say(`Installed ${items.length} images. The watch shows its face now.`);
       return;
     }

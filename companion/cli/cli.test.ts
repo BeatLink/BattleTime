@@ -21,9 +21,22 @@ import type { WebRequest } from '@/services/web-request';
 // The flash command only needs the DFU link and a way to reset the watch, which is what a session gives it.
 class FakeSession extends MockLegacyDfuTarget {
   readonly sent: string[] = [];
+  // The files the watch gets through its file service, which has none to begin with.
+  readonly written = new Map<string, Uint8Array>();
 
   async send(text: string) {
     this.sent.push(text);
+  }
+
+  async files() {
+    return {
+      list: async (dir: string) => {
+        throw new Error(`${dir} is missing`);
+      },
+      write: async (path: string, data: Uint8Array) => {
+        this.written.set(path, data);
+      },
+    };
   }
 }
 
@@ -50,6 +63,7 @@ describe('the flash command', () => {
     expect(session.sent).toEqual([]);
     expect(session.received.image).toEqual(image);
     expect(session.timeWrites).toHaveLength(1);
+    expect([...session.written.keys()]).toEqual(['/system/accelerometer/bma421', '/system/accelerometer/bma425']);
   });
 
   it('restarts a watch still on wasp-os into its bootloader first', async () => {

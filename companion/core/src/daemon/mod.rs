@@ -42,6 +42,7 @@ use crate::protocol::battletime::{
 use crate::protocol::link::WriteMode;
 use crate::sync::files::{FileClient, FileTransport};
 use crate::sync::store::{SyncSettings, SyncStore, LONGEST_INTERVAL, SHORTEST_INTERVAL};
+use crate::sync::system_files::put_missing_system_files;
 use crate::sync::{SyncOutput, SyncReport, Syncer};
 use clock::{ClockReading, ClockWatch, CLOCK_CHECK_INTERVAL};
 use device::{CallCommand, Device, PhoneEvent};
@@ -571,9 +572,19 @@ impl Daemon {
         if capabilities.time {
             self.set_clock().await;
         }
+        if capabilities.files {
+            self.put_system_files().await;
+        }
         self.runtime.spawn(self.clone().follow_clock(epoch, capabilities));
         if capabilities.uart || capabilities.battery {
             self.runtime.spawn(self.clone().read_status_regularly(epoch));
+        }
+    }
+
+    // A watch whose firmware reads its accelerometer's configuration from a file counts no steps until it has one.
+    async fn put_system_files(&self) {
+        if let Err(error) = put_missing_system_files(self.syncer.files()).await {
+            self.change(|state| state.last_error = Some(error.to_string()));
         }
     }
 

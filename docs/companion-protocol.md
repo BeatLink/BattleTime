@@ -422,6 +422,18 @@ whole with the file transfer above; the watch only reads them.
 | `/settings/quick_apps` | the watch face's swipes | [Quick apps](#quick-apps) |
 | `/remote/buttons` | the remote app | [Remote](#remote) |
 | `/apps/<id>/state` | the app, after a `state` line | [App state](#app-state-served) |
+| `/system/accelerometer/bma421`, `/system/accelerometer/bma425` | the firmware's step counter | [System files](#system-files) |
+
+### System files
+
+Files the firmware needs that are not apps live under `/system`: today Bosch's configuration for
+each accelerometer chip, 6,144 bytes each, which the firmware uploads to the chip at start. The
+firmware reads only its own chip's file, checked against its checksum; while the file is missing it
+counts no steps and looks again every minute. The companion app, when it connects to a watch that
+serves files, lists each file's folder and writes any file that is missing or of another size, and
+the command line tool does the same after `flash` and `apps setup`. The bundled copies come from
+`tools/build_store.py`'s `system/` folder through `npm run import-system-files`; the Rust core's
+are in `companion/core/system-files/` and the window's in `companion/src/bundles/system-files.ts`.
 
 ### Notes
 

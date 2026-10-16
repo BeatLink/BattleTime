@@ -215,7 +215,10 @@ async fn fetch_note(url: &str, access: &WebAccess, requester: &WebRequester) -> 
     let reply = match access.request("GET", url, None, FETCH_TIMEOUT_MS) {
         Ok(mut request) => {
             // The access settings' own headers win over this default.
-            request.headers.entry("Accept".to_string()).or_insert_with(|| "text/plain, */*".to_string());
+            request
+                .headers
+                .entry("Accept".to_string())
+                .or_insert_with(|| "text/plain, */*".to_string());
             requester(request).await
         }
         Err(error) => Err(error),

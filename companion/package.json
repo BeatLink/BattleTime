@@ -15,6 +15,7 @@
     "build:cli": "esbuild cli/battletime.ts --bundle --platform=node --target=node20 --format=cjs --external:node-ble --alias:@=./src --outfile=build/battletime.cjs",
     "battletime": "npm run build:cli --silent && node build/battletime.cjs",
     "import-watch-apps": "node scripts/import-watch-apps.mjs",
+    "import-system-files": "node scripts/import-system-files.mjs",
     "import-icon-names": "node scripts/import-icon-names.mjs",
     "build-plugin": "node scripts/build-plugin.mjs"
   },
