@@ -131,6 +131,10 @@ internal flash for a loop the flash cache holds and 20% for one it does not. The
 its 0x2000_0000 address was the slowest, since its instructions then share the system bus with
 data. The emulator showed no difference for the small loop and missed the system bus's cost.
 
+The same watch, running master, missed the flash cache on 10.3% of instruction fetches (32.6
+million of 317 million) over that time, so most firmware code runs at the slower, missing speed
+some of the time.
+
 **What this means for the design**
 
 - Opening a screen that loads 3 to 10 KB costs 3 to 10 ms on top of a 120 ms redraw.
@@ -152,7 +156,8 @@ Docs and comments the code contradicts, as of e30358e4:
   pixels, up to four pieces a strip, every 64 B in blocking fills, and in full on the async
   `ready()` path, which never sets `DISPLAY_IS_WAITING`. Both are corrected on this branch.
 - The shell's store calls use `try_lock`; a busy store reads as nothing, and `file_bytes` then
-  fills zeros without an error.
+  fills zeros without an error. The shell's waits keep this from happening today: the watch
+  counted no busy store call (see [Order of work](#order-of-work)).
 - "About 12 KB of RAM per app" (CLAUDE.md, `docs/app-runtime.md`) appears in code only as a test
   constant (`harness/tests/quality.rs`); the firmware's limit is 26,880 B.
 - [architecture-assessment.md](architecture-assessment.md)'s launcher figure, 40 ms on the bus
@@ -168,9 +173,11 @@ Docs and comments the code contradicts, as of e30358e4:
    - Awaiting store reads: measured at 4.6 KB of flash, since every store function that reads
      grows by an await, and left out. Only background tasks would gain; the shell's reads run to
      their end either way.
-   - A busy store: an open file needs the store only when it looks its file up again after a
-     write, so the shell's reads now find it busy only during a write. `file_bytes` still reads
-     zeros then; telling the app needs an error the runtime can act on.
+   - A busy store: the shell awaits `wait_until_free` after every wake, before each drawing step
+     and before closed apps run, and handlers and layout then run without yielding, so no other
+     task can take the store from under them. The watch confirmed it: on 2026-10-15,
+     `StoreCallsFoundBusy` read 0 after 3,150 shell loops that included three app installs over
+     Bluetooth. So no retry was built; paged code that reads from inside an await would need one.
    - Pausing reads for the painter: tried and left out. A 4 KB read started in the background
      streams to its end while the painter awaits the bus, so a strip waited up to 3.6 ms instead
      of 1.4 ms; asking the read to pause from the painter's await cut that to 1.4 ms with no change
