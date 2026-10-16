@@ -134,6 +134,60 @@ fn a_paged_app_needs_its_resident_image_and_cache_or_what_opening_holds() {
 }
 
 #[test]
+fn an_image_a_value_picks_costs_no_library_icon_when_the_app_names_none() {
+    let mut code = CodeWriter::new();
+    code.emit(Instruction::PushSmall(1));
+    let own_picture = code.finish().unwrap();
+    let mut image = writer();
+    image.image_resource(ImageFormat::Mask, 1, 1, &[255]);
+    image.image_resource(ImageFormat::Mask, 1, 1, &[128]);
+    let picked = image.expression(own_picture);
+    image.widget(WidgetKind::Column, 1, &[]);
+    image.widget(WidgetKind::Image, 0, &[(Property::Image, Expression(picked))]);
+    assert_eq!(need_of(&image).icon_bytes, 0);
+
+    // Naming a library icon anywhere in the code, such as a handler, makes the value count again.
+    let mut code = CodeWriter::new();
+    code.emit(Instruction::PushInt(ImageReference::SharedLibrary(3).to_value()))
+        .emit(Instruction::Drop);
+    image.handler(code.finish().unwrap());
+    assert_eq!(
+        need_of(&image).icon_bytes,
+        held_icon_bytes(LIBRARY_ICON_MOST_BYTES)
+    );
+}
+
+#[test]
+fn reading_an_icon_system_value_or_starting_with_an_icon_counts_too() {
+    let screen = |image: &mut ImageWriter, expression| {
+        image.widget(WidgetKind::Column, 1, &[]);
+        image.widget(WidgetKind::Icon, 0, &[(Property::Icon, Expression(expression))]);
+    };
+    let mut code = CodeWriter::new();
+    code.emit(Instruction::PushSmall(0))
+        .emit(Instruction::ReadSystemElement(SystemValue::NotificationIcon));
+    let mut reads_system = writer();
+    let expression = reads_system.expression(code.finish().unwrap());
+    screen(&mut reads_system, expression);
+    assert_eq!(
+        need_of(&reads_system).icon_bytes,
+        held_icon_bytes(LIBRARY_ICON_MOST_BYTES)
+    );
+
+    let mut starts_with_one = writer();
+    let icon = ImageReference::SharedLibrary(5).to_value() as i64;
+    starts_with_one.variable("icon", ValueType::Int, false, icon);
+    let mut code = CodeWriter::new();
+    code.emit(Instruction::ReadState(0));
+    let expression = starts_with_one.expression(code.finish().unwrap());
+    screen(&mut starts_with_one, expression);
+    assert_eq!(
+        need_of(&starts_with_one).icon_bytes,
+        held_icon_bytes(LIBRARY_ICON_MOST_BYTES)
+    );
+}
+
+#[test]
 fn an_app_list_holds_icons_up_to_the_cap() {
     let mut image = writer();
     image.widget(WidgetKind::Column, 1, &[]);

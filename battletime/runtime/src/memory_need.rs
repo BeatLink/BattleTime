@@ -6,7 +6,10 @@
 use crate::image::AppImage;
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue};
 use crate::interpreter::scratch_bytes_for;
-use crate::library_icons::{held_icon_bytes, HELD_ICONS_MOST_BYTES, LIBRARY_ICON_MOST_BYTES};
+use crate::library_icons::{
+    held_icon_bytes, HELD_ICONS_MOST_BYTES, LIBRARY_FUNCTIONS_GIVING_ICONS, LIBRARY_ICON_MOST_BYTES,
+    MOST_LIBRARY_ICONS,
+};
 use crate::paging::{cache_bytes, resident_bytes};
 use crate::resources::{library_image_named_by, ImageReference};
 use crate::widgets::{Property, PropertySource, WidgetKind, WidgetTree, DEEPEST_NESTING, MOST_WIDGETS};
@@ -124,11 +127,12 @@ pub struct MemoryNeed {
 /// Works out an app's heap need from its image.
 pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
     let tree = WidgetTree::new(*image);
+    let may_name_library_icons = names_library_icons_anywhere(image);
     let mut largest = ScreenCost::default();
     // The screen with the most icons may be another one, so taking the most of each is safe.
     let mut most_icons = 0;
     for root in tree.screens() {
-        let cost = screen_cost(&tree, root);
+        let cost = screen_cost(&tree, root, may_name_library_icons);
         most_icons = most_icons.max(cost.icon_count);
         if cost.node_count > largest.node_count
             || (cost.node_count == largest.node_count && cost.text_bytes > largest.text_bytes)
@@ -324,7 +328,7 @@ struct OpenWidget {
 }
 
 /// The nodes and text one screen builds, counting every widget as shown and each Repeat's rows.
-fn screen_cost(tree: &WidgetTree, root: u16) -> ScreenCost {
+fn screen_cost(tree: &WidgetTree, root: u16, may_name_library_icons: bool) -> ScreenCost {
     let mut cost = ScreenCost::default();
     let end = tree.subtree_end(root).unwrap_or(root);
     let mut open = [OpenWidget {
@@ -348,7 +352,11 @@ fn screen_cost(tree: &WidgetTree, root: u16) -> ScreenCost {
         cost.text_bytes += copies * widget_text_bytes(tree, &widget);
         cost.icon_count = cost
             .icon_count
-            .saturating_add(copies.saturating_mul(widget_library_icons(tree, &widget)));
+            .saturating_add(copies.saturating_mul(widget_library_icons(
+                tree,
+                &widget,
+                may_name_library_icons,
+            )));
         cost.has_app_list |= widget.kind == WidgetKind::AppList;
 
         if depth > 0 {
@@ -399,7 +407,13 @@ fn repeat_rows(
 }
 
 /// How many of the shared library's icons one node of this widget may show at once.
-fn widget_library_icons(tree: &WidgetTree, widget: &crate::widgets::Widget) -> u32 {
+///
+/// An image a value works out can be a library icon only when `may_name_library_icons`.
+fn widget_library_icons(
+    tree: &WidgetTree,
+    widget: &crate::widgets::Widget,
+    may_name_library_icons: bool,
+) -> u32 {
     match widget.kind {
         WidgetKind::StatusIcons => 3,
         // Only its charging bolt.
@@ -412,11 +426,58 @@ fn widget_library_icons(tree: &WidgetTree, widget: &crate::widgets::Widget) -> u
                 .or_else(|| widget.property(Property::Icon));
             match source {
                 Some(PropertySource::Constant(value)) => names_library_icon(tree.image(), value) as u32,
-                Some(PropertySource::Expression(_)) => 1,
+                Some(PropertySource::Expression(_)) => may_name_library_icons as u32,
                 _ => 0,
             }
         }
     }
+}
+
+/// Whether any value the app works out could name a library icon.
+///
+/// Such a value comes from somewhere in the app: a constant in its code, a variable's starting
+/// value, one of its images other than its launcher icon that names a library icon, a system value that is an icon, or a call to
+/// one of `LIBRARY_FUNCTIONS_GIVING_ICONS`. The compiler writes `library_icon` and the `icons` as
+/// constants. An app that has none of these only ever
+/// shows its own pictures, so its images cost no library icons.
+fn names_library_icons_anywhere(image: &AppImage) -> bool {
+    let first = ImageReference::SharedLibrary(0).to_value() as i64;
+    let names_one = |value: i64| (first..first + MOST_LIBRARY_ICONS as i64).contains(&value);
+    // A launcher icon that names a library icon is image 0, which the compiler gives no path, so no code reaches it.
+    let first_reachable = image.has_icon as u16;
+    let mut found = (first_reachable..image.resource_count())
+        .filter_map(|index| image.resource_bytes(index))
+        .any(|bytes| library_image_named_by(bytes).is_some());
+    found |= (0..image.state_count())
+        .filter_map(|index| image.state_variable(index))
+        .any(|variable| names_one(variable.default_value));
+    found |= (0..image.initial_values_count())
+        .filter_map(|index| image.initial_values(index))
+        .any(|(variable, bytes)| {
+            let width = image
+                .state_variable(variable as u16)
+                .map_or(8, |variable| variable.element_bytes as usize);
+            bytes
+                .chunks(width.max(1))
+                .filter_map(crate::state::read_packed)
+                .any(names_one)
+        });
+    for_each_instruction(image, |instruction| {
+        found |= match instruction {
+            Instruction::PushSmall(value) => names_one(value as i64),
+            Instruction::PushInt(value) => names_one(value as i64),
+            Instruction::PushLong(value) => names_one(value),
+            Instruction::ReadSystem(value) | Instruction::ReadSystemElement(value) => matches!(
+                value,
+                SystemValue::InstalledAppIcon
+                    | SystemValue::LauncherGroupIcon
+                    | SystemValue::NotificationIcon
+            ),
+            Instruction::CallLibrary { function, .. } => LIBRARY_FUNCTIONS_GIVING_ICONS.contains(&function),
+            _ => false,
+        };
+    });
+    found
 }
 
 /// Whether an image value is a library icon, or an app's image that only names one.

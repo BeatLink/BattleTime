@@ -400,3 +400,22 @@ fn the_library_carries_no_accelerometer_configuration() {
 
     assert_eq!(image.data(0), None);
 }
+
+#[test]
+fn exactly_the_listed_library_functions_give_back_an_icon() {
+    use crate::types::Kind;
+    use battletime_runtime::library_icons::LIBRARY_FUNCTIONS_GIVING_ICONS;
+
+    // Memory need counts no library icons for an app that names none itself and calls none of these.
+    let giving: Vec<u16> = crate::shared_functions::library_signatures()
+        .iter()
+        .filter(|signature| signature.result.kind == Kind::Icon)
+        .map(|signature| signature.number)
+        .collect();
+    assert_eq!(giving, LIBRARY_FUNCTIONS_GIVING_ICONS);
+}
+
+#[test]
+fn every_icon_fits_the_numbers_memory_need_reads_as_library_icons() {
+    assert!(ICON_NAMES.len() <= battletime_runtime::library_icons::MOST_LIBRARY_ICONS as usize);
+}

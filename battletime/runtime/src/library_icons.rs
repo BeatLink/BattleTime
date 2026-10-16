@@ -28,6 +28,14 @@ pub const HELD_ICONS_MOST_BYTES: u32 = 8192;
 /// What one held icon costs beside its bytes: its number and its place in the host's list.
 pub const HELD_ICON_OVERHEAD_BYTES: u32 = 16;
 
+/// The most icons the library may number; a constant from 32768 below 32768 plus this names one.
+/// Fixed colours share those numbers, so only a very dark red could be taken for an icon.
+pub const MOST_LIBRARY_ICONS: u16 = 256;
+
+/// The shared library's functions that can give back a library icon, by number: `weather_icon_at`.
+/// `compiler/src/library_tests.rs` checks the list against the library's code.
+pub const LIBRARY_FUNCTIONS_GIVING_ICONS: [u16; 1] = [8];
+
 const HEADER_BYTES: u32 = 4;
 const PLACE_BYTES: u32 = 4;
 
