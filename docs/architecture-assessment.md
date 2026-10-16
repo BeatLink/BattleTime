@@ -6,22 +6,24 @@ the UI toolkit, littlefs, and how apps are stored and loaded. Figures come from
 [memory-map.md](memory-map.md) and from a release build of `firmware/` at `0068f33`, sorted by
 symbol.
 
-Two of its proposals have since been carried out: BattleTime draws its widgets with its own renderer
-instead of rlvgl, and keeps its files in `battletime-flash-store` instead of littlefs
-([flash-store.md](flash-store.md)).
+Three of its proposals have since been carried out: BattleTime draws its widgets with its own renderer
+instead of rlvgl, keeps its files in `battletime-flash-store` instead of littlefs
+([flash-store.md](flash-store.md)), and moves the screen's strips and the flash's reads by DMA on a
+bus shared one transaction at a time ([The CPU](#the-cpu)).
 
 ## In short
 
 | Question | Answer |
 |---|---|
-| Embassy, or an RTOS? | Keep Embassy. Stop blocking inside it, and add a second, higher-priority executor for input. |
+| Embassy, or an RTOS? | Keep Embassy. Drawing and flash reads no longer block it; add a second, higher-priority executor for input. |
 | Our own Bluetooth host? | No. Keep TrouBLE on our own controller, and trim it. |
 | rlvgl, Slint, or our own? | Our own. BattleTime already has its own toolkit; rlvgl only draws six widget shapes. |
-| littlefs, or our own storage? | Our own: `battletime-flash-store`, measured faster, gentler on the flash and safe through every power cut tested; it replaces littlefs once the firmware moves over. |
+| littlefs, or our own storage? | Our own: `battletime-flash-store`, measured faster, gentler on the flash and safe through every power cut tested; the firmware now uses it. |
 | Split apps into chunks in ekv? | No: each app is one file read whole when it opens, its saved values one record. Chunk keys cost more lookups than the RAM they save. |
 
-The bigger problems are not these choices. One cooperative executor spends long stretches spinning
-on the SPI bus, and about 12 KB of the heap is held for storage that uses under 2 KB.
+The bigger problem was not these choices but one cooperative executor spinning on the SPI bus.
+Drawing and flash reads now go by DMA and let other tasks run; flash erases and writes from the
+shell still spin.
 
 ## The CPU
 
@@ -33,21 +35,31 @@ An RTOS would cost RAM we lack. Embassy keeps each task's state in one fixed blo
 firmware is built. Eight RTOS threads would need eight stacks, each big enough for its own worst
 case, out of the 10.8 KB the stack has now.
 
-What does hurt is that the executor often spins instead of waiting:
+What hurt was that the executor often spun instead of waiting. Most of that is fixed:
 
-- The screen and the flash share one SPI bus, and its driver blocks. Each paint step holds the CPU
-  for up to about 23 ms (48 rows at 8 MHz).
-- Flash erases and writes wait in `BusyWait`, which spins the CPU.
-- littlefs has no async interface.
+- **The screen and the flash share the SPI bus by DMA** (`firmware/src/display_dma.rs`). The bus is
+  taken one transaction at a time. A strip goes out by chained EasyDMA, in pieces of at most
+  255 bytes linked through PPI, while the next strip is drawn into a second buffer; TIMER1's
+  interrupt ends each send and wakes whoever awaits `bus_is_free`. Flash reads move by DMA in the
+  gaps the display leaves and stop after one piece when the display wants the bus. In the emulator,
+  opening the launcher went from 40 ms blocked on the bus to 3 ms.
+- **The flash store is async.** Its reads, programs, erases and status polls await the bus and
+  wait on a timer, so other tasks run meanwhile.
+
+What still spins:
+
+- The shell's store calls run to their end under `block_on`, polling the chip with
+  `embassy_time::block_for`, so an erase or write the shell asks for spins the CPU.
+- Moving the update and recovery slots goes through the blocking `ExternalFlash`, which waits in
+  `BusyWait`.
 
 While the CPU spins, touch and the button wait, and the chip cannot sleep, so this costs both
 response time and battery.
 
 What to do:
 
-1. **Async SPI with DMA for the screen and the flash**, behind an async bus lock taken per
-   transfer. The nRF52832 moves at most 255 bytes per DMA transfer, so a paint goes out in chunks,
-   and the CPU sleeps between them.
+1. **Async SPI with DMA for the screen and the flash.** Done, as above. What is left is letting
+   the shell's store writes and the slot moves wait without spinning.
 2. **A second Embassy executor at a higher interrupt priority** (`InterruptExecutor`) for touch,
    the button and the vibrator. They then preempt drawing and storage. It brings two costs. The
    deepest stack becomes the deepest low-priority path plus the deepest high-priority one, so the
@@ -73,9 +85,9 @@ Static RAM is 54.7 KB, and the stack has the remaining 10.8 KB. The heap is one 
 
 What to do, in order:
 
-1. **Shrink the storage share of the heap.** littlefs needs about 1.8 KB with two files open. Of
-   the 12 KB or so this frees, give part to the stack (the alarm's margin is 1,920 B, under the
-   2 KB rule) and the rest to apps. Measure the heap's peak on the watch first.
+1. **Shrink the storage share of the heap.** Done in part: the flash store keeps its tables in
+   static RAM, and storage's share of the heap is now 10 KB. Measure its peak on the watch before
+   shrinking it further.
 2. **Stop reading whole app images into the heap.** See [Apps](#apps-as-chunks-in-flash).
 3. **Move the GATT table into flash** as a constant. Done: `third_party/trouble-host` and its
    macros build the table in a constant, so `SERVER` is 496 B and the values that change take
@@ -337,8 +349,8 @@ batch them and append the step log.
 `battletime-flash-store` (`services/flash_store`, [flash-store.md](flash-store.md)) is a store that
 knows how data is written, not what it is, so a new kind of data needs no new format or firmware.
 It began as a prototype in the benchmark and is now a `no_std` workspace crate with no heap,
-generic over the async flash traits the firmware's driver implements; the firmware does not use it
-yet. It has three containers in
+generic over the async flash traits the firmware's driver implements; the firmware keeps its files
+in it. It has three containers in
 the 3 MB region: 2 MB for files, 256 KB for records and 768 KB for logs.
 
 - **Files** are named by path, up to 64 bytes, and written whole: each is a list of up to 64
@@ -405,9 +417,10 @@ setting removes the cleanup that blocks for 11 s.
 
 ## Suggested order
 
-1. Async SPI for the screen and the flash.
+1. Async SPI for the screen and the flash. Done, except that the shell's flash writes and the slot
+   moves still spin.
 2. A higher-priority executor for touch, the button and the vibrator.
-3. Move the firmware onto `battletime-flash-store`, migrating littlefs once, then shrink the storage
-   share of the heap, measured on the watch.
-4. Replace rlvgl with our own shape drawing.
+3. Move the firmware onto `battletime-flash-store`. Done; the storage share of the heap is now
+   10 KB, still to be measured on the watch.
+4. Replace rlvgl with our own shape drawing. Done.
 5. The flash trims: the accelerometer configuration, the arc trigonometry, the unexplained 23 KB.
