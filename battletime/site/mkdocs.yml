@@ -54,9 +54,9 @@ validation:
 
 nav:
   - Home: index.md
+  - Install: guide/installing.md
   - Using the watch:
       - What BattleTime does: guide/index.md
-      - Installing BattleTime: guide/installing.md
       - Getting around: guide/getting-around.md
       - Screen and battery: guide/screen-and-battery.md
       - Time and alarms: guide/time-and-alarms.md
