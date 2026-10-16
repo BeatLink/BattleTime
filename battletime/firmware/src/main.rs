@@ -1099,8 +1099,6 @@ async fn confirm_once(screen: &mut Screen, confirmation: &mut storage::Confirmat
 /// The first data a phone exchanges proves the radio works end to end, so that is when the firmware confirms itself.
 ///
 /// Each slow step is polled out of line, which keeps this function's state machine small.
-// Only the shell's builds move slots, the one use of `files` here.
-#[cfg_attr(not(with_shell), allow(unused_variables))]
 async fn serve_connection(
     connection: &GattConnection<'_, '_, DefaultPacketPool>,
     server: &Server<'_>,
@@ -1330,7 +1328,7 @@ async fn serve_connection(
                     send_uart_reply(connection, server, &answer).await;
                     if must_restart {
                         screen.write_line(line::ACTION, "Slots moved");
-                        shell::OutOfLine(storage::reset(screen)).await;
+                        shell::OutOfLine(storage::reset(screen, files)).await;
                     }
                 }
                 shell::OutOfLine(confirm_once(screen, confirmation, confirmed)).await;
@@ -1356,7 +1354,7 @@ async fn serve_connection(
                 show_update(screen, dfu, &outcome, &mut shown_progress);
                 if outcome.reset_requested {
                     screen.write_line(line::ACTION, "Restarting to install");
-                    shell::OutOfLine(storage::reset(screen)).await;
+                    shell::OutOfLine(storage::reset(screen, files)).await;
                 }
             }
             _ => {}

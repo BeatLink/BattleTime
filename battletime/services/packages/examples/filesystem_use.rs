@@ -1,6 +1,7 @@
 //! Builds the external flash of a typical install and reports what each file costs in the flash store.
 //!
 //! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] ID=FILE... /PATH=FILE...`
+//! or `... -- --read IMAGE /PATH`
 //!
 //! `ID=FILE` installs an app or face image; `/PATH=FILE` copies any other file, such as a saved state.
 //! `--no-theme` leaves out the all-black theme, so the built-in colours show.
@@ -9,6 +10,9 @@
 //! larger ones take whole sectors, as on the watch. Each step's cost is the file sectors it added.
 //! `--image` also writes the whole 4 MB external flash, which the emulator loads with
 //! `externalFlashMemory LoadBinary @OUT 0`. `tools/measure_memory.py` runs it with a typical install.
+//!
+//! `--read` mounts a whole 4 MB image, such as the emulator's `externalFlash SaveBinary` writes, and
+//! prints the file at `/PATH` in hex, or `missing`.
 
 use battletime_boot::{EXTERNAL_FLASH_SIZE, FILE_SYSTEM};
 use battletime_flash_store::{ram_flash::RamFlash, FileAccess, FlashStore, Layout, SECTOR_BYTES};
@@ -77,6 +81,8 @@ struct Options {
     /// Leaves out the all-black theme, which stands in for the companion app's, so the built-in colours show.
     without_theme: bool,
     entries: Vec<Entry>,
+    /// `--read IMAGE /PATH`: the image to mount and the file to print from it.
+    read: Option<(String, String)>,
 }
 
 fn read_options(arguments: impl IntoIterator<Item = String>) -> Result<Options, String> {
@@ -86,6 +92,11 @@ fn read_options(arguments: impl IntoIterator<Item = String>) -> Result<Options, 
         match argument.as_str() {
             "--image" => options.image_path = Some(arguments.next().ok_or("--image wants a path")?),
             "--no-theme" => options.without_theme = true,
+            "--read" => {
+                let image = arguments.next().ok_or("--read wants an image")?;
+                let path = arguments.next().ok_or("--read wants a path")?;
+                options.read = Some((image, path));
+            }
             _ => {
                 let (name, file) = argument
                     .split_once('=')
@@ -108,6 +119,10 @@ fn read_options(arguments: impl IntoIterator<Item = String>) -> Result<Options, 
 
 fn main() {
     let options = read_options(std::env::args().skip(1)).unwrap_or_else(|problem| panic!("{problem}"));
+    if let Some((image, path)) = &options.read {
+        println!("{}", read_from_image(image, path));
+        return;
+    }
 
     let flash = RamFlash::blank(EXTERNAL_FLASH_SIZE as usize / SECTOR_BYTES as usize);
     let mut store = block_on(Store::mount(flash, LAYOUT)).expect("the store mounts on blank flash");
@@ -157,6 +172,22 @@ fn main() {
     }
 }
 
+// ============================================================================
+// Reading an image back
+// ============================================================================
+
+/// The file at `path` in the image in hex, or `missing`.
+fn read_from_image(image: &str, path: &str) -> String {
+    let bytes = std::fs::read(image).unwrap_or_else(|_| panic!("cannot read {image}"));
+    let mut store = block_on(Store::mount(RamFlash { bytes, erases: 0 }, LAYOUT)).expect("the image mounts");
+    let Some(length) = block_on(FileAccess::file_length(&mut store, path)).expect("the store reads") else {
+        return "missing".into();
+    };
+    let mut file = vec![0; length];
+    block_on(FileAccess::read_file(&mut store, path, 0, &mut file)).expect("the store reads");
+    file.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -191,6 +222,7 @@ mod tests {
                         file: "backup/timer/state".into()
                     },
                 ],
+                read: None,
             }
         );
     }
@@ -204,5 +236,20 @@ mod tests {
     fn a_bare_name_or_a_missing_image_path_is_refused() {
         assert!(read_options(strings(&["launcher"])).is_err());
         assert!(read_options(strings(&["--image"])).is_err());
+        assert!(read_options(strings(&["--read", "flash.bin"])).is_err());
+    }
+
+    #[test]
+    fn a_file_reads_back_from_an_image_in_hex() {
+        let flash = RamFlash::blank(EXTERNAL_FLASH_SIZE as usize / SECTOR_BYTES as usize);
+        let mut store = block_on(Store::mount(flash, LAYOUT)).unwrap();
+        block_on(FileAccess::write_file(&mut store, "/settings/system", &[1, 0xab])).unwrap();
+        let image = std::env::temp_dir().join(format!("filesystem_use-{}.bin", std::process::id()));
+        std::fs::write(&image, store.into_flash().bytes).unwrap();
+        let image = image.to_str().unwrap();
+
+        assert_eq!(read_from_image(image, "/settings/system"), "01ab");
+        assert_eq!(read_from_image(image, "/settings/theme"), "missing");
+        std::fs::remove_file(image).unwrap();
     }
 }

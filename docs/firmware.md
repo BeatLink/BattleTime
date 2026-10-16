@@ -204,8 +204,8 @@ or swipe from each touch's `GestureFinder` (see [drivers.md](drivers.md#touch-pa
   their images only while the launcher is open. `packages::CHANGED` makes the shell read everything
   again after an install. With no face the shell shows `help.rs`: the time and how to install one.
 - **Turning apps on and off.** `set_app_enabled` from an app runs the package manager's checks on
-  that list, writes the `disabled` marker and tells the open app; the open app itself cannot be
-  turned off.
+  that list, queues writing or deleting the `disabled` marker and tells the open app; the open app
+  itself cannot be turned off.
 - **Images.** The open app's image is read into the heap when it opens and freed once its host is
   gone. The shared library is read in place from the internal flash, after the firmware's code.
 - **Memory check before an app opens.** Before the shell starts an app, it compares the app's need
@@ -376,6 +376,10 @@ The shell draws through `DrawingScreen` (`drawing_screen.rs`) and the DMA code i
 `storage/watch.rs` mounts the flash store at start, in place in its static and by polling the chip,
 so no task holds a copy of it. Its flash adapter, `StoreFlash`, reads at once and starts each erase
 and page program without waiting, then waits on the timer, so other tasks run while the chip works.
+The update and recovery slots reach the chip the same way, through `SlotFlash`, a `StoreFlash`
+bounded to one slot: a firmware arriving by Bluetooth and a recovery image moved by `slots` both
+wait on the timer. If the store and a slot reach the chip at once, the driver makes the later one
+spin until the earlier one's erase or program ends.
 [storage.md](storage.md) lists what the watch keeps there.
 
 - **The storage task** (`run_storage`) alone awaits the store: the Bluetooth task's file transfers
@@ -386,6 +390,11 @@ and page program without waiting, then waits on the timer, so other tasks run wh
   request is under way, then calls the store directly (`Files::read_now` and the like), which run
   to their end at once by polling the chip, and no other task can take the store before the shell
   next waits. The app host's file reads while drawing go the same way.
+- **The shell's writes are queued.** Saving settings, the theme or an app's state
+  (`Files::write_soon`) and turning an app on or off (`set_app_enabled_soon`) put the whole file, or
+  its deletion, in a queue in RAM and return at once; the storage task writes them, waiting on the
+  timer, before any other request. Until then the shell's reads of that path answer from the queue,
+  and any other store call the shell makes writes the queue first, by polling, so it sees them.
 - **Flash sleep.** While the screen is off, `storage::Files` puts the external flash into deep
   power-down (`let_flash_sleep`), only while it holds the store, at the end of each store call and
   after each storage task request, so no store read is under way or can start while the chip is
@@ -395,7 +404,7 @@ and page program without waiting, then waits on the timer, so other tasks run wh
 
 ### Background work waits for a pause
 
-The shell's store calls and the internal flash block the one executor while they work, a sector
+The shell's store reads and the internal flash block the one executor while they work, a sector
 erase for tens of milliseconds. Work the wearer is not waiting on first awaits
 `foreground::wait_for_a_pause`: each packages command, each file transfer write from the phone, and
 each step count reading before it goes to the log. It holds back while the shell is part way

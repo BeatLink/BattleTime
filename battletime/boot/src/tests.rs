@@ -734,6 +734,26 @@ mod recovery_moves {
     }
 
     #[test]
+    fn a_move_to_free_space_plans_a_copy_of_the_whole_image_and_writes_nothing() {
+        let (mut flash, recovery) = flash_with_recovery(9000);
+        let to = region(0x7_9000, 16 * PAGE_SIZE);
+
+        let plan = plan_recovery_move(&mut flash, DEFAULT_SLOTS.recovery, to);
+
+        assert_eq!(
+            plan,
+            Ok(RecoveryMovePlan::Copy {
+                length: recovery.len() as u32
+            })
+        );
+        assert_eq!(
+            recovery_erase_end(to, recovery.len() as u32),
+            0x7_9000 + 3 * PAGE_SIZE
+        );
+        assert_eq!(flash.erase_count, 0);
+    }
+
+    #[test]
     fn an_empty_slot_moves_freely() {
         let mut flash = FakeFlash::erased(EXTERNAL_FLASH_SIZE);
 

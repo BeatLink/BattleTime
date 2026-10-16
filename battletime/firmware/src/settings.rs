@@ -91,7 +91,7 @@ pub fn load(files: &storage::Files) {
 pub fn save(files: &storage::Files) {
     let mut buffer = [0; FILE_BYTES];
     let length = current().write_file(&mut buffer);
-    files.write_now(SETTINGS_PATH, &buffer[..length]);
+    files.write_soon(SETTINGS_PATH, &buffer[..length]);
 }
 
 /// Changes one setting by the name an app gave `set_setting`; unknown names and bad values do nothing.
@@ -163,7 +163,7 @@ pub fn load_theme(files: &storage::Files) -> Theme {
 }
 
 pub fn save_theme(files: &storage::Files, theme: &Theme) {
-    files.write_now(THEME_PATH, &theme_to_bytes(theme));
+    files.write_soon(THEME_PATH, &theme_to_bytes(theme));
 }
 
 fn theme_to_bytes(theme: &Theme) -> [u8; THEME_BYTES] {

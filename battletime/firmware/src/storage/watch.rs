@@ -20,7 +20,7 @@ use embassy_sync::signal::Signal;
 use crate::motion;
 use battletime_blefs::FileTransfer;
 use battletime_boot::{
-    bootloader_identity, image_header::read_image_header, slot_table::read_slots, Slots, UpdaterNote,
+    bootloader_identity, image_header::read_image_header, slot_table::read_slots, Region, Slots, UpdaterNote,
     BOOT_STATE, DEFAULT_SLOTS, FIRMWARE, SLOT_TABLE,
 };
 use battletime_external_flash::{BusyWait, ExternalFlash};
@@ -35,11 +35,11 @@ use battletime_updates::{
     confirm_running_firmware, forget_rollback, running_firmware_is_on_trial,
     running_firmware_was_rolled_back, Receivers, RecoveryReceiver, UpdateReceiver,
 };
-use embassy_futures::select::{select3, Either3};
+use embassy_futures::select::{select4, Either4};
 use embedded_storage::nor_flash::ReadNorFlash;
 use static_cell::StaticCell;
 
-use alloc::boxed::Box;
+use alloc::{boxed::Box, collections::VecDeque, sync::Arc};
 use core::{
     cell::RefCell,
     future::Future,
@@ -61,8 +61,11 @@ use crate::{
 
 pub const WATCHDOG_HALT: HaltConfig = HaltConfig::Pause;
 /// The bootloader takes over at the next start, swapping in an update if one was marked.
-pub async fn reset(_screen: &mut Screen) -> ! {
+///
+/// The shell's queued writes land first, so a restart never loses them.
+pub async fn reset(_screen: &mut Screen, files: &Files) -> ! {
     embassy_time::Timer::after(embassy_time::Duration::from_millis(200)).await;
+    Box::pin(files.write_queued()).await;
     cortex_m::peripheral::SCB::sys_reset()
 }
 
@@ -81,10 +84,9 @@ const BUSY_WAIT: BusyWait = BusyWait {
 type FlashOnBus = ExternalFlash<crate::display_dma::FlashOnBus, BusyWait>;
 type SharedExternalFlash = Mutex<NoopRawMutex, RefCell<FlashOnBus>>;
 type SharedInternalFlash = Mutex<NoopRawMutex, RefCell<Nvmc<'static>>>;
-type ExternalSlot = BlockingAsync<BlockingPartition<'static, NoopRawMutex, FlashOnBus>>;
 type BootStatePage = BlockingAsync<BlockingPartition<'static, NoopRawMutex, Nvmc<'static>>>;
 
-pub type Targets = Receivers<'static, ExternalSlot, BootStatePage, ExternalSlot>;
+pub type Targets = Receivers<'static, SlotFlash, BootStatePage, SlotFlash>;
 
 static EXTERNAL_FLASH: StaticCell<SharedExternalFlash> = StaticCell::new();
 static INTERNAL_FLASH: StaticCell<SharedInternalFlash> = StaticCell::new();
@@ -143,11 +145,7 @@ pub async fn start(
 
     let targets = Receivers {
         firmware: UpdateReceiver::new(
-            BlockingAsync::new(BlockingPartition::new(
-                external_flash,
-                slots.update.start,
-                slots.update.size,
-            )),
+            SlotFlash::new(external_flash, slots.update),
             BlockingAsync::new(BlockingPartition::new(
                 internal_flash,
                 BOOT_STATE.start,
@@ -155,11 +153,7 @@ pub async fn start(
             )),
             STATE_ALIGNMENT.init([0; 4]),
         ),
-        recovery: RecoveryReceiver::new(BlockingAsync::new(BlockingPartition::new(
-            external_flash,
-            slots.recovery.start,
-            slots.recovery.size,
-        ))),
+        recovery: RecoveryReceiver::new(SlotFlash::new(external_flash, slots.recovery)),
     };
     let mut confirmation = Confirmation {
         boot_state: BlockingAsync::new(BlockingPartition::new(
@@ -324,7 +318,10 @@ impl Files {
     }
 
     /// Restarts a firmware the boot state still says is on trial, so the bootloader brings back the one before.
+    ///
+    /// The shell's queued writes land first, so the restart never loses them.
     pub fn roll_back_firmware_now(&self) {
+        self.now(|_| ());
         let mut alignment = [0; 4];
         if block_on(running_firmware_is_on_trial(
             &mut self.boot_state(),
@@ -347,14 +344,16 @@ pub use slots::{answer_slots, slots_answer_line};
 #[cfg(with_shell)]
 mod slots {
     use battletime_boot::{
-        image_header::read_image_header, move_recovery, slot_table::read_slots, RecoveryMove, Region,
-        SlotProblem, Slots, DEFAULT_SLOTS, FIRMWARE, SLOT_AREA, SLOT_TABLE,
+        check_moved_recovery, image_header::read_image_header, plan_recovery_move, recovery_erase_end,
+        slot_table::read_slots, RecoveryMove, RecoveryMovePlan, Region, SlotProblem, Slots, DEFAULT_SLOTS,
+        FIRMWARE, MOVE_CHUNK_SIZE, SLOT_AREA, SLOT_TABLE,
     };
     use battletime_companion::{slots_refusal, slots_report, SlotRange, SlotsReport, SlotsRequest};
     use battletime_updates::{change_slots, UpdateError};
     use embassy_embedded_hal::flash::partition::BlockingPartition;
+    use embedded_storage_async::nor_flash::{NorFlash, ReadNorFlash};
 
-    use super::{Confirmation, Files};
+    use super::{Confirmation, Files, SharedExternalFlash, SlotFlash};
 
     /// Answers the companion's `slots`: the slots as they now are, and whether they moved; or why not.
     ///
@@ -382,8 +381,8 @@ mod slots {
         };
         wanted.check().map_err(slot_problem_text)?;
         if wanted.recovery != current.recovery {
-            let mut external_flash = BlockingPartition::new(files.external_flash, 0, SLOT_AREA.size);
-            match move_recovery(&mut external_flash, current.recovery, wanted.recovery) {
+            let moving = move_recovery(files.external_flash, current.recovery, wanted.recovery);
+            match alloc::boxed::Box::pin(moving).await {
                 Ok(moved) if moved.may_switch() => {}
                 Ok(RecoveryMove::ImageTooLarge) => {
                     return Err("the recovery image is larger than the new slot")
@@ -410,6 +409,39 @@ mod slots {
             Err(UpdateError::UnsoundSlots(problem)) => Err(slot_problem_text(problem)),
             Err(_) => Err("the slot table could not be written"),
         }
+    }
+
+    /// Moves the recovery image as `battletime_boot::move_recovery` does, waiting on the chip with the timer, so
+    /// other tasks run while it erases and writes.
+    async fn move_recovery(
+        flash: &'static SharedExternalFlash,
+        from: Region,
+        to: Region,
+    ) -> Result<RecoveryMove, ()> {
+        let mut checked = BlockingPartition::new(flash, 0, SLOT_AREA.size);
+        let length = match plan_recovery_move(&mut checked, from, to).map_err(|_| ())? {
+            RecoveryMovePlan::Finished(moved) => return Ok(moved),
+            RecoveryMovePlan::Copy { length } => length,
+        };
+
+        let mut slot_area = SlotFlash::new(
+            flash,
+            Region {
+                start: 0,
+                size: SLOT_AREA.size,
+            },
+        );
+        slot_area
+            .erase(to.start, recovery_erase_end(to, length))
+            .await
+            .map_err(|_| ())?;
+        let mut chunk = [0; MOVE_CHUNK_SIZE];
+        for offset in (0..length).step_by(MOVE_CHUNK_SIZE) {
+            let piece = &mut chunk[..(length - offset).min(MOVE_CHUNK_SIZE as u32) as usize];
+            slot_area.read(from.start + offset, piece).await.map_err(|_| ())?;
+            slot_area.write(to.start + offset, piece).await.map_err(|_| ())?;
+        }
+        check_moved_recovery(&mut checked, to).map_err(|_| ())
     }
 
     /// The reply line for `answer_slots`' answer, with the recovery image's length read from its header.
@@ -457,7 +489,7 @@ mod slots {
 }
 
 // ============================================================================
-// The flash store, reached a page at a time without spinning
+// The external flash, reached a page at a time without spinning
 // ============================================================================
 
 /// The 3 MB file system region: 2 MB of files, 256 KB of records and 768 KB of logs.
@@ -475,10 +507,11 @@ type WatchStore = FlashStore<StoreFlash, 128, 128, 192>;
 const ERASE_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_millis(2);
 const PROGRAM_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_micros(100);
 
-/// The external flash as the store sees it: reads move by EasyDMA while the CPU sleeps, and erases and page programs
-/// are started and then waited on with the timer, so the CPU and other tasks run while the chip works.
+/// The external flash as the store and the slots see it: reads move by EasyDMA while the CPU sleeps, and erases and
+/// page programs are started and then waited on with the timer, so the CPU and other tasks run while the chip works.
 ///
-/// It shares the chip with the update slots, which use it blocking; the driver makes either wait for the other.
+/// The store and the slots each have one. When both reach the chip at once, the driver makes the later one wait,
+/// spinning, for the earlier one's erase or program to end.
 struct StoreFlash {
     flash: &'static SharedExternalFlash,
     /// Polls the chip without the timer, for the shell's calls, which run to their end without yielding.
@@ -575,6 +608,73 @@ impl StoreFlash {
     }
 }
 
+const OUT_OF_BOUNDS: <FlashOnBus as embedded_storage::nor_flash::ErrorType>::Error =
+    battletime_external_flash::Error::BadRange(embedded_storage::nor_flash::NorFlashErrorKind::OutOfBounds);
+
+/// One update or recovery slot of the external flash, so a firmware arriving by Bluetooth, or a slot being moved,
+/// waits on the chip with the timer like the store does.
+pub struct SlotFlash {
+    chip: StoreFlash,
+    region: Region,
+}
+
+impl SlotFlash {
+    fn new(flash: &'static SharedExternalFlash, region: Region) -> SlotFlash {
+        SlotFlash {
+            chip: StoreFlash {
+                flash,
+                polls_without_yielding: false,
+            },
+            region,
+        }
+    }
+
+    /// The address in the chip of `length` bytes at `offset` in the slot, or an error if they reach past its end.
+    fn chip_address(
+        &self,
+        offset: u32,
+        length: usize,
+    ) -> Result<u32, <Self as embedded_storage_async::nor_flash::ErrorType>::Error> {
+        if offset as usize + length > self.region.size as usize {
+            return Err(OUT_OF_BOUNDS);
+        }
+        Ok(self.region.start + offset)
+    }
+}
+
+impl embedded_storage_async::nor_flash::ErrorType for SlotFlash {
+    type Error = <FlashOnBus as embedded_storage::nor_flash::ErrorType>::Error;
+}
+
+impl embedded_storage_async::nor_flash::ReadNorFlash for SlotFlash {
+    const READ_SIZE: usize = 1;
+
+    async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        let address = self.chip_address(offset, bytes.len())?;
+        self.chip.read(address, bytes).await
+    }
+
+    fn capacity(&self) -> usize {
+        self.region.size as usize
+    }
+}
+
+impl embedded_storage_async::nor_flash::NorFlash for SlotFlash {
+    const WRITE_SIZE: usize = 1;
+    const ERASE_SIZE: usize = StoreFlash::ERASE_SIZE;
+
+    async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        let length = to.checked_sub(from).ok_or(OUT_OF_BOUNDS)?;
+        let start = self.chip_address(from, length as usize)?;
+        self.chip.erase(start, start + length).await
+    }
+
+    async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        let address = self.chip_address(offset, bytes.len())?;
+        self.chip.write(address, bytes).await
+    }
+}
+
 // ============================================================================
 // Parts of files read ahead
 // ============================================================================
@@ -641,6 +741,28 @@ pub struct Files {
     external_flash: &'static SharedExternalFlash,
     /// Set while the screen is off, when the chip goes into deep power-down whenever the store is idle.
     flash_may_sleep: AtomicBool,
+    /// The shell's writes, oldest first, waiting for the storage task to carry them out.
+    queued_writes: Mutex<NoopRawMutex, RefCell<VecDeque<QueuedWrite>>>,
+}
+
+/// A whole file the shell wrote, or a file it deleted, on its way to the flash.
+#[derive(Clone)]
+struct QueuedWrite {
+    path: Box<str>,
+    /// The file's new contents, or nothing when it is deleted; shared, so the storage task writes them without a copy.
+    bytes: Option<Arc<[u8]>>,
+}
+
+impl QueuedWrite {
+    /// Whether both are the very same write, rather than a newer write of the path.
+    fn is_same_as(&self, other: &QueuedWrite) -> bool {
+        self.path == other.path
+            && match (&self.bytes, &other.bytes) {
+                (Some(mine), Some(theirs)) => Arc::ptr_eq(mine, theirs),
+                (None, None) => true,
+                _ => false,
+            }
+    }
 }
 
 #[cfg_attr(not(with_shell), allow(dead_code))]
@@ -654,7 +776,31 @@ impl Files {
     }
 
     /// Runs a store call to its end at once, for the shell, which does not wait; nothing if another task holds it.
+    ///
+    /// Writes still queued are carried out first, so the call sees them.
     fn now<Answer>(&self, call: impl FnOnce(&mut WatchStore) -> Answer) -> Option<Answer> {
+        self.now_leaving_queue(|store| {
+            self.write_queued_now(store);
+            call(store)
+        })
+    }
+
+    /// Like `now`, for a call that reads only `path`: a queued write of it answers from RAM, and other queued
+    /// writes stay queued.
+    fn now_reading<Answer>(
+        &self,
+        path: &str,
+        from_queue: impl FnOnce(Option<&[u8]>) -> Answer,
+        call: impl FnOnce(&mut WatchStore) -> Answer,
+    ) -> Option<Answer> {
+        if let Some(answer) = self.with_queued_write(path, from_queue) {
+            return Some(answer);
+        }
+        self.now_leaving_queue(call)
+    }
+
+    /// Runs a store call to its end at once, leaving queued writes queued.
+    fn now_leaving_queue<Answer>(&self, call: impl FnOnce(&mut WatchStore) -> Answer) -> Option<Answer> {
         let Ok(mut store) = self.store.try_lock() else {
             crate::diagnostics::add_one(crate::diagnostics::Counter::StoreCallsFoundBusy);
             return None;
@@ -665,6 +811,90 @@ impl Files {
         store.flash_mut().polls_without_yielding = false;
         self.sleep_flash_if_allowed();
         Some(answer)
+    }
+
+    // ------------------------------------------------------------------------
+    // The shell's queued writes
+    // ------------------------------------------------------------------------
+
+    /// Queues the whole file for the storage task to write, so the shell never waits on the flash chip.
+    ///
+    /// Until it is written, the shell's reads of `path` answer with these bytes.
+    pub fn write_soon(&self, path: &str, bytes: &[u8]) {
+        self.queue_write(path, Some(bytes.into()));
+    }
+
+    /// Queues deleting the file, as `write_soon` queues a write.
+    fn delete_soon(&self, path: &str) {
+        self.queue_write(path, None);
+    }
+
+    /// Queues a write, replacing one of the same path still queued.
+    fn queue_write(&self, path: &str, bytes: Option<Arc<[u8]>>) {
+        self.queued_writes.lock(|queue| {
+            let mut queue = queue.borrow_mut();
+            match queue.iter_mut().find(|write| &*write.path == path) {
+                Some(queued) => queued.bytes = bytes,
+                None => queue.push_back(QueuedWrite {
+                    path: path.into(),
+                    bytes,
+                }),
+            }
+        });
+        WRITES_QUEUED.signal(());
+    }
+
+    /// Answers from the queued contents of `path`, or nothing when no write of it is waiting.
+    fn with_queued_write<Answer>(
+        &self,
+        path: &str,
+        answer: impl FnOnce(Option<&[u8]>) -> Answer,
+    ) -> Option<Answer> {
+        let bytes = self.queued_writes.lock(|queue| {
+            let queue = queue.borrow();
+            let write = queue.iter().find(|write| &*write.path == path)?;
+            Some(write.bytes.clone())
+        })?;
+        Some(answer(bytes.as_deref()))
+    }
+
+    /// Carries out every queued write at once, for the shell, which does not wait.
+    #[inline(never)]
+    fn write_queued_now(&self, store: &mut WatchStore) {
+        while let Some(write) = self.oldest_queued_write() {
+            run_on_heap(self.carry_out_write(store, write));
+        }
+    }
+
+    /// The oldest queued write, left in the queue so the shell's reads still answer from it while it runs.
+    fn oldest_queued_write(&self) -> Option<QueuedWrite> {
+        self.queued_writes.lock(|queue| queue.borrow().front().cloned())
+    }
+
+    /// Writes or deletes the file, then takes it from the queue unless the shell has queued newer contents meanwhile.
+    async fn carry_out_write(&self, store: &mut WatchStore, write: QueuedWrite) {
+        let _ = match &write.bytes {
+            Some(bytes) => FileAccess::write_file(store, &write.path, bytes).await,
+            None => FileAccess::delete_file(store, &write.path).await,
+        };
+        self.queued_writes.lock(|queue| {
+            let mut queue = queue.borrow_mut();
+            if queue.front().is_some_and(|front| front.is_same_as(&write)) {
+                queue.pop_front();
+            }
+        });
+    }
+
+    /// Carries out every queued write, letting other tasks run while the chip works.
+    async fn write_queued(&self) {
+        let mut store = self.store.lock().await;
+        let Some(store) = store.as_mut() else {
+            self.queued_writes.lock(|queue| queue.borrow_mut().clear());
+            return;
+        };
+        while let Some(write) = self.oldest_queued_write() {
+            self.carry_out_write(store, write).await;
+        }
     }
 
     /// Lets the chip sleep while the screen is off, and puts it down now if the store is idle.
@@ -686,7 +916,14 @@ impl Files {
     /// Puts the chip into deep power-down if the screen is off; only called with the store held, so no store call is under way.
     fn sleep_flash_if_allowed(&self) {
         if self.flash_may_sleep.load(Ordering::Relaxed) {
-            let _ = self.external_flash.lock(|flash| flash.borrow_mut().sleep());
+            let _ = self.external_flash.lock(|flash| {
+                let mut flash = flash.borrow_mut();
+                // A slot's erase still running keeps the chip awake until the next idle moment.
+                if flash.operation_has_finished()? {
+                    flash.sleep()?;
+                }
+                Ok::<_, battletime_external_flash::Error<_>>(())
+            });
         }
     }
 
@@ -695,7 +932,11 @@ impl Files {
     ///
     /// A part of a file kept as a record, never more than 1 KB, is read at once instead.
     pub fn start_reading_part(&self, path: &str, offset: u32, length: usize) -> Option<FilePart> {
-        self.now(|store| {
+        let from_queue = |bytes: Option<&[u8]>| {
+            let part = part_of(bytes?, offset as usize, length);
+            Some(FilePart::Arrived(part.into()))
+        };
+        self.now_reading(path, from_queue, |store| {
             let mut extents = [Extent::default(); MOST_READ_EXTENTS];
             let found = run_on_heap(store.file_extents(path, offset as usize, length, &mut extents)).ok()?;
             let Some(found) = found else {
@@ -718,7 +959,8 @@ impl Files {
     }
 
     pub fn read_now(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
-        self.now(|store| {
+        let from_queue = |bytes: Option<&[u8]>| bytes.map(alloc::vec::Vec::from);
+        self.now_reading(path, from_queue, |store| {
             let length = run_on_heap(FileAccess::file_length(store, path)).ok()??;
             let mut bytes = alloc::vec![0; length];
             run_on_heap(FileAccess::read_file(store, path, 0, &mut bytes)).ok()??;
@@ -728,12 +970,22 @@ impl Files {
 
     /// Reads part of a file, for the app host while it draws.
     pub fn read_part_now(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
-        self.now(|store| run_on_heap(FileAccess::read_file(store, path, offset as usize, out)).ok()?)?
-    }
-
-    /// Writes the whole file; false when the store is missing, full or held by another task.
-    pub fn write_now(&self, path: &str, bytes: &[u8]) -> bool {
-        self.now(|store| run_on_heap(FileAccess::write_file(store, path, bytes)).is_ok()) == Some(true)
+        let length = out.len();
+        let out = RefCell::new(out);
+        let from_queue = |bytes: Option<&[u8]>| {
+            let part = part_of(bytes?, offset as usize, length);
+            out.borrow_mut()[..part.len()].copy_from_slice(part);
+            Some(part.len())
+        };
+        self.now_reading(path, from_queue, |store| {
+            run_on_heap(FileAccess::read_file(
+                store,
+                path,
+                offset as usize,
+                &mut out.borrow_mut(),
+            ))
+            .ok()?
+        })?
     }
 
     /// Lists the folder at `path` into `folder` from every file of the store; false when the store is busy or missing.
@@ -765,10 +1017,26 @@ impl Files {
             .unwrap_or_default()
     }
 
-    pub fn set_app_enabled_now(&self, id: &str, enabled: bool) -> bool {
-        self.now(|store| {
-            run_on_heap(battletime_packages::Packages::new(store).set_enabled(id, enabled)).is_ok()
-        }) == Some(true)
+    /// Turns an installed app on or off by queuing its `disabled` marker's write or deletion; false when it is not installed.
+    pub fn set_app_enabled_soon(&self, id: &str, enabled: bool) -> bool {
+        use battletime_packages::{app_file, check_id, DISABLED_FILE, IMAGE_FILE};
+        let exists = |path: &str| {
+            self.now_reading(
+                path,
+                |bytes| bytes.is_some(),
+                |store| matches!(run_on_heap(FileAccess::file_length(store, path)), Ok(Some(_))),
+            ) == Some(true)
+        };
+        if check_id(id).is_err() || !exists(&app_file(id, IMAGE_FILE)) {
+            return false;
+        }
+        let marker = app_file(id, DISABLED_FILE);
+        match (enabled, exists(&marker)) {
+            (true, true) => self.delete_soon(&marker),
+            (false, false) => self.write_soon(&marker, &[]),
+            _ => {}
+        }
+        true
     }
 
     /// The image of the app `id` in `directory`, `/apps` or `/temp`.
@@ -921,6 +1189,12 @@ impl Files {
     }
 }
 
+/// The bytes of `length` from `offset` in a whole file, cut short at its end.
+fn part_of(bytes: &[u8], offset: usize, length: usize) -> &[u8] {
+    let start = offset.min(bytes.len());
+    &bytes[start..(start + length).min(bytes.len())]
+}
+
 /// Reads each remembered day back from the log into the step history, changing nothing else in it, so steps
 /// recorded meanwhile are kept.
 #[cfg(with_shell)]
@@ -948,6 +1222,7 @@ fn make_files(
         internal_flash,
         external_flash,
         flash_may_sleep: AtomicBool::new(false),
+        queued_writes: Mutex::new(RefCell::new(VecDeque::new())),
     })
 }
 
@@ -988,7 +1263,11 @@ impl battletime_packages::commands::ReplySink for ToBluetooth {
 /// Raised when the screen goes dark, so the storage task saves the trip count and erases ahead while nothing waits.
 static ROOM_WANTED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
-/// Runs every store call other tasks ask for, and the packages characteristic's commands, one at a time.
+/// Raised when the shell queues a write, for the storage task to carry out.
+static WRITES_QUEUED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+
+/// Runs every store call other tasks ask for, the shell's queued writes, and the packages characteristic's commands,
+/// one at a time.
 ///
 /// A packages command starts near the top of the stack here, where the verifier inside it has room. Each call's
 /// state is on the heap while it runs, so the task's static space holds no store call.
@@ -997,18 +1276,23 @@ pub async fn run_storage(files: &'static Files) {
     crate::tasks::name_this_task("storage");
     let mut transfer = FileTransfer::new();
     loop {
-        let next = select3(
+        let next = select4(
             storage_requests::REQUESTS.receive(),
             packages::COMMANDS.receive(),
             ROOM_WANTED.wait(),
-        );
-        match next.await {
-            Either3::First(request) => {
+            WRITES_QUEUED.wait(),
+        )
+        .await;
+        // The shell's writes go first, so every other task's call sees them.
+        alloc::boxed::Box::pin(files.write_queued()).await;
+        match next {
+            Either4::First(request) => {
                 alloc::boxed::Box::pin(files.carry_out(&mut transfer, request)).await;
                 alloc::boxed::Box::pin(files.prepare_room()).await;
             }
-            Either3::Third(()) => alloc::boxed::Box::pin(files.use_dark_screen()).await,
-            Either3::Second(line) => {
+            Either4::Third(()) => alloc::boxed::Box::pin(files.use_dark_screen()).await,
+            Either4::Fourth(()) => alloc::boxed::Box::pin(files.prepare_room()).await,
+            Either4::Second(line) => {
                 foreground::wait_for_a_pause().await;
                 let change = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;
                 match change {

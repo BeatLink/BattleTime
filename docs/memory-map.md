@@ -106,6 +106,17 @@ library and keeps the bitmap font, as do the bootloader and its updater. Startin
 library and erased external flash, which shows the status page and then the help screen in that
 font, peaked at 5,316 B of stack, 4,140 B spare.
 
+Queuing the shell's store writes for the storage task and writing the update and recovery slots
+through `SlotFlash`, so neither spins on the flash chip, added 4,048 B to the firmware's code image,
+measured with `cargo objcopy` against master on 2026-10-15 (428,660 B to 432,708 B), leaving 9,089 B
+of the region free beside the 49,467 B library, and 120 B of static RAM, mostly the Bluetooth task's
+future now holding the slot writes' waits. The recovery build grew by 1,172 B of text and 124 B of
+static RAM. About half the code is the queue and the storage task's handling of it; the rest is the
+waits in the update receivers and the recovery move. The stack did not move: opening the launcher's
+first app with the launcher, settings, stopwatch and digital face installed peaked at 6,092 B,
+3,364 B spare (6,084 B before). The queue holds each waiting file once on the heap, usually for
+only a moment.
+
 Running closed apps (`firmware/src/closed_apps.rs` and `battletime_app_host::closed_apps`) added
 5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14
 (405,496 B to 410,504 B of text), and 32 B of static RAM. A first version wrapped the shell's

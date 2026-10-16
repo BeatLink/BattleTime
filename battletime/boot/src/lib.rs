@@ -439,8 +439,54 @@ impl RecoveryMove {
     }
 }
 
-/// Small, since the firmware runs this on its Bluetooth task's stack.
-const MOVE_CHUNK_SIZE: usize = 256;
+/// Small, since the firmware copies on its Bluetooth task's stack.
+pub const MOVE_CHUNK_SIZE: usize = 256;
+
+/// What moving the recovery slot needs: nothing more, or copying an image of `length` bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RecoveryMovePlan {
+    Finished(RecoveryMove),
+    Copy { length: u32 },
+}
+
+/// Decides whether the recovery image in `from` must be copied to `to`, reading only its header and CRC.
+pub fn plan_recovery_move<Flash: ReadNorFlash>(
+    external_flash: &mut Flash,
+    from: Region,
+    to: Region,
+) -> Result<RecoveryMovePlan, Flash::Error> {
+    let Some(header) = image_header::installable_image(external_flash, from.start, from.size)? else {
+        return Ok(RecoveryMovePlan::Finished(RecoveryMove::NoImage));
+    };
+    if header.total_size_in_bytes() > to.size {
+        return Ok(RecoveryMovePlan::Finished(RecoveryMove::ImageTooLarge));
+    }
+    if to.start == from.start {
+        return Ok(RecoveryMovePlan::Finished(RecoveryMove::KeptInPlace));
+    }
+    if to.start < from.end() && from.start < to.end() {
+        return Ok(RecoveryMovePlan::Finished(RecoveryMove::Overlapping));
+    }
+    Ok(RecoveryMovePlan::Copy {
+        length: header.total_size_in_bytes(),
+    })
+}
+
+/// The end of the pages a copied image of `length` bytes needs erased at `to`.
+pub const fn recovery_erase_end(to: Region, length: u32) -> u32 {
+    to.start + length.div_ceil(PAGE_SIZE) * PAGE_SIZE
+}
+
+/// Whether the image copied to `to` reads back whole.
+pub fn check_moved_recovery<Flash: ReadNorFlash>(
+    external_flash: &mut Flash,
+    to: Region,
+) -> Result<RecoveryMove, Flash::Error> {
+    match image_header::installable_image(external_flash, to.start, to.size)? {
+        Some(_) => Ok(RecoveryMove::Copied),
+        None => Ok(RecoveryMove::CopyDamaged),
+    }
+}
 
 /// Carries the recovery image from `from` to `to` before the slot table names `to`, so moving the slot never loses it.
 pub fn move_recovery<Flash: NorFlash>(
@@ -448,33 +494,19 @@ pub fn move_recovery<Flash: NorFlash>(
     from: Region,
     to: Region,
 ) -> Result<RecoveryMove, Flash::Error> {
-    let Some(header) = image_header::installable_image(external_flash, from.start, from.size)? else {
-        return Ok(RecoveryMove::NoImage);
+    let length = match plan_recovery_move(external_flash, from, to)? {
+        RecoveryMovePlan::Finished(moved) => return Ok(moved),
+        RecoveryMovePlan::Copy { length } => length,
     };
-    if header.total_size_in_bytes() > to.size {
-        return Ok(RecoveryMove::ImageTooLarge);
-    }
-    if to.start == from.start {
-        return Ok(RecoveryMove::KeptInPlace);
-    }
-    if to.start < from.end() && from.start < to.end() {
-        return Ok(RecoveryMove::Overlapping);
-    }
 
-    let length = header.total_size_in_bytes();
-    let erase_end = to.start + length.div_ceil(PAGE_SIZE) * PAGE_SIZE;
-    external_flash.erase(to.start, erase_end)?;
+    external_flash.erase(to.start, recovery_erase_end(to, length))?;
     let mut chunk = [0; MOVE_CHUNK_SIZE];
     for offset in (0..length).step_by(MOVE_CHUNK_SIZE) {
         let piece = &mut chunk[..(length - offset).min(MOVE_CHUNK_SIZE as u32) as usize];
         external_flash.read(from.start + offset, piece)?;
         external_flash.write(to.start + offset, piece)?;
     }
-
-    match image_header::installable_image(external_flash, to.start, to.size)? {
-        Some(_) => Ok(RecoveryMove::Copied),
-        None => Ok(RecoveryMove::CopyDamaged),
-    }
+    check_moved_recovery(external_flash, to)
 }
 
 #[cfg(feature = "build-script")]

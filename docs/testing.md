@@ -372,6 +372,18 @@ and a second start with the setting saved; it takes about three minutes.
 firmware three times: with no face chosen analog opens, with digital chosen in the saved settings
 digital opens, and with an uninstalled face chosen it falls back to analog; it takes about a minute.
 
+`../tools/check_shell_writes.py FIRMWARE_ELF [PICTURE_FOLDER]` installs a face, the launcher and
+Settings, opens Settings, taps **Always on** and goes back to the face, then saves the emulated
+external flash and reads the settings file out of it with `filesystem_use --read`: the shell's
+queued write must have landed with the screen kept on. It needs no Bluetooth and takes about a
+minute.
+
+`../tools/check_slot_move.py FIRMWARE_ELF` puts a recovery image with a real header in the
+default recovery slot, connects through the Bluetooth bridge and sends a `slots` line moving the
+recovery slot into free space; the image must read back byte for byte at the new start, the old
+copy must stay, and the reply must name the new slot and say the watch restarts. It takes about a
+minute.
+
 `../tools/check_wake_gestures.py FIRMWARE_ELF` installs a face with raise to wake and lower to sleep
 turned on and a 5 second screen timeout, then tilts the emulated accelerometer: the screen must light
 for a raised wrist after timing out, go dark for a lowered arm before the timeout, and go dark for

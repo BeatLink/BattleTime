@@ -247,8 +247,8 @@ trait embassy-boot and the flash store are reached through:
   firmware's DMA reads. When the firmware lets the chip sleep is in
   [firmware.md](firmware.md#storage).
 - **Blocking and async.** While an erase or a write is in progress, both check the chip every 100
-  microseconds and wait in between. `ExternalFlash` blocks, which is what the bootloader, the
-  reloader and the firmware's update slots need; it waits on a blocking delay, and the watch
+  microseconds and wait in between. `ExternalFlash` blocks, which is what the bootloader and the
+  reloader need; it waits on a blocking delay, and the watch
   passes `BusyWait` (the `cortex-m` feature), which spins the CPU without touching a peripheral,
   since back-to-back status reads make the emulator spend most of an erase in its SPI model.
   `AsyncExternalFlash` implements the `embedded-storage-async` traits and waits on an async delay,

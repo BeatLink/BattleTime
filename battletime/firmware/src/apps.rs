@@ -255,7 +255,7 @@ impl InstalledApps {
             return false;
         };
         if checks::check_change(&self.packages, id, enabled).is_err()
-            || !files.set_app_enabled_now(id, enabled)
+            || !files.set_app_enabled_soon(id, enabled)
         {
             return false;
         }

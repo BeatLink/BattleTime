@@ -135,7 +135,10 @@ start and size, the recovery slot's start and size, a spare word, and a CRC-32 o
 
 The companion moves them with the `slots` message ([companion-protocol.md](companion-protocol.md#slots-served)),
 which the firmware answers with `storage::answer_slots`: it carries the recovery image to a new
-recovery slot first (`battletime_boot::move_recovery`), then calls `change_slots` and restarts.
+recovery slot first, then calls `change_slots` and restarts. The firmware's copy takes the plan and the
+read-back check from `battletime_boot` (`plan_recovery_move`, `check_moved_recovery`) and erases and
+writes through `SlotFlash`, so other tasks run meanwhile; `battletime_boot::move_recovery` does the
+same blocking.
 
 ### Why the slot area stays at 1 MB
 

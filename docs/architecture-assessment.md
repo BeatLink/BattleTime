@@ -22,8 +22,8 @@ bus shared one transaction at a time ([The CPU](#the-cpu)).
 | Split apps into chunks in ekv? | No: each app is one file read whole when it opens, its saved values one record. Chunk keys cost more lookups than the RAM they save. |
 
 The bigger problem was not these choices but one cooperative executor spinning on the SPI bus.
-Drawing and flash reads now go by DMA and let other tasks run; flash erases and writes from the
-shell still spin.
+Drawing and flash reads now go by DMA and let other tasks run, and every flash erase and write
+waits on the timer.
 
 ## The CPU
 
@@ -45,21 +45,28 @@ What hurt was that the executor often spun instead of waiting. Most of that is f
   opening the launcher went from 40 ms blocked on the bus to 3 ms.
 - **The flash store is async.** Its reads, programs, erases and status polls await the bus and
   wait on a timer, so other tasks run meanwhile.
+- **The shell's writes are queued.** The shell saves settings, the theme and app state by queuing
+  the file for the storage task, which writes it waiting on the timer; the shell's reads of a
+  queued path answer from RAM.
+- **The update and recovery slots wait on the timer too.** A firmware arriving by Bluetooth and a
+  recovery image moved to a new slot are erased and written through `SlotFlash`, the store's own
+  adapter bounded to one slot.
 
 What still spins:
 
-- The shell's store calls run to their end under `block_on`, polling the chip with
-  `embassy_time::block_for`, so an erase or write the shell asks for spins the CPU.
-- Moving the update and recovery slots goes through the blocking `ExternalFlash`, which waits in
-  `BusyWait`.
+- The shell's store reads run to their end under `block_on`; they only wait on the chip when an
+  erase or write from another task is under way, or when a store call other than a single-file read
+  meets writes still queued.
+- When the store and a slot reach the chip at once, the driver makes the later one spin until the
+  earlier one's erase or program ends.
 
 While the CPU spins, touch and the button wait, and the chip cannot sleep, so this costs both
 response time and battery.
 
 What to do:
 
-1. **Async SPI with DMA for the screen and the flash.** Done, as above. What is left is letting
-   the shell's store writes and the slot moves wait without spinning.
+1. **Async SPI with DMA for the screen and the flash.** Done, as above, along with the shell's
+   store writes and the slot copies.
 2. **A second Embassy executor at a higher interrupt priority** (`InterruptExecutor`) for touch,
    the button and the vibrator. They then preempt drawing and storage. It brings two costs. The
    deepest stack becomes the deepest low-priority path plus the deepest high-priority one, so the

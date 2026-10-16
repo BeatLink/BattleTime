@@ -125,7 +125,7 @@ impl Shell {
     pub(super) fn write_state(&self, id: &str, bytes: &[u8]) {
         let now = Instant::now().as_ticks();
         if !app_events::with_state_hold(|hold| hold.keep_save(id, bytes, now)) {
-            self.files.write_now(&state_path(id), bytes);
+            self.files.write_soon(&state_path(id), bytes);
         }
     }
 
@@ -139,7 +139,7 @@ impl Shell {
             Some((app_events::StateWritten::try_from(id).ok()?, bytes))
         });
         if let Some((id, bytes)) = released {
-            self.files.write_now(&state_path(&id), &bytes);
+            self.files.write_soon(&state_path(&id), &bytes);
         }
     }
 }

@@ -8,6 +8,13 @@ document for its part instead.
 
 ## Hardware tests
 
+- [ ] **A firmware upload through `SlotFlash` on the PineTime.** The update and recovery slots are
+  now erased and written through `SlotFlash`, which waits on the timer instead of spinning. Moving
+  the recovery slot over the Nordic UART is proven in the emulator (`tools/check_slot_move.py`),
+  but no emulator check uploads a firmware by DFU. Flash an update with `battletime flash` and check
+  that it installs and confirms, that the screen and touch keep answering while it arrives, and that
+  `battletime slots` still answers afterwards.
+
 - [ ] **The DCDC regulator on the PineTime.** The firmware turns the nRF52832's DCDC regulator on
   at start (`config.dcdc.reg1`), which has run only in the emulator, which models no regulator.
   Flash it and check that the watch boots, connects, and that the battery percentage in the
