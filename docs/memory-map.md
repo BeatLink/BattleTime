@@ -48,11 +48,11 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 137.9 KB | 46.6 KB |
-| App host (with `battletime-ui`) | 92.5 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 138.1 KB | 46.6 KB |
+| App host (with `battletime-ui`) | 91.1 KB | 0.0 KB |
 | App runtime | 33.9 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 31.7 KB | 41.3 KB |
-| core, alloc and compiler builtins | 27.9 KB | 15.4 KB |
+| core, alloc and compiler builtins | 27.7 KB | 15.4 KB |
 | Storage (flash store) | 18.0 KB | 14.4 KB |
 | Settings, companion and notifications (with serde) | 17.7 KB | 2.4 KB |
 | BLEFS file service | 9.5 KB | 3.1 KB |
@@ -60,10 +60,10 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 | Packages | 7.8 KB | 1.3 KB |
 | Display, graphics and drivers | 5.4 KB | 3.2 KB |
 | Updates (DFU) | 3.1 KB | 2.8 KB |
-| Other constants and padding | 29.6 KB | 14.3 KB |
-| **Code and data** | **423.7 KB** | **150.5 KB** |
+| Other constants and padding | 25.7 KB | 14.3 KB |
+| **Code and data** | **418.4 KB** | **150.5 KB** |
 | Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 7.7 KB | 329.2 KB |
+| Free of the 480 KB region, after its header | 13.0 KB | 329.3 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -345,11 +345,11 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
 | Firmware: task storage, the Bluetooth host's resources and packet pool | 21,139 B | 11,266 B |
 | Bluetooth controller | 2,618 B | 2,618 B |
+| App host (with `battletime-ui`) | 396 B | 0 B |
 | Display, graphics and drivers | 372 B | 372 B |
-| App host (with `battletime-ui`) | 368 B | 0 B |
-| Other | 1 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,544 B** | **24,528 B** |
-| Left for the stack | 9,976 B | 40,992 B |
+| Other | 5 B | 1 B |
+| **Static RAM** (`.data` and `.bss`) | **55,576 B** | **24,528 B** |
+| Left for the stack | 9,944 B | 40,992 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
