@@ -133,7 +133,7 @@ fn the_resident_image_keeps_all_but_the_code_and_says_where_the_code_lies() {
     assert!(resident_bytes.len() <= super::resident_bytes(&whole));
     assert_eq!(
         resident_bytes.len(),
-        sample.bytes.len() - whole.code_bytes() + 12 + 2 * 12
+        sample.bytes.len() - whole.code_bytes() - whole.widget_record_bytes() + 12 + 3 * 12
     );
     assert_eq!(resident.string_count(), whole.string_count());
     assert_eq!(
@@ -283,4 +283,49 @@ fn paged_code_that_cannot_be_read_fails_the_run() {
         &whole_file(&sample.bytes),
     );
     assert_eq!(without_cache.unwrap_err(), Failure::NoSuchCode);
+}
+
+// ============================================================================
+// Widget records
+// ============================================================================
+
+/// An app of two screens: a column of two labels named `first`, and a lone label named `second`.
+fn two_screens() -> Vec<u8> {
+    use crate::widgets::{Property, PropertySource::Constant, WidgetKind};
+    let mut writer = ImageWriter::new("screens", "Screens", AppKind::App, 1);
+    let first = writer.string("first") as i32;
+    let second = writer.string("second") as i32;
+    writer.widget(WidgetKind::Column, 2, &[(Property::ScreenName, Constant(first))]);
+    writer.widget(WidgetKind::Label, 0, &[]);
+    writer.widget(WidgetKind::Label, 0, &[]);
+    writer.widget(WidgetKind::Label, 0, &[(Property::ScreenName, Constant(second))]);
+    writer.build()
+}
+
+#[test]
+fn a_paged_image_finds_its_screens_by_table_and_reads_only_the_window_s_widgets() {
+    use crate::widgets::{screen_table, ScreenWindow, WidgetKind, WidgetTree};
+
+    let whole_bytes = two_screens();
+    let whole = AppImage::parse(&whole_bytes).unwrap();
+    let resident_bytes = resident_image(&whole_bytes).unwrap();
+    let resident = AppImage::parse(&resident_bytes).unwrap();
+    let table = screen_table(&WidgetTree::new(whole));
+
+    assert!(resident.widgets_paged());
+    assert_eq!(resident.widget_bytes(0), None);
+    let no_window = WidgetTree::paged(resident, None, &table);
+    assert_eq!(no_window.screens().collect::<Vec<_>>(), [0, 3]);
+    assert_eq!(no_window.screen_named("second"), Some(3));
+    assert_eq!(no_window.screen_end(0), Some(3));
+    assert!(no_window.widget(0).is_none());
+
+    let span = ScreenWindow::span(&resident, 0, 3).unwrap();
+    let bytes = whole_bytes[span.at as usize..(span.at + span.length) as usize].to_vec();
+    let window = ScreenWindow::new(0, 3, span, bytes.into_boxed_slice());
+    let tree = WidgetTree::paged(resident, Some(&window), &table);
+    assert_eq!(tree.widget(1).unwrap().kind, WidgetKind::Label);
+    assert_eq!(tree.children(0).collect::<Vec<_>>(), [1, 2]);
+    assert!(tree.widget(3).is_none());
+    assert!(window.byte_count() < whole.widget_record_bytes());
 }

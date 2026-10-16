@@ -4,7 +4,9 @@
 //! pointers. Each root is one screen. A widget's properties are each a constant, the number of an
 //! expression that works the value out, or, for an event, the number of a handler.
 
-use crate::image::{AppImage, ImageError};
+use alloc::{boxed::Box, vec::Vec};
+
+use crate::image::{AppImage, CodePlace, ImageError};
 use crate::resources::ImageReference;
 use crate::theme::ColorValue;
 
@@ -684,6 +686,15 @@ impl<'image> Widget<'image> {
             })
     }
 
+    pub fn property_count(&self) -> usize {
+        self.properties.len() / PROPERTY_BYTES
+    }
+
+    /// The property at a position, which a caller that changes things between properties reads one at a time.
+    pub fn property_at(&self, position: usize) -> Option<PropertyEntry> {
+        self.properties().nth(position).flatten()
+    }
+
     pub fn property(&self, wanted: Property) -> Option<PropertySource> {
         self.properties()
             .flatten()
@@ -692,15 +703,102 @@ impl<'image> Widget<'image> {
     }
 }
 
-/// The widgets of an image, read in place.
+/// The widget records of one screen of a paged image, read from its file while the screen shows.
+#[derive(Debug)]
+pub struct ScreenWindow {
+    first: u16,
+    end: u16,
+    /// Where `bytes` starts in the whole image.
+    at: u32,
+    bytes: Box<[u8]>,
+}
+
+impl ScreenWindow {
+    /// The one span of the whole image that holds the records of widgets `first` up to `end`.
+    pub fn span(image: &AppImage, first: u16, end: u16) -> Option<CodePlace> {
+        let places = (first..end).map(|index| image.widget_place(index));
+        let mut start = u32::MAX;
+        let mut finish = 0;
+        for place in places {
+            let place = place?;
+            start = start.min(place.at);
+            finish = finish.max(place.at + place.length);
+        }
+        (finish > start).then_some(CodePlace {
+            at: start,
+            length: finish - start,
+        })
+    }
+
+    /// The window over widgets `first` up to `end`, whose records `bytes` holds, read from `span`.
+    pub fn new(first: u16, end: u16, span: CodePlace, bytes: Box<[u8]>) -> ScreenWindow {
+        ScreenWindow {
+            first,
+            end,
+            at: span.at,
+            bytes,
+        }
+    }
+
+    /// The bytes it holds on the heap.
+    pub fn byte_count(&self) -> usize {
+        self.bytes.len()
+    }
+}
+
+/// One screen of a paged image: its root, the widget just past it, and the string naming it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ScreenEntry {
+    pub root: u16,
+    pub end: u16,
+    pub name: Option<u16>,
+}
+
+/// Each screen of an image whose widgets are all here, for a paged image made from it to find its screens by.
+pub fn screen_table(tree: &WidgetTree) -> Vec<ScreenEntry> {
+    tree.screens()
+        .map(|root| ScreenEntry {
+            root,
+            end: tree.subtree_end(root).unwrap_or(root),
+            name: match tree
+                .widget(root)
+                .and_then(|widget| widget.property(Property::ScreenName))
+            {
+                Some(PropertySource::Constant(string)) => u16::try_from(string).ok(),
+                _ => None,
+            },
+        })
+        .collect()
+}
+
+/// The widgets of an image, read in place, or for a paged image those of the screen in its window.
 #[derive(Clone, Copy, Debug)]
 pub struct WidgetTree<'image> {
     image: AppImage<'image>,
+    window: Option<&'image ScreenWindow>,
+    screens: &'image [ScreenEntry],
 }
 
 impl<'image> WidgetTree<'image> {
     pub fn new(image: AppImage<'image>) -> Self {
-        WidgetTree { image }
+        WidgetTree {
+            image,
+            window: None,
+            screens: &[],
+        }
+    }
+
+    /// The widgets of a paged image: those of the screen `window` holds, and `screens` to find the others by.
+    pub fn paged(
+        image: AppImage<'image>,
+        window: Option<&'image ScreenWindow>,
+        screens: &'image [ScreenEntry],
+    ) -> Self {
+        WidgetTree {
+            image,
+            window,
+            screens,
+        }
     }
 
     /// The image the widgets are read from.
@@ -713,7 +811,14 @@ impl<'image> WidgetTree<'image> {
     }
 
     pub fn widget(&self, index: u16) -> Option<Widget<'image>> {
-        Widget::parse(self.image.widget_bytes(index)?)
+        let Some(place) = self.image.widget_place(index) else {
+            return Widget::parse(self.image.widget_bytes(index)?);
+        };
+        let window = self
+            .window
+            .filter(|window| (window.first..window.end).contains(&index))?;
+        let start = place.at.checked_sub(window.at)? as usize;
+        Widget::parse(window.bytes.get(start..start + place.length as usize)?)
     }
 
     /// The index just past this widget and everything inside it.
@@ -741,16 +846,41 @@ impl<'image> WidgetTree<'image> {
 
     /// The root widget of each screen, in order; the first is the screen an app opens on.
     pub fn screens(&self) -> impl Iterator<Item = u16> + '_ {
+        let paged = self.image.widgets_paged();
         let mut next = Some(0u16);
+        let mut place = 0;
         core::iter::from_fn(move || {
+            if paged {
+                place += 1;
+                return self.screens.get(place - 1).map(|screen| screen.root);
+            }
             let root = next.filter(|&root| root < self.widget_count())?;
             next = self.subtree_end(root);
             Some(root)
         })
     }
 
+    /// The widget just past a screen and everything in it, found in the screen table for a paged image.
+    pub fn screen_end(&self, root: u16) -> Option<u16> {
+        match self.image.widgets_paged() {
+            true => self
+                .screens
+                .iter()
+                .find(|screen| screen.root == root)
+                .map(|screen| screen.end),
+            false => self.subtree_end(root),
+        }
+    }
+
     /// The screen whose root has this name.
     pub fn screen_named(&self, name: &str) -> Option<u16> {
+        if self.image.widgets_paged() {
+            return self
+                .screens
+                .iter()
+                .find(|screen| screen.name.and_then(|string| self.image.string(string)) == Some(name))
+                .map(|screen| screen.root);
+        }
         self.screens().find(|&root| {
             let named = self.widget(root).and_then(|widget| widget.property(Property::ScreenName));
             matches!(named, Some(PropertySource::Constant(string)) if self.image.string(string as u16) == Some(name))

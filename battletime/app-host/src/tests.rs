@@ -462,26 +462,22 @@ fn a_paged_app_draws_and_runs_its_handlers_as_the_whole_one_does() {
 }
 
 #[test]
-fn a_paged_app_whose_image_file_is_gone_reports_its_handler_failing() {
+fn a_paged_app_whose_image_file_is_gone_reports_its_screen_failing() {
     let whole = stopwatch_image();
     let resident = battletime_runtime::paging::resident_image(&whole).unwrap();
     let mut system = FakeSystem::default();
     let mut slot = None;
     open_paged(&mut slot, &whole, &resident, &mut system);
-    let host = slot.as_mut().unwrap();
 
-    click_on(
-        host,
-        stopwatch_widgets::START_BUTTON,
-        START_TIME + 10,
-        &mut system,
-    );
-
+    assert!(slot
+        .unwrap()
+        .widget_bounds(stopwatch_widgets::START_BUTTON)
+        .is_none());
     assert!(system.failures.iter().any(|failure| matches!(
         failure,
-        AppFailure::Handler {
+        AppFailure::Screen {
+            root: 0,
             failure: battletime_runtime::Failure::CodeUnreadable,
-            ..
         }
     )));
 }

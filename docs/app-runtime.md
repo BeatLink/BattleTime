@@ -513,31 +513,40 @@ embed it.
 
 ### Paged code
 
-An app whose [memory need](#memory) is smaller that way keeps its handlers' and functions' code on
-the external flash while it is open. `estimate_memory_need` works the need out both ways and
-`paging::pages_code` takes its choice: paged, the app holds a resident image and a code cache, but
-holds the whole image beside the resident one for a moment as it opens, so an app with little code
-or a small screen stays whole. Seven of the 66 apps and faces in the repository are paged, such as
-`about`, `fancy` and `omega-time`, saving up to 3 KB each.
+An app whose [memory need](#memory) is smaller that way keeps its handlers' and functions' code,
+and the widget records of every screen but the open one, on the external flash while it is open.
+`estimate_memory_need` works the need out both ways and `paging::pages_code` takes its choice:
+paged, the app holds a resident image, a code cache and the open screen's widget records, but holds
+the whole image beside the resident one for a moment as it opens, so an app with little code or a
+small screen stays whole. Ten of the 66 apps and faces in the repository are paged, such as
+`settings`, `about`, `fancy` and `omega-time`, saving up to 3 KB each.
 
 Opening a paged app takes these steps instead of the first and fourth above:
 
 1. The shell reads the whole image, and `paging::resident_image` copies everything but the code's
-   data into a resident image. Its handler and function tables stay, so every number still names
-   the same code, and a section of kind 14 says where their data lies in the image file.
+   and widget records' data into a resident image. Their tables stay, so every number still names
+   the same code or widget, and a section of kind 14 says where their data lies in the image file.
 2. `AppHost::open_paged_into` verifies the whole image and works the bindings and subscriptions
    out from it, with the shared library, keeps the resident image, and gives the interpreter a
-   `CodeCache` on the image file's path; then the derive subscriptions run.
+   `CodeCache` on the image file's path, and a table of each screen's root, end and name, read from
+   the whole image; then the derive subscriptions run.
 3. The shell frees the whole image, and only then does `bring_to_front` build the first screen, so
    the whole image and the screen are never held together.
+
+Each time a screen opens, the host drops the last screen's widget records and reads the new
+screen's into a `ScreenWindow` in one read, through the cache with its CRC check; a screen it cannot
+read shows nothing and is reported as `AppFailure::Screen`. Its `WidgetTree` reads widgets from the
+window and finds other screens, by number or name, in the screen table, built through a macro so
+only those fields are borrowed while the rest of the host changes.
 
 The interpreter asks the cache for each handler or function as it starts running it, by its
 number. The cache holds as much as the longest one, and at least 1 KB, packed in the order it read
 them; when one does not fit it drops the least recently used. A function's caller is found again by
 its number when the call returns, so dropping any code but what is running is always safe, at the
 cost of reading it again. Each read is one DMA read through the image file's own open file,
-about 40 µs plus 1 µs a byte on the watch, and a second of the file's 4-byte CRC: code read from an image put at the same path,
-such as one the companion is uploading, fails the handler with `CodeUnreadable` rather than running.
+about 40 µs plus 1 µs a byte on the watch, and a second of the file's 4-byte CRC: code read from an
+image put at the same path, such as one the companion is uploading, fails the handler with
+`CodeUnreadable` rather than running.
 Expressions stay in the resident image, since the screen evaluates them all the time; they still
 call paged functions. The verifier refuses a resident image, and a paged app takes no library after
 it opens, since the bindings are worked out from the whole image. Closed apps that run in the

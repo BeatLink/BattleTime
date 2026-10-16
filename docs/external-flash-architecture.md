@@ -210,11 +210,13 @@ Docs and comments the code contradicts, as of e30358e4:
 7. **Paged bytecode functions and glyph subsets**, and the shell's screens as bytecode. Paged code
    is done ([app-runtime.md](app-runtime.md#paged-code)), ahead of the stages before it, while
    apps are still small: an app whose need is smaller that way keeps its handlers and functions on
-   the flash and reads them into a code cache of at least 1 KB as they run, for 3,944 B of firmware
-   code. Today it pages 7 of 66 apps and faces, saving up to 3 KB each; the gain grows with an
-   app's code. No install-time index was needed: the image's own tables give every piece's place,
-   and the bindings are worked out from the whole image while it opens. Still to come: strings and
-   widget records of screens not shown, glyph subsets, and paging closed apps.
+   the flash and reads them into a code cache of at least 1 KB as they run, and holds only the open
+   screen's widget records, for 6,580 B of firmware code. Today it pages 10 of 66 apps and faces,
+   saving up to 3 KB each; the gain grows with an app's code and screens. No install-time index was
+   needed: the image's own tables give every piece's place, and the bindings and screen table are
+   worked out from the whole image while it opens. Still to come: strings, which handlers and
+   nodes borrow for as long as the image lives, and glyph subsets. Closed apps are left whole: they
+   are loaded only for a moment, and opening paged holds both images then anyway.
 8. **Native code compiled from bytecode**, if an app needs the speed.
 
 ## Open questions

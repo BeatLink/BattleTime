@@ -119,7 +119,12 @@ fn a_paged_app_needs_its_resident_image_and_cache_or_what_opening_holds() {
     let resident = (crate::paging::resident_bytes(&parsed) as u32).div_ceil(4) * 4;
     let cache = (crate::paging::cache_bytes(&parsed) as u32).div_ceil(4) * 4;
     assert!(need.pages_code);
-    assert_eq!(need.image_bytes, resident + cache + CODE_CACHE_OVERHEAD_BYTES);
+    // One screen of a column and ten labels, each record 4 bytes.
+    let window = 11 * 4;
+    assert_eq!(
+        need.image_bytes,
+        resident + cache + CODE_CACHE_OVERHEAD_BYTES + window + SCREEN_WINDOW_OVERHEAD_BYTES + 8
+    );
     assert_eq!(need.opening_bytes, whole + resident);
     let open = need.image_bytes + need.working_bytes + need.widget_bytes + need.text_bytes + need.icon_bytes;
     assert_eq!(

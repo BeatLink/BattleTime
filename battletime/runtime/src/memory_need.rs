@@ -42,6 +42,12 @@ pub const BITMAP_FILE_BYTES: u32 = rounded(crate::widgets::BITMAP_FILE_MOST_BYTE
 /// What a paged app's code cache holds beside its code: the image file's path and the list of what it holds.
 pub const CODE_CACHE_OVERHEAD_BYTES: u32 = 160;
 
+/// What a paged app's window of widget records holds beside them: its box and where its widgets start and end.
+pub const SCREEN_WINDOW_OVERHEAD_BYTES: u32 = 24;
+
+/// Each screen of a paged app in its screen table: its root, end and name.
+pub const SCREEN_ENTRY_BYTES: u32 = 6;
+
 /// The most bytes one `prefetch_file` reads ahead; an app that asks for one holds that much until a `file_bytes` takes it.
 pub const PREFETCH_BYTES: u32 = 4096;
 
@@ -149,10 +155,17 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
     if image.is_paged() || image.code_bytes() == 0 {
         return whole;
     }
-    // Paged, the app holds its resident image and code cache, but holds both images for a moment as it opens.
+    // Paged, the app holds its resident image, code cache and open screen's widget records, but holds
+    // both images for a moment as it opens.
     let resident = rounded(resident_bytes(image) as u32);
+    let screens = tree.screens().count() as u32;
     let paged = MemoryNeed {
-        image_bytes: resident + rounded(cache_bytes(image) as u32) + CODE_CACHE_OVERHEAD_BYTES,
+        image_bytes: resident
+            + rounded(cache_bytes(image) as u32)
+            + CODE_CACHE_OVERHEAD_BYTES
+            + rounded(largest_screen_records(&tree))
+            + SCREEN_WINDOW_OVERHEAD_BYTES
+            + rounded(SCREEN_ENTRY_BYTES * screens),
         opening_bytes: whole_bytes + resident,
         pages_code: true,
         ..whole
@@ -416,6 +429,20 @@ fn names_library_icon(image: &AppImage, value: i32) -> bool {
         Some(ImageReference::SharedLibrary(_) | ImageReference::InstalledApp(_)) => true,
         None => false,
     }
+}
+
+/// The widget records of the screen with the most, which a paged app's window holds while it shows.
+fn largest_screen_records(tree: &WidgetTree) -> u32 {
+    tree.screens()
+        .map(|root| {
+            let end = tree.subtree_end(root).unwrap_or(root);
+            (root..end)
+                .filter_map(|index| tree.image().widget_bytes(index))
+                .map(|record| record.len() as u32)
+                .sum::<u32>()
+        })
+        .max()
+        .unwrap_or(0)
 }
 
 /// What the host holds for this many library icons, up to its cap.

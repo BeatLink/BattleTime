@@ -16,7 +16,7 @@ use battletime_runtime::{
     state::SaveBufferFull,
     subscriptions::{Subscription, SubscriptionKind},
     verify_with,
-    widgets::{Property, PropertyValue as ValueKind, MOST_WIDGETS},
+    widgets::{screen_table, Property, PropertyValue as ValueKind, ScreenEntry, ScreenWindow, MOST_WIDGETS},
     AppImage, AppKind, AppState, Bindings, CheckedFunctions, EffectKind, Failure, HandlerOutcome, ImageError,
     Inputs, Interpreter, PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree,
     NONE,
@@ -174,6 +174,15 @@ fn verify_image(image_bytes: &[u8]) -> Result<(), OpenError> {
     Ok(())
 }
 
+/// The host's widgets: the image's, or for a paged image those of the open screen's window.
+///
+/// A macro rather than a method, so it borrows only those fields and the host's others stay free to change.
+macro_rules! tree {
+    ($host:expr) => {
+        WidgetTree::paged($host.image, $host.window.as_deref(), &$host.screen_table)
+    };
+}
+
 fn mask_of(expressions: impl Iterator<Item = usize>) -> u128 {
     expressions
         .filter(|&expression| expression < MOST_BOUND_EXPRESSIONS)
@@ -187,7 +196,10 @@ fn mask_of(expressions: impl Iterator<Item = usize>) -> u128 {
 /// One app, open with the widgets of its screen, or closed with only its state.
 pub struct AppHost<'image> {
     image: AppImage<'image>,
-    tree: WidgetTree<'image>,
+    /// For an image whose widget records were paged, those of the open screen, read when it opens.
+    window: Option<Box<ScreenWindow>>,
+    /// For an image whose widget records were paged, each screen's root, end and name.
+    screen_table: Vec<ScreenEntry>,
     library: Option<AppImage<'image>>,
     installed_app_icons: &'image [&'image [u8]],
     state: AppState,
@@ -457,8 +469,15 @@ impl<'image> AppHost<'image> {
         // Made a constant, so the box is filled from flash rather than from a 1 KB copy on the stack.
         let mut interpreter = Box::new(const { Interpreter::without_scratch() });
         interpreter.allot_scratch(battletime_runtime::interpreter::scratch_bytes_for(&image));
-        let tree = WidgetTree::new(image);
-        let first_screen = tree.screens().next().ok_or(OpenError::NoScreens)?;
+        // A paged image keeps no widget records but those of the open screen, so its screens are found from the whole one.
+        let screen_table = match image.widgets_paged() {
+            true => screen_table(&WidgetTree::new(analysed)),
+            false => Vec::new(),
+        };
+        let first_screen = WidgetTree::paged(image, None, &screen_table)
+            .screens()
+            .next()
+            .ok_or(OpenError::NoScreens)?;
 
         let mut persistent_variables = 0;
         for variable in 0..image.state_count().min(MOST_TRACKED_VARIABLES) {
@@ -472,7 +491,8 @@ impl<'image> AppHost<'image> {
 
         let host = AppHost {
             image,
-            tree,
+            window: None,
+            screen_table,
             library: None,
             installed_app_icons: &[],
             state,
@@ -602,7 +622,7 @@ impl<'image> AppHost<'image> {
 
     /// The open screen's name, if it has one.
     pub fn screen_name(&self) -> Option<&'image str> {
-        let root = self.tree.widget(self.screen_root)?;
+        let root = tree!(self).widget(self.screen_root)?;
         match root.property(Property::ScreenName)? {
             PropertySource::Constant(string) => self.image.string(u16::try_from(string).ok()?),
             _ => None,
@@ -625,7 +645,7 @@ impl<'image> AppHost<'image> {
             memory.failures_in_a_row = 0;
         }
         self.run_subscriptions_of(SubscriptionKind::Open, None, &[], &[], now, system);
-        let first_screen = self.tree.screens().next().unwrap_or(0);
+        let first_screen = tree!(self).screens().next().unwrap_or(0);
         self.show_screen(first_screen, now, system);
         self.run_screen_event(Property::OnShow, &[], now, system, false);
     }
@@ -699,6 +719,9 @@ impl<'image> AppHost<'image> {
 
     fn show_screen(&mut self, root: u16, now: Value, system: &mut impl System) {
         self.nodes = Vec::new();
+        if let Err(failure) = self.load_window(root, &*system) {
+            system.app_failed(AppFailure::Screen { root, failure });
+        }
         self.cleared_regions.clear();
         self.screen_root = root;
         self.last_clock_update = now;
@@ -708,6 +731,35 @@ impl<'image> AppHost<'image> {
         self.text_files = Vec::new();
         self.bitmap_files = Vec::new();
         self.build_whole_screen(now, system);
+    }
+
+    /// For a paged image, reads the widget records of the screen at `root` from its file, dropping the last screen's first.
+    ///
+    /// A screen whose records cannot be read shows nothing, as a screen with no widgets would.
+    #[inline(never)]
+    fn load_window(&mut self, root: u16, system: &dyn SystemValues) -> Result<(), Failure> {
+        if !self.image.widgets_paged() {
+            return Ok(());
+        }
+        self.window = None;
+        let end = WidgetTree::paged(self.image, None, &self.screen_table)
+            .screen_end(root)
+            .ok_or(Failure::NoSuchCode)?;
+        let span = ScreenWindow::span(&self.image, root, end).ok_or(Failure::NoSuchCode)?;
+        let cache = self.interpreter.code_cache().ok_or(Failure::CodeUnreadable)?;
+        let mut bytes = Vec::new();
+        bytes
+            .try_reserve_exact(span.length as usize)
+            .map_err(|_| Failure::ScratchFull)?;
+        bytes.resize(span.length as usize, 0);
+        cache.read_part(span.at, &mut bytes, system)?;
+        self.window = Some(Box::new(ScreenWindow::new(
+            root,
+            end,
+            span,
+            bytes.into_boxed_slice(),
+        )));
+        Ok(())
     }
 
     /// Builds and lays out every node afresh, and marks the whole screen to be drawn.
@@ -754,7 +806,7 @@ impl<'image> AppHost<'image> {
         let mut created: Vec<usize> = Vec::new();
         let mut pending: Vec<(u16, u16, Option<u8>)> = alloc::vec![(self.screen_root, 0, None)];
         while let Some((widget_index, row, parent)) = pending.pop() {
-            let Some(widget) = self.tree.widget(widget_index) else {
+            let Some(kind) = tree!(self).widget(widget_index).map(|widget| widget.kind) else {
                 continue;
             };
             if self.nodes.len() >= MOST_WIDGETS {
@@ -775,7 +827,7 @@ impl<'image> AppHost<'image> {
                     }
                 }
                 None => {
-                    let mut node = Node::new(widget_index, widget.kind, 0, parent, SCREEN_AREA);
+                    let mut node = Node::new(widget_index, kind, 0, parent, SCREEN_AREA);
                     node.row = row;
                     self.nodes.push(Box::new(node));
                     first_failure = first_failure.or(self.fill_node(node_index, now, system));
@@ -784,11 +836,11 @@ impl<'image> AppHost<'image> {
                 }
             }
             if self.nodes[node_index].settings.visible {
-                let mut children: Vec<u16> = self.tree.children(widget_index).collect();
-                if widget.kind == WidgetKind::Pages {
+                let mut children: Vec<u16> = tree!(self).children(widget_index).collect();
+                if kind == WidgetKind::Pages {
                     children = self.page_on_show(node_index, &children);
                 }
-                let rows = match widget.kind {
+                let rows = match kind {
                     WidgetKind::Repeat => self.rows_to_build(node_index, now, system),
                     _ => alloc::vec![row],
                 };
@@ -850,9 +902,14 @@ impl<'image> AppHost<'image> {
 
     /// Works out a new node's properties: constants from the image, expressions by running them.
     fn fill_node(&mut self, node_index: usize, now: Value, system: &impl SystemValues) -> Option<AppFailure> {
-        let widget = self.tree.widget(self.nodes[node_index].widget_index)?;
+        let widget_index = self.nodes[node_index].widget_index;
+        let count = tree!(self).widget(widget_index)?.property_count();
         let mut first_failure = None;
-        for entry in widget.properties().flatten() {
+        // One at a time, since running an expression changes the host the widget is read through.
+        for position in 0..count {
+            let Some(entry) = tree!(self).widget(widget_index)?.property_at(position) else {
+                continue;
+            };
             match entry.source {
                 PropertySource::Constant(constant) => {
                     let value = match entry.property.value() {
@@ -878,7 +935,7 @@ impl<'image> AppHost<'image> {
     fn expressions_on_screen(&self) -> u128 {
         let mut expressions = 0u128;
         for node in &self.nodes {
-            let Some(widget) = self.tree.widget(node.widget_index) else {
+            let Some(widget) = tree!(self).widget(node.widget_index) else {
                 continue;
             };
             for entry in widget.properties().flatten() {
@@ -899,7 +956,7 @@ impl<'image> AppHost<'image> {
     fn expressions_that_wake(&self) -> u128 {
         let mut expressions = 0u128;
         for node in &self.nodes {
-            let Some(widget) = self.tree.widget(node.widget_index) else {
+            let Some(widget) = tree!(self).widget(node.widget_index) else {
                 continue;
             };
             for entry in widget.properties().flatten() {
@@ -926,7 +983,7 @@ impl<'image> AppHost<'image> {
         if node.kind != WidgetKind::Repeat {
             return None;
         }
-        let row = self.tree.widget(self.tree.children(node.widget_index).next()?)?;
+        let row = tree!(self).widget(tree!(self).children(node.widget_index).next()?)?;
         match row.property(Property::Visible)? {
             PropertySource::Expression(expression) if (expression as usize) < MOST_BOUND_EXPRESSIONS => {
                 Some(expression)
@@ -961,11 +1018,10 @@ impl<'image> AppHost<'image> {
     fn rows_to_build(&mut self, node_index: usize, now: Value, system: &impl SystemValues) -> Vec<u16> {
         let node = &self.nodes[node_index];
         let count = node.settings.value.clamp(0, u16::MAX as i32) as u16;
-        let row_widget = self
-            .tree
+        let row_widget = tree!(self)
             .children(node.widget_index)
             .next()
-            .and_then(|row| self.tree.widget(row));
+            .and_then(|row| tree!(self).widget(row));
         // Rows sit in slots only along a list that scrolls; elsewhere they are laid out as their parent's own children.
         let list = node
             .parent
@@ -1153,10 +1209,17 @@ impl<'image> AppHost<'image> {
         let mut first_failure = None;
         if expressions != 0 {
             for node_index in 0..self.nodes.len() {
-                let Some(widget) = self.tree.widget(self.nodes[node_index].widget_index) else {
-                    continue;
-                };
-                for entry in widget.properties().flatten() {
+                let widget_index = self.nodes[node_index].widget_index;
+                let count = tree!(self)
+                    .widget(widget_index)
+                    .map_or(0, |widget| widget.property_count());
+                for position in 0..count {
+                    let Some(entry) = tree!(self)
+                        .widget(widget_index)
+                        .and_then(|widget| widget.property_at(position))
+                    else {
+                        continue;
+                    };
                     let PropertySource::Expression(expression) = entry.source else {
                         continue;
                     };
@@ -1296,7 +1359,7 @@ impl<'image> AppHost<'image> {
             let wanted = match effect.kind {
                 EffectKind::Go if may_navigate => app_effect
                     .text(0)
-                    .and_then(|name| self.tree.screen_named(name))
+                    .and_then(|name| tree!(self).screen_named(name))
                     .map(Navigation::Go),
                 EffectKind::Back if may_navigate && self.screen_history_length > 0 => Some(Navigation::Back),
                 _ => None,
@@ -1409,7 +1472,7 @@ impl<'image> AppHost<'image> {
                 continue;
             }
             let key = NodeKey::of(node);
-            let Some(widget) = self.tree.widget(node.widget_index) else {
+            let Some(widget) = tree!(self).widget(node.widget_index) else {
                 continue;
             };
             let text_of = |property| match widget.property(property) {
@@ -1527,7 +1590,7 @@ impl<'image> AppHost<'image> {
                 continue;
             }
             let widget_index = node.widget_index;
-            let Some(widget) = self.tree.widget(widget_index) else {
+            let Some(widget) = tree!(self).widget(widget_index) else {
                 continue;
             };
             let number = widget
@@ -1961,7 +2024,7 @@ impl<'image> AppHost<'image> {
 
     /// Puts the named screen in place of the open one as if the app had opened on it, so going back never visits the first.
     pub fn start_on_screen(&mut self, name: &str, now: Value, system: &mut impl System) -> bool {
-        let Some(root) = self.tree.screen_named(name).filter(|_| self.is_open) else {
+        let Some(root) = tree!(self).screen_named(name).filter(|_| self.is_open) else {
             return false;
         };
         if root != self.screen_root {
@@ -1997,7 +2060,7 @@ impl<'image> AppHost<'image> {
             if !is_inside(area) || self.is_disabled(node_index) {
                 continue;
             }
-            let Some(widget) = self.tree.widget(node.widget_index) else {
+            let Some(widget) = tree!(self).widget(node.widget_index) else {
                 continue;
             };
             if let Some(PropertySource::Handler(handler)) = widget.property(property) {
@@ -2090,8 +2153,7 @@ impl<'image> AppHost<'image> {
         let option =
             dropdown_option_at(node, y).filter(|&option| inside_across && option < node.option_count as i32);
         let row = node.row;
-        let handler = self
-            .tree
+        let handler = tree!(self)
             .widget(node.widget_index)
             .and_then(|widget| widget.property(Property::OnChange));
         match (option, handler) {
@@ -2234,7 +2296,7 @@ impl<'image> AppHost<'image> {
         let handler = self
             .nodes
             .get(node_index)
-            .and_then(|node| self.tree.widget(node.widget_index))
+            .and_then(|node| tree!(self).widget(node.widget_index))
             .and_then(|widget| widget.property(Property::OnPageChange));
         if let Some(PropertySource::Handler(handler)) = handler {
             let row = self.nodes[node_index].row;
@@ -2320,8 +2382,7 @@ impl<'image> AppHost<'image> {
         self.settle_on_a_page(drag, now, system);
         let node = self.nodes.get(drag.node_index)?;
         let offset = node.scroll_offset as Value;
-        let handler = self
-            .tree
+        let handler = tree!(self)
             .widget(node.widget_index)
             .and_then(|widget| widget.property(Property::OnScrollEnd));
         Some(match handler {
@@ -2351,8 +2412,7 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
         may_navigate: bool,
     ) -> EventResult {
-        let handler = match self
-            .tree
+        let handler = match tree!(self)
             .widget(self.screen_root)
             .and_then(|root| root.property(property))
         {

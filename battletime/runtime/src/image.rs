@@ -416,9 +416,10 @@ pub struct CodePlace {
 struct PagedPlaces {
     handlers: Option<CodePlace>,
     functions: Option<CodePlace>,
+    widgets: Option<CodePlace>,
 }
 
-/// Reads the paged section, if the image has one; only handlers and functions may be paged.
+/// Reads the paged section, if the image has one; only handlers, functions and widget records may be paged.
 fn paged_places(bytes: &[u8], section_count: u16) -> Result<PagedPlaces, ImageError> {
     let mut places = PagedPlaces::default();
     for section_index in 0..section_count as usize {
@@ -438,6 +439,7 @@ fn paged_places(bytes: &[u8], section_count: u16) -> Result<PagedPlaces, ImageEr
             match SectionKind::from_number(number) {
                 Some(SectionKind::Handlers) => places.handlers = place,
                 Some(SectionKind::Functions) => places.functions = place,
+                Some(SectionKind::Widgets) => places.widgets = place,
                 _ => return Err(ImageError::UnknownSection(number)),
             }
         }
@@ -474,9 +476,10 @@ pub struct AppImage<'image> {
     fonts: EntryTable<'image>,
     functions: EntryTable<'image>,
     data: EntryTable<'image>,
-    /// Where the handlers' and functions' data starts in the whole image when it was left there; 0 when it is here.
+    /// Where the handlers', functions' and widget records' data starts in the whole image when it was left there; 0 when it is here.
     paged_handlers_at: u32,
     paged_functions_at: u32,
+    paged_widgets_at: u32,
     /// What the compiler worked out about the image; `parse` reads them but does not check them.
     pub facts: Facts,
 }
@@ -567,12 +570,14 @@ impl<'image> AppImage<'image> {
             data: EntryTable::default(),
             paged_handlers_at: 0,
             paged_functions_at: 0,
+            paged_widgets_at: 0,
             facts: Facts::default(),
         };
 
         let paged = paged_places(bytes, section_count)?;
         image.paged_handlers_at = paged.handlers.map_or(0, |place| place.at);
         image.paged_functions_at = paged.functions.map_or(0, |place| place.at);
+        image.paged_widgets_at = paged.widgets.map_or(0, |place| place.at);
         let mut seen_sections = 0u32;
         for section_index in 0..section_count as usize {
             let entry = HEADER_BYTES + section_index * SECTION_ENTRY_BYTES;
@@ -601,7 +606,12 @@ impl<'image> AppImage<'image> {
                         None => EntryTable::parse(count, section_bytes)?,
                     }
                 }
-                SectionKind::Widgets => image.widgets = EntryTable::parse(count, section_bytes)?,
+                SectionKind::Widgets => {
+                    image.widgets = match paged.widgets {
+                        Some(place) => EntryTable::parse_paged(count, section_bytes, place)?,
+                        None => EntryTable::parse(count, section_bytes)?,
+                    }
+                }
                 SectionKind::InitialValues => image.initial_values = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Subscriptions => {
                     image.subscriptions = section_bytes
@@ -776,7 +786,25 @@ impl<'image> AppImage<'image> {
 
     /// Whether the image's code was left in the image file, so it runs only through a `CodeCache`.
     pub fn is_paged(&self) -> bool {
-        self.paged_handlers_at != 0 || self.paged_functions_at != 0
+        self.paged_handlers_at != 0 || self.paged_functions_at != 0 || self.paged_widgets_at != 0
+    }
+
+    /// Whether the widget records were left in the image file, so only a `ScreenWindow` holds any.
+    pub fn widgets_paged(&self) -> bool {
+        self.paged_widgets_at != 0
+    }
+
+    /// Where a paged widget's record lies in the whole image; none when the widgets are here.
+    pub fn widget_place(&self, index: u16) -> Option<CodePlace> {
+        match self.paged_widgets_at {
+            0 => None,
+            at => self.widgets.place(index, at),
+        }
+    }
+
+    /// The bytes of every widget record together, in a whole image.
+    pub fn widget_record_bytes(&self) -> usize {
+        self.widgets.data.len()
     }
 
     /// Where a paged handler's code lies in the whole image; none when the handlers are here.

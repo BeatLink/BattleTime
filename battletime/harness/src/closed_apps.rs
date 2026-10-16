@@ -75,7 +75,7 @@ impl TestWatch {
         let mut host = crate::watch::open_host(image, library, &saved, now, &mut self.system)?;
         host.set_installed_app_icons(self.installed_icons, &self.system);
         self.system.app_name = parsed.string(parsed.name_string).unwrap_or_default().to_string();
-        self.widgets = WidgetTree::new(*host.image());
+        self.widgets = WidgetTree::new(parsed);
         self.host = host;
         self.open_image = image;
         // An open app runs its own subscriptions, and is noted again when it closes.

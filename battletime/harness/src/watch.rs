@@ -168,7 +168,9 @@ impl TestWatch {
             .string(host.image().name_string)
             .unwrap_or_default()
             .to_string();
-        let widgets = WidgetTree::new(*host.image());
+        // The whole image, since a paged host holds only the open screen's widget records.
+        let widgets =
+            WidgetTree::new(AppImage::parse(image).map_err(|error| OpenFailure::CannotOpen(error.into()))?);
         Ok(TestWatch {
             host,
             open_image: image,

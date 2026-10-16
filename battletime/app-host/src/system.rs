@@ -50,6 +50,11 @@ pub enum AppFailure {
         expression: u16,
         failure: Failure,
     },
+    /// A paged app's screen, by its root widget, whose widgets could not be read from its image file.
+    Screen {
+        root: u16,
+        failure: Failure,
+    },
 }
 
 // ============================================================================

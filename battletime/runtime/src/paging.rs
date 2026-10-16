@@ -1,11 +1,12 @@
-//! Keeping an open app's code on the flash, so its image takes less of the heap.
+//! Keeping an open app's code and widget records on the flash, so its image takes less of the heap.
 //!
 //! An app whose memory need is smaller paged, as `estimate_memory_need` works out, is opened from a
-//! resident image: a copy of its image with every section but the code's data, which `resident_image`
-//! builds. Its handler and function tables stay, and a paged section says where their data lies in
-//! the image file. The interpreter then reads each handler or function into a `CodeCache` when it
-//! runs, keeping those used most recently. A caller is found again by its number when a call
-//! returns, so dropping any code but what is running is always safe.
+//! resident image: a copy of its image with every section but the handlers', functions' and widget
+//! records' data, which `resident_image` builds. Their tables stay, and a paged section says where
+//! their data lies in the image file. The interpreter then reads each handler or function into a
+//! `CodeCache` when it runs, keeping those used most recently. A caller is found again by its number
+//! when a call returns, so dropping any code but what is running is always safe. The app host reads
+//! the open screen's widget records into a `widgets::ScreenWindow` through the same cache.
 
 use alloc::{string::String, vec::Vec};
 
@@ -23,6 +24,7 @@ const HEADER_BYTES: usize = layout::HEADER_BYTES;
 const SECTION_ENTRY_BYTES: usize = layout::SECTION_ENTRY_BYTES;
 const HANDLERS_SECTION: u16 = 4;
 const FUNCTIONS_SECTION: u16 = 10;
+const WIDGETS_SECTION: u16 = 5;
 /// The CRC field, and where the bytes it covers start.
 const CRC_AT: usize = 12;
 const CRC_COVERS_FROM: usize = 16;
@@ -39,7 +41,9 @@ pub fn cache_bytes(image: &AppImage) -> usize {
 
 /// How long the app's resident image is, at most: the whole image less its code, plus the paged section.
 pub fn resident_bytes(image: &AppImage) -> usize {
-    image.byte_count() - image.code_bytes() + SECTION_ENTRY_BYTES + 2 * layout::PAGED_ENTRY_BYTES
+    image.byte_count() - image.code_bytes() - image.widget_record_bytes()
+        + SECTION_ENTRY_BYTES
+        + 3 * layout::PAGED_ENTRY_BYTES
 }
 
 // ============================================================================
@@ -54,8 +58,8 @@ fn read_u32(bytes: &[u8], at: usize) -> Option<u32> {
     Some(u32::from_le_bytes(bytes.get(at..at + 4)?.try_into().ok()?))
 }
 
-/// The resident image of a whole image: every section as it is, but the handlers' and functions'
-/// tables without their data, and a paged section saying where that data lies in `whole`.
+/// The resident image of a whole image: every section as it is, but the handlers', functions' and
+/// widgets' tables without their data, and a paged section saying where that data lies in `whole`.
 pub fn resident_image(whole: &[u8]) -> Result<Vec<u8>, ImageError> {
     let image = AppImage::parse(whole)?;
     if image.is_paged() {
@@ -76,7 +80,7 @@ pub fn resident_image(whole: &[u8]) -> Result<Vec<u8>, ImageError> {
         let bytes = whole
             .get(offset..offset + length)
             .ok_or(ImageError::SectionOutOfBounds)?;
-        if number == HANDLERS_SECTION || number == FUNCTIONS_SECTION {
+        if number == HANDLERS_SECTION || number == FUNCTIONS_SECTION || number == WIDGETS_SECTION {
             let table_bytes = count as usize * layout::TABLE_ENTRY_BYTES;
             let place = CodePlace {
                 at: (offset + table_bytes) as u32,
@@ -198,14 +202,16 @@ impl CodeCache {
             return Err(Failure::CodeUnreadable);
         }
         let start = self.make_room(length);
-        let read = system.read_file(&self.path, place.at, &mut self.buffer[start..start + length]);
         self.reads += 1;
-        let mut crc = [0u8; 4];
-        let still_the_image = system.read_file(&self.path, CRC_AT as u32, &mut crc) == Some(crc.len())
-            && u32::from_le_bytes(crc) == self.image_crc;
-        if read != Some(length) || !still_the_image {
-            return Err(Failure::CodeUnreadable);
-        }
+        let read = read_checked(
+            &self.path,
+            self.image_crc,
+            place.at,
+            &mut self.buffer[start..start + length],
+            system,
+        );
+        // Whatever was read in part is not kept.
+        read?;
         self.held.push(Held {
             unit,
             start: start as u16,
@@ -249,6 +255,34 @@ impl CodeCache {
     /// The bytes the cache takes on the heap.
     pub fn capacity(&self) -> usize {
         self.buffer.len()
+    }
+
+    /// Reads other bytes of the image file, such as a screen's widget records, with the same check as code.
+    pub fn read_part<System: SystemValues + ?Sized>(
+        &self,
+        at: u32,
+        out: &mut [u8],
+        system: &System,
+    ) -> Result<(), Failure> {
+        read_checked(&self.path, self.image_crc, at, out, system)
+    }
+}
+
+/// Fills `out` from the image file at `path`, failing if it cannot or the file no longer carries `image_crc`.
+fn read_checked<System: SystemValues + ?Sized>(
+    path: &str,
+    image_crc: u32,
+    at: u32,
+    out: &mut [u8],
+    system: &System,
+) -> Result<(), Failure> {
+    let read = system.read_file(path, at, out);
+    let mut crc = [0u8; 4];
+    let still_the_image = system.read_file(path, CRC_AT as u32, &mut crc) == Some(crc.len())
+        && u32::from_le_bytes(crc) == image_crc;
+    match read == Some(out.len()) && still_the_image {
+        true => Ok(()),
+        false => Err(Failure::CodeUnreadable),
     }
 }
 
