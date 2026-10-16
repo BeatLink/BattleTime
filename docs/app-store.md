@@ -7,8 +7,16 @@ what CI builds for it, and what a release carries.
 
 ## In the companion
 
-Open it from the Watch tab (**Store**) or from the Apps screen (**Open the store**). It opens with no
-watch connected, so it can be browsed and filled first; installing waits for a watch. Each entry
+Open it from the Watch tab (**Store**), from the Apps screen (**Open the store**) or from the Plugins
+screen (**Find plugins in the store**). It opens with no watch connected, so it can be browsed and
+filled first; installing waits for a watch.
+
+The apps and faces are bundled. The plugins are listed online: on opening, the store reads
+`store.json` from whichever release of the repository in Settings changed its `store.json` last,
+usually `apps-latest`, and lists every plugin it names. Only that list comes down at first; a
+plugin's own `.ntplugin` is downloaded when it is installed, checked against the `sha256` in
+`store.json` and kept like an added file. An online plugin takes the place of one kept from GitHub
+at another version, never of one added from a file. Each entry
 shows whether it is installed, its size and where it came from.
 
 - **Install** sends an app or face to the watch, which checks it and refuses one that would not fit

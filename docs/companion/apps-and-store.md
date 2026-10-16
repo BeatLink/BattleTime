@@ -32,10 +32,13 @@ the companion never sends it.
 
 **Store** on the Watch screen, or **Open the store** on the Apps screen, lists every app, face and
 plugin the companion can install, with whether it is on the watch, its size and where it came
-from. It opens without a watch, so it can be filled before one is connected.
+from. It opens without a watch, so it can be filled before one is connected. The apps and faces come
+with the companion; the plugins are listed online from the newest release of the repository in
+Settings, `BeatLink/BattleTime` unless changed, so new plugins appear without updating the companion.
 
 - **Install** sends an app or face to the watch. The watch checks it and refuses one that would not
-  fit in its memory, saying why.
+  fit in its memory, saying why. For a plugin listed online it first downloads the plugin, checks it
+  against the release's checksum and keeps it, then installs the plugin and its watch app.
 - **Uninstall** removes it from the watch, with what it saved.
 - **Remove from the store** takes an entry out of the list. A removed bundled entry comes back with
   **Bring back the bundled entries** at the bottom of the screen.
@@ -47,7 +50,8 @@ from. It opens without a watch, so it can be filled before one is connected.
 ![The Store with the 2048 game chosen, offering Install and Remove from the store](../images/companion/store.png){ .phone }
 
 An entry added later replaces one with the same id, so adding a newer release and installing again
-updates the app on the watch. Added files are kept on the device, so installing needs no download.
+updates the app on the watch. A plugin kept from GitHub gives way to the one listed online when the
+versions differ, so installing it again updates it; one added from a file stays. Added files are kept on the device, so installing needs no download.
 
 [The app store](../app-store.md) describes how releases are built and what they carry.
 
@@ -59,7 +63,7 @@ Timer, Steps, Heart and System, show a page of their own; [Watch data](watch-dat
 those pages.
 
 Installing a plugin from the store installs its watch app too. The **Plugins** screen on the Watch
-screen lists the installed plugins. Choose one to see:
+screen lists the installed plugins, and **Find plugins in the store** opens the store to get more. Choose one to see:
 
 - what it is allowed to do, in words: the messages it may send the watch, the websites it may reach
   and the watch data it may read;
@@ -68,7 +72,7 @@ screen lists the installed plugins. Choose one to see:
 - **Remove**, which takes away the plugin and its settings;
 - its page, when it has one, and its log.
 
-**Install a plugin** on the same screen installs a `.ntplugin` file directly. Plugins run in the
+**Install a plugin from a file** on the same screen installs a `.ntplugin` file directly. Plugins run in the
 desktop and Android apps, and keep running while the window is closed. [Plugins](../plugins.md) is
 the guide to writing one.
 

@@ -70,10 +70,11 @@ npm run build-plugin -- plugins/buzz-back
 [scripts/build-plugin.mjs](../companion/scripts/build-plugin.mjs) reads the folder's `plugin.json`
 (the manifest without file names), compiles `watch/app.tsx` with the watch's compiler, bundles
 `phone/main.ts` with esbuild, copies `phone/ui/`, and writes `build/plugins/<id>.ntplugin`. In the
-Tauri app, Watch, then Plugins, then Install a plugin installs it and its watch app.
+Tauri app, Watch, then Plugins, then Install a plugin from a file installs it and its watch app.
 
 CI builds every plugin in `companion/plugins/` into the store's files, and each release and the
-`apps-latest` pre-release carry them, so the companion's Store screen can download and install them.
+`apps-latest` pre-release carry them. The companion's Store screen lists them online from the newest
+release's `store.json` and downloads each one when it is installed.
 A plugin published elsewhere reaches the store as a `.ntplugin` file on a GitHub release, or as a
 file added by hand; [app-store.md](app-store.md) describes both.
 

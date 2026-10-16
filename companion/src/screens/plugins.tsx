@@ -8,6 +8,7 @@ import { Row } from '@/components/row';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { useWatch } from '@/hooks/use-watch';
+import { useRouter } from '@/navigation';
 import {
   appendLog,
   describePermissions,
@@ -24,6 +25,7 @@ export default function PluginsScreen() {
   const bridge = useMemo(() => pluginBridge(), []);
   const plugins = useMemo(() => (bridge ? new Plugins(bridge) : null), [bridge]);
   const { watchReady } = useWatch();
+  const router = useRouter();
   const task = useTask();
   const [list, setList] = useState<PluginStatus[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -98,7 +100,13 @@ export default function PluginsScreen() {
           watch and starts its logic here, which answers the app and keeps its settings. It can only send the
           watch the messages and reach the websites it lists.
         </ThemedText>
-        <Button title="Install a plugin" disabled={task.busy !== null} onClick={() => void install()} />
+        <Button title="Find plugins in the store" disabled={task.busy !== null} onClick={() => router.push('/store')} />
+        <Button
+          title="Install a plugin from a file"
+          variant="secondary"
+          disabled={task.busy !== null}
+          onClick={() => void install()}
+        />
       </Card>
 
       <Card title="Installed">

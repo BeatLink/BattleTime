@@ -21,7 +21,15 @@ import {
   type StoreOffer,
 } from '@/services/app-store';
 import { pickFiles } from '@/services/device-files';
-import { fetchStoreRelease, listStoreReleases, type StoreRelease } from '@/services/github-store';
+import {
+  fetchOnlinePlugin,
+  fetchStoreRelease,
+  listOnlinePlugins,
+  listStoreReleases,
+  withOnlinePlugins,
+  type OnlinePlugin,
+  type StoreRelease,
+} from '@/services/github-store';
 import { pluginBridge, Plugins, type PluginStatus } from '@/services/plugins';
 import { appStorage } from '@/state/storage';
 import { useTask } from '@/state/use-task';
@@ -52,7 +60,9 @@ export default function StoreScreen() {
     return bridge ? new Plugins(bridge) : null;
   }, []);
   const task = useTask();
-  const [entries, setEntries] = useState<StoreEntry[]>([]);
+  const [kept, setKept] = useState<StoreEntry[]>([]);
+  const [onlinePlugins, setOnlinePlugins] = useState<OnlinePlugin[]>([]);
+  const [onlineNote, setOnlineNote] = useState<string | null>(null);
   const [hidden, setHidden] = useState(0);
   const [onWatch, setOnWatch] = useState<WatchApp[] | null>(null);
   const [pluginList, setPluginList] = useState<PluginStatus[] | null>(null);
@@ -66,7 +76,7 @@ export default function StoreScreen() {
   const token = settings.githubToken || undefined;
 
   const readStore = useCallback(async () => {
-    setEntries(await store.entries());
+    setKept(await store.entries());
     setHidden(await store.hiddenCount());
   }, [store]);
 
@@ -85,6 +95,21 @@ export default function StoreScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchReady]);
 
+  useEffect(() => {
+    // Read apart from the task, which would drop it while the store is being read.
+    setOnlineNote('Looking for plugins online...');
+    listOnlinePlugins(settings.githubRepo, { token })
+      .then((found) => {
+        setOnlinePlugins(found);
+        setOnlineNote(null);
+      })
+      .catch((error: unknown) => setOnlineNote(`Could not list the plugins online: ${(error as Error).message}`));
+    // Read once when the screen opens, from the repository in Settings.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const { entries, online } = useMemo(() => withOnlinePlugins(kept, onlinePlugins), [kept, onlinePlugins]);
+
   const chosenEntry = entries.find((entry) => entry.key === selected) ?? null;
   const stateOf = (entry: StoreEntry): InstallState | null =>
     entry.kind !== 'plugin' && onWatch === null ? null : installState(entry, onWatch ?? [], pluginList);
@@ -102,6 +127,11 @@ export default function StoreScreen() {
 
   const install = (entry: StoreEntry) =>
     act(`Installing ${entry.name}`, async () => {
+      const onlinePlugin = online.get(entry.key);
+      if (onlinePlugin) {
+        // An online plugin comes down now and is kept, so installing it again needs no download.
+        await store.add([await fetchOnlinePlugin(onlinePlugin, { token })]);
+      }
       await installEntry(entry, await store.data(entry.key), { files: await files(), packages: await packages(), plugins }, (step) =>
         setProgress(`${step.file}: ${Math.round((step.sent / Math.max(1, step.total)) * 100)}%`),
       );
@@ -152,9 +182,9 @@ export default function StoreScreen() {
       <Card>
         <ThemedText type="small" themeColor="textSecondary">
           The store holds the apps, watch faces and plugins this companion can install. It starts with every
-          app BattleTime ships, and you can add more from files or from a GitHub repository&apos;s releases, or
-          take out what you do not want. Plugins run in the app, which also installs the watch apps they
-          carry.
+          app BattleTime ships and every plugin in the repository, listed online. You can add more from files or
+          from a GitHub repository&apos;s releases, or take out what you do not want. Plugins run in the app,
+          which also installs the watch apps they carry.
         </ThemedText>
         {!watchReady ? (
           <ThemedText type="small" themeColor="textSecondary">
@@ -185,22 +215,30 @@ export default function StoreScreen() {
               onClick={() => (armed === 'uninstall' ? void uninstall(chosenEntry) : setArmed('uninstall'))}
             />
           ) : null}
-          <Button
-            title={armed === 'remove' ? 'Tap again to take it out of the store' : 'Remove from the store'}
-            variant="secondary"
-            disabled={busy}
-            onClick={() => {
-              if (armed !== 'remove') {
-                setArmed('remove');
-                return;
-              }
-              void act(`Removing ${chosenEntry.name}`, async () => {
-                await store.remove(chosenEntry.key);
-                setSelected(null);
-              });
-            }}
-          />
+          {online.has(chosenEntry.key) ? null : (
+            <Button
+              title={armed === 'remove' ? 'Tap again to take it out of the store' : 'Remove from the store'}
+              variant="secondary"
+              disabled={busy}
+              onClick={() => {
+                if (armed !== 'remove') {
+                  setArmed('remove');
+                  return;
+                }
+                void act(`Removing ${chosenEntry.name}`, async () => {
+                  await store.remove(chosenEntry.key);
+                  setSelected(null);
+                });
+              }}
+            />
+          )}
         </Card>
+      ) : null}
+
+      {onlineNote ? (
+        <ThemedText type="small" themeColor="textSecondary">
+          {onlineNote}
+        </ThemedText>
       ) : null}
 
       {SECTIONS.map(({ kind, title }) => {

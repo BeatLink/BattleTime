@@ -1,10 +1,21 @@
+import { createHash } from 'node:crypto';
+
 import { describe, expect, it } from '@jest/globals';
 import { zipSync } from 'fflate';
 
 import { utf8Encode } from '@/ble/encoding';
 import { testImage } from '@/test-support/app-images';
 
-import { fetchStoreRelease, listStoreReleases, offersFromStoreZip, type StoreRelease } from './github-store';
+import { type StoreEntry } from './app-store';
+import {
+  fetchOnlinePlugin,
+  fetchStoreRelease,
+  listOnlinePlugins,
+  listStoreReleases,
+  offersFromStoreZip,
+  withOnlinePlugins,
+  type StoreRelease,
+} from './github-store';
 
 type Call = { url: string; headers: Record<string, string> };
 
@@ -194,5 +205,97 @@ describe('downloading from GitHub', () => {
       fetcher: fakeFetch({ 'https://api/assets/10': storeZip(null) }, calls),
     });
     expect(calls[0].headers.Authorization).toBe('Bearer secret');
+  });
+});
+
+describe("the repository's plugins online", () => {
+  const plugin = zipSync({
+    'manifest.json': utf8Encode(JSON.stringify({ id: 'buzz-back', name: 'Buzz back', version: '1.1.0' })),
+  });
+  const sum = createHash('sha256').update(plugin).digest('hex');
+  const buzzBack = {
+    id: 'buzz-back',
+    name: 'Buzz back',
+    version: '1.1.0',
+    description: 'Buzzes back.',
+    watch: ['buzz-back'],
+    file: 'buzz-back.ntplugin',
+    bytes: plugin.length,
+    sha256: sum,
+  };
+  const index = (format = 1) =>
+    utf8Encode(JSON.stringify({ format, apps: [], plugins: [buzzBack, { id: 'gone', name: 'Gone', file: 'gone.ntplugin' }] }));
+  const INDEX_URL = 'https://api/assets/21';
+  const PLUGIN_URL = 'https://api/assets/22';
+  const storeReleases = [
+    {
+      id: 1,
+      tag_name: 'v1',
+      name: 'Version 1',
+      published_at: '2026-10-15T00:00:00Z',
+      prerelease: false,
+      assets: [{ id: 11, name: 'store.json', size: 1, url: 'https://api/assets/11', updated_at: '2026-10-15T00:00:00Z' }],
+    },
+    {
+      id: 2,
+      tag_name: 'apps-latest',
+      name: 'Apps (latest master)',
+      published_at: '2026-10-01T00:00:00Z',
+      prerelease: true,
+      assets: [
+        { id: 21, name: 'store.json', size: 1, url: INDEX_URL, updated_at: '2026-10-16T00:00:00Z' },
+        { id: 22, name: 'buzz-back.ntplugin', size: plugin.length, url: PLUGIN_URL },
+      ],
+    },
+    { id: 3, tag_name: 'v0', name: null, published_at: '2026-10-17T00:00:00Z', prerelease: false, assets: [] },
+  ];
+  const listed = () => listOnlinePlugins('a/b', { fetcher: fakeFetch({ [RELEASES]: storeReleases, [INDEX_URL]: index() }) });
+
+  it('lists the plugins of the release whose store.json changed last, leaving out any without a file', async () => {
+    const calls: Call[] = [];
+    const found = await listOnlinePlugins('a/b', {
+      fetcher: fakeFetch({ [RELEASES]: storeReleases, [INDEX_URL]: index() }, calls),
+    });
+    expect(found.map((item) => item.entry)).toEqual([
+      expect.objectContaining({
+        key: 'plugin:buzz-back',
+        version: '1.1.0',
+        description: 'Buzzes back.',
+        watch: ['buzz-back'],
+        source: { type: 'github', repo: 'a/b', release: 'Apps (latest master)' },
+      }),
+    ]);
+    expect(calls.map((call) => call.url)).toEqual([RELEASES, INDEX_URL]);
+    expect(calls[1].headers.Accept).toBe('application/octet-stream');
+  });
+
+  it('finds nothing without a store.json, and refuses another format', async () => {
+    expect(await listOnlinePlugins('a/b', { fetcher: fakeFetch({ [RELEASES]: [storeReleases[2]] }) })).toEqual([]);
+    await expect(
+      listOnlinePlugins('a/b', { fetcher: fakeFetch({ [RELEASES]: storeReleases, [INDEX_URL]: index(2) }) }),
+    ).rejects.toThrow('another version');
+  });
+
+  it('downloads one plugin and checks its checksum and id', async () => {
+    const [online] = await listed();
+    const fetcher = fakeFetch({ [PLUGIN_URL]: plugin });
+    expect((await fetchOnlinePlugin(online, { fetcher })).entry.key).toBe('plugin:buzz-back');
+    await expect(fetchOnlinePlugin({ ...online, sha256: '00' }, { fetcher })).rejects.toThrow('checksum');
+    const other = { ...online, sha256: '', entry: { ...online.entry, key: 'plugin:other' } };
+    await expect(fetchOnlinePlugin(other, { fetcher })).rejects.toThrow('another plugin');
+  });
+
+  it('stands in for a kept plugin only when that came from GitHub at another version', async () => {
+    const [online] = await listed();
+    const kept = (version: string, source: StoreEntry['source']): StoreEntry => ({ ...online.entry, version, source });
+    const fromGitHub = { type: 'github' as const, repo: 'a/b', release: 'v1' };
+    const dice: StoreEntry = { ...online.entry, key: 'watch:dice', kind: 'app', id: 'dice', name: 'Dice', source: { type: 'bundled' } };
+
+    const fresh = withOnlinePlugins([dice], [online]);
+    expect(fresh.entries.map((entry) => entry.key)).toEqual(['watch:dice', 'plugin:buzz-back']);
+    expect([...fresh.online.keys()]).toEqual(['plugin:buzz-back']);
+    expect(withOnlinePlugins([kept('1.0.0', fromGitHub)], [online]).online.size).toBe(1);
+    expect(withOnlinePlugins([kept('1.1.0', fromGitHub)], [online]).online.size).toBe(0);
+    expect(withOnlinePlugins([kept('0.9.0', { type: 'file', name: 'mine.ntplugin' })], [online]).online.size).toBe(0);
   });
 });
