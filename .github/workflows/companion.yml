@@ -1,4 +1,4 @@
-# Runs the companion's tests with coverage, the type check, the lint, the window and CLI builds, the Rust core and the Nix package whenever companion/ or the flake changes.
+# Runs the companion's tests with coverage, the type check, the lint, the window and CLI builds, the Rust core, the Nix package and the Android app whenever companion/ or the flake changes.
 name: Companion
 
 on:
@@ -71,3 +71,46 @@ jobs:
       # Fails when package-lock.json changes without npmDepsHash in flake.nix.
       - name: Build the desktop app and command line tool
         run: nix build ..#companion --print-build-logs
+
+  android:
+    name: Android app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion -> target
+      - name: Install the dependencies
+        run: nix develop ..#companion-android --command npm ci
+      # Signs with the release key when the secrets are there, so a master build installs over a release.
+      - name: Write the signing key
+        if: github.event_name != 'pull_request'
+        working-directory: companion/tauri/gen/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+          } > keystore.properties
+      - name: Build the app for every phone processor
+        run: |
+          nix develop ..#companion-android --command npm run tauri-android:release
+          mkdir -p ../apk
+          cp tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release*.apk \
+            "../apk/BattleTime-Companion-${GITHUB_SHA::8}.apk"
+      - name: Delete the signing key
+        if: always()
+        working-directory: companion/tauri/gen/android
+        run: rm -f release.jks keystore.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-android
+          path: apk/
