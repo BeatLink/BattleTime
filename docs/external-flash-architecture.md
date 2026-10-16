@@ -4,7 +4,8 @@ A design study, dated 2026-10-15, of running BattleTime with internal flash hold
 and the VM, and everything else (apps, the shell's screens, icons, fonts, rare native code) loaded
 from the external flash when it is needed and dropped afterwards. It rests on a review of the code,
 not of the other docs; where they disagree, [Corrections](#corrections) says so. The numbers under
-[Measured](#measured-in-the-emulator) come from the bench build in `firmware/src/bench.rs`.
+[Measured](#measured) come from the bench build in `firmware/src/bench.rs`, in the emulator and on
+the watch.
 
 ## The limits
 
@@ -74,41 +75,44 @@ would leave about 230 KB of internal flash free, against 13 KB today.
   bundle again. A dead external chip already stops Bluetooth today (`firmware/src/main.rs` returns
   before starting it), so this design adds no new way to lose the watch.
 
-## Measured in the emulator
+## Measured
 
 The bench firmware (`cargo build --release --features bench`) runs in place of the shell and
-`tools/bench_external_flash.py` prints its results. Reads and redraws are timed with TIMER2, which
+`tools/bench_external_flash.py` prints its results, from the emulator or from a dump of the
+diagnostics characteristic of a watch running it. Reads and redraws are timed with TIMER2, which
 keeps counting while the CPU sleeps waiting for the bus; the loops with the DWT cycle counter.
 
-The emulator charges the bus 1 µs a byte with no gaps between pieces and fetches from RAM for free,
-so the watch will be slower on reads and may differ on code from RAM. These are a lower bound until
-the same build runs on the watch.
+The watch ran it on 2026-10-15, built from b981a989. The emulator charges the bus 1 µs a byte with
+no gaps between pieces and fetches from RAM for free; the watch's reads came out 5 to 30% slower,
+and its code from RAM differs, as below.
 
 **Reads with the bus idle**
 
-| Read | Raw DMA | Through the store |
-|---|---:|---:|
-| 32 B | 58 µs | 178 µs |
-| 256 B | 286 µs | 384 µs |
-| 1 KB | 1.06 ms | 1.19 ms |
-| 4 KB | 4.18 ms | 4.30 ms |
-| A 600 B file kept as a record | | 0.98 ms |
+| Read | Raw, emulator | Raw, watch | Store, emulator | Store, watch |
+|---|---:|---:|---:|---:|
+| 32 B | 58 µs | 74 µs | 178 µs | 187 µs |
+| 256 B | 286 µs | 305 µs | 384 µs | 394 µs |
+| 1 KB | 1.06 ms | 1.12 ms | 1.19 ms | 1.25 ms |
+| 4 KB | 4.18 ms | 4.42 ms | 4.30 ms | 4.53 ms |
 
-A read costs about 1 µs a byte plus 25 µs. The store adds about 120 µs to every read, from finding
+A 600 B file kept as a record took 0.98 ms in the emulator; the watch had no such file, so it was
+not measured there.
+
+On the watch a read costs about 1.08 µs a byte plus 40 µs. The store adds about 120 µs to every read, from finding
 the path again and running the call on the heap under `block_on`, so it triples the cost of a small
 read; open file handles would remove most of it.
 
 **Full-screen redraws**
 
-| Redraw | Time | Change |
-|---|---:|---:|
-| Nothing to draw | 120 ms | |
-| 0.5 ms of drawing per strip | 120 ms | 0% |
-| … and a 64 B read on every strip | 125 ms | +4% |
-| … and a 256 B read on 8 strips | 123 ms | +2% |
-| … and a 256 B read on every strip | 137 ms | +14% |
-| … and a 1,920 B read on every strip | 238 ms | +98% |
-| … and a 4 KB read in the background | 124 ms | +3% |
+| Redraw | Emulator | Watch | Change on the watch |
+|---|---:|---:|---:|
+| Nothing to draw | 120 ms | 123 ms | |
+| 0.5 ms of drawing per strip | 120 ms | 124 ms | 0% |
+| … and a 64 B read on every strip | 125 ms | 129 ms | +4% |
+| … and a 256 B read on 8 strips | 123 ms | 126 ms | +2% |
+| … and a 256 B read on every strip | 137 ms | 141 ms | +14% |
+| … and a 1,920 B read on every strip | 238 ms | 248 ms | +100% |
+| … and a 4 KB read in the background | 124 ms | 128 ms | +3% |
 
 The bus, not the CPU, sets the pace: drawing a strip overlaps sending the one before, so it costs
 nothing, while every byte read costs the frame about the same microsecond whether it is read before
@@ -117,20 +121,23 @@ frames even, not for their total time. Only reading as much as each strip sends 
 
 **Code run from flash and from RAM**
 
-| Loop | Internal flash | RAM | RAM's code alias |
+| Loop, on the watch | Internal flash | RAM at 0x2000_0000 | RAM's code alias, 0x0080_0000 |
 |---|---:|---:|---:|
-| 20 B, which the flash cache holds | 28.2 ms | 28.3 ms | 28.2 ms |
-| 3 KB, more than the cache holds | 4.56 ms | 3.26 ms | 3.23 ms |
+| 20 B, which the flash cache holds | 34.1 ms | 37.7 ms | 28.3 ms |
+| 3 KB, more than the cache holds | 4.04 ms | 4.96 ms | 3.22 ms |
 
-Code the flash cache holds runs equally fast anywhere; code that overflows it ran 40% slower from
-flash than from RAM, by the emulator's model of the cache. The watch has the final word here.
+On the watch, code in RAM run through the code alias was the fastest of the three: 17% faster than
+internal flash for a loop the flash cache holds and 20% for one it does not. The same code run at
+its 0x2000_0000 address was the slowest, since its instructions then share the system bus with
+data. The emulator showed no difference for the small loop and missed the system bus's cost.
 
 **What this means for the design**
 
 - Opening a screen that loads 3 to 10 KB costs 3 to 10 ms on top of a 120 ms redraw.
 - A frame that streams a few hundred bytes costs a few per cent, too little to see.
 - Only full-colour pictures that stream every row run at half speed.
-- Native modules loaded into RAM should run at least as fast as from internal flash.
+- Native modules loaded into RAM run faster than code in internal flash, if they are linked to
+  run from the code alias.
 
 ## Corrections
 
