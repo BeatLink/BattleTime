@@ -171,8 +171,15 @@ Docs and comments the code contradicts, as of e30358e4:
    - A busy store: an open file needs the store only when it looks its file up again after a
      write, so the shell's reads now find it busy only during a write. `file_bytes` still reads
      zeros then; telling the app needs an error the runtime can act on.
-   - `set_window` as one transaction, and a pool of erased sectors so reads rarely wait behind a
-     45 ms erase: still to do.
+   - Pausing reads for the painter: tried and left out. A 4 KB read started in the background
+     streams to its end while the painter awaits the bus, so a strip waited up to 3.6 ms instead
+     of 1.4 ms; asking the read to pause from the painter's await cut that to 1.4 ms with no change
+     to the frame's total. But the flag it raises can stay up while the painter is suspended, and a
+     blocking store read in another task, sleeping in WFE until its read moves, then never starts:
+     the watch hangs. Holding the bus across `set_window`'s three commands is safe, being one
+     blocking call, but cost 728 B to remove gaps of a piece or two. Both wait for awaited store
+     reads, under which a paused read no longer blocks the executor.
+   - A pool of erased sectors, so reads rarely wait behind a 45 ms erase: still to do.
 2. **Load before painting**, with icons still internal.
 3. **The resource bundle and safe mode:** icons and accelerometer configurations leave the firmware
    image (about 43 KB), shipped beside it in each DFU package.

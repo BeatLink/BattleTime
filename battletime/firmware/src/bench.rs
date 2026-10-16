@@ -82,9 +82,12 @@ pub enum Measure {
     OpenRead4kMost,
     /// 1 when every open-file read gave the same bytes as the store read, 0 when one differed.
     OpenReadsMatch,
+    /// The longest a strip waited for the bus in a busy redraw with a 4 KB read in the background, which streams
+    /// to its end, since an async wait for the bus does not ask it to pause.
+    LongestStripWaitBackground4k,
 }
 
-pub const RESULT_COUNT: usize = Measure::OpenReadsMatch as usize + 1;
+pub const RESULT_COUNT: usize = Measure::LongestStripWaitBackground4k as usize + 1;
 const FINISHED: u32 = 0xBE7C_0001;
 
 pub static RESULTS: [AtomicU32; RESULT_COUNT] = [const { AtomicU32::new(0) }; RESULT_COUNT];
@@ -339,7 +342,7 @@ async fn measure_frames(display: &'static SharedDisplay, files: &storage::Files)
     for (measure, draw_cycles, reads) in frames {
         let mut best = u32::MAX;
         for _ in 0..4 {
-            let taken = redraw(
+            let (taken, _) = redraw(
                 display,
                 buffers,
                 files,
@@ -354,9 +357,9 @@ async fn measure_frames(display: &'static SharedDisplay, files: &storage::Files)
         }
         record(measure, best);
     }
-    let mut best = u32::MAX;
+    let (mut best, mut longest_wait) = (u32::MAX, 0);
     for _ in 0..4 {
-        let taken = redraw(
+        let (taken, wait) = redraw(
             display,
             buffers,
             files,
@@ -367,12 +370,16 @@ async fn measure_frames(display: &'static SharedDisplay, files: &storage::Files)
         )
         .await;
         best = best.min(taken);
+        longest_wait = longest_wait.max(wait);
         Timer::after(PAUSE).await;
     }
     record(Measure::FrameBusyBackground4k, best);
+    record(Measure::LongestStripWaitBackground4k, longest_wait);
 }
 
 /// Sends one full screen the way the painter does: draw a strip, await the bus, send it, and draw the next meanwhile.
+///
+/// Gives the whole redraw's time and the longest a strip waited for the bus.
 async fn redraw(
     display: &'static SharedDisplay,
     buffers: &mut [[u16; STRIP_PIXELS]; 2],
@@ -381,8 +388,9 @@ async fn redraw(
     draw_cycles: u32,
     reads: Option<Reads>,
     background_read: bool,
-) -> u32 {
+) -> (u32, u32) {
     let start = cycles();
+    let mut longest_wait = 0;
     let mut background = match background_read {
         true => files.start_reading_part(DATA_PATH, 0, 4096),
         false => None,
@@ -395,7 +403,9 @@ async fn redraw(
         if let Some(reads) = reads.filter(|reads| strip % reads.every == 0) {
             files.read_flash_now(RAW_ADDRESS, &mut read_buffer[..reads.bytes]);
         }
+        let waiting_since = cycles();
         display_dma::bus_is_free().await;
+        longest_wait = longest_wait.max(cycles().wrapping_sub(waiting_since));
         let area = Rectangle::new(
             Point::new(0, (strip * STRIP_ROWS) as i32),
             Size::new(SCREEN_SIDE, STRIP_ROWS),
@@ -407,7 +417,7 @@ async fn redraw(
     if let Some(part) = background.as_mut() {
         let _ = part.bytes();
     }
-    cycles().wrapping_sub(start)
+    (cycles().wrapping_sub(start), longest_wait)
 }
 
 /// Keeps the CPU busy for about this many cycles, standing in for drawing a strip.

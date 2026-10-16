@@ -65,6 +65,7 @@ MEASURES = [
     "open-file read 1 KB (mean)", "open-file read 1 KB (most)",
     "open-file read 4 KB (mean)", "open-file read 4 KB (most)",
     "open-file reads match the store (count)",
+    "longest strip wait, busy, 4 KB background read",
 ]
 
 # ============================================================================
