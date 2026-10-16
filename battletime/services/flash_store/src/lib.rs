@@ -118,6 +118,47 @@ pub struct FileExtents {
     pub bytes: usize,
 }
 
+/// Where each byte of one file lies in the flash, in order, as `FlashStore::file_map` found it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct FileMap {
+    length: usize,
+    /// On the heap and only as long as the file needs, so a map costs a few words on the stack.
+    extents: alloc::vec::Vec<Extent>,
+}
+
+impl FileMap {
+    /// The file's length in bytes.
+    pub fn length(&self) -> usize {
+        self.length
+    }
+
+    /// Fills `out` with the runs that hold `length` bytes from `offset`, fewer bytes only at the file's end;
+    /// none when `out` is too short for them.
+    pub fn extents_of(&self, offset: usize, length: usize, out: &mut [Extent]) -> Option<FileExtents> {
+        let wanted = self.length.saturating_sub(offset).min(length);
+        let (mut skip, mut done, mut count) = (offset, 0, 0);
+        for extent in &self.extents {
+            if done == wanted {
+                break;
+            }
+            let extent_length = extent.length as usize;
+            if skip >= extent_length {
+                skip -= extent_length;
+                continue;
+            }
+            let size = (extent_length - skip).min(wanted - done);
+            *out.get_mut(count)? = Extent {
+                address: extent.address + skip as u32,
+                length: size as u32,
+            };
+            count += 1;
+            done += size;
+            skip = 0;
+        }
+        Some(FileExtents { count, bytes: done })
+    }
+}
+
 /// Where the store lives in the flash and how its sectors are divided.
 #[derive(Clone, Copy, Debug)]
 pub struct Layout {
@@ -547,6 +588,29 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
             _ => return Ok(None),
         };
         Ok(self.files.extents(&large, offset, length, extents))
+    }
+
+    /// Where every byte of a file kept in sectors lies, so a caller can read any part of it later by DMA without
+    /// looking the file up again; none for a missing file or one kept as a record.
+    ///
+    /// The map stays right until the store next erases or programs the flash, which the caller watches for.
+    pub async fn file_map(&mut self, path: &str) -> Result<Option<FileMap>, StoreError<Flash::Error>> {
+        let large = match self.locate(path).await? {
+            (Some(small), Some(large)) if large.sequence > small.sequence => large,
+            (None, Some(large)) => large,
+            _ => return Ok(None),
+        };
+        // A file has at most one run per sector it takes.
+        let sectors = (FILE_HEADER_BYTES + large.length).div_ceil(SECTOR_BYTES as usize);
+        let mut extents = alloc::vec![Extent::default(); sectors];
+        let Some(found) = self.files.extents(&large, 0, large.length, &mut extents) else {
+            return Ok(None);
+        };
+        extents.truncate(found.count);
+        Ok(Some(FileMap {
+            length: found.bytes,
+            extents,
+        }))
     }
 
     pub async fn file_length(&mut self, path: &str) -> Result<Option<usize>, StoreError<Flash::Error>> {

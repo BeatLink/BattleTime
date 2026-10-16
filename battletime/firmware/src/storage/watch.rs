@@ -24,7 +24,7 @@ use battletime_boot::{
     BOOT_STATE, DEFAULT_SLOTS, FIRMWARE, SLOT_TABLE,
 };
 use battletime_external_flash::{BusyWait, ExternalFlash};
-use battletime_flash_store::{Extent, FileAccess, FlashStore, Layout, StoreError};
+use battletime_flash_store::{Extent, FileAccess, FileMap, FlashStore, Layout, StoreError};
 use battletime_packages::{
     commands::{refuse_command, Change},
     InstalledApp,
@@ -43,7 +43,7 @@ use alloc::{boxed::Box, collections::VecDeque, sync::Arc};
 use core::{
     cell::RefCell,
     future::Future,
-    sync::atomic::{AtomicBool, AtomicU8, Ordering},
+    sync::atomic::{AtomicBool, AtomicU32, AtomicU8, Ordering},
 };
 
 use crate::display_dma::{start_flash_read, FlashReadInProgress, MOST_READ_EXTENTS};
@@ -503,6 +503,9 @@ const STORE_LAYOUT: Layout = Layout {
 /// 128 files, 128 record keys and rings of up to 192 sectors: 2.4 KB of static RAM.
 type WatchStore = FlashStore<StoreFlash, 128, 128, 192>;
 
+/// Counts the erases and page programs the store has started, so an `OpenFile` can tell its map may be stale.
+static STORE_CHANGES: AtomicU32 = AtomicU32::new(0);
+
 /// How often a running erase or page program is checked while other tasks run.
 const ERASE_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_millis(2);
 const PROGRAM_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_micros(100);
@@ -525,7 +528,8 @@ impl embedded_storage_async::nor_flash::ErrorType for StoreFlash {
 impl embedded_storage_async::nor_flash::ReadNorFlash for StoreFlash {
     const READ_SIZE: usize = 1;
 
-    /// Moves the bytes by EasyDMA in the moments the display leaves the bus free, so a strip going out is not slowed.
+    /// Moves the bytes by EasyDMA in the moments the display leaves the bus free, sleeping the whole executor in WFE
+    /// until they have moved; awaiting the read instead would cost 4.6 KB of flash across the store's code.
     async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
         self.wake_chip()?;
         self.flash
@@ -544,6 +548,7 @@ impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
     const ERASE_SIZE: usize = battletime_flash_store::SECTOR_BYTES as usize;
 
     async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+        STORE_CHANGES.fetch_add(1, Ordering::Release);
         self.wake_chip()?;
         for sector in (from..to).step_by(Self::ERASE_SIZE) {
             self.wait_for_free_bus().await;
@@ -556,6 +561,7 @@ impl embedded_storage_async::nor_flash::NorFlash for StoreFlash {
     }
 
     async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+        STORE_CHANGES.fetch_add(1, Ordering::Release);
         self.wake_chip()?;
         let page = battletime_external_flash::PROGRAM_PAGE_SIZE;
         let mut done = 0;
@@ -743,6 +749,35 @@ pub struct Files {
     flash_may_sleep: AtomicBool,
     /// The shell's writes, oldest first, waiting for the storage task to carry them out.
     queued_writes: Mutex<NoopRawMutex, RefCell<VecDeque<QueuedWrite>>>,
+}
+
+/// Why a file could not be read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReadError {
+    Missing,
+    /// Another task held the store, so the file could not be looked up.
+    Busy,
+    /// The flash or the store failed, or the read needed more runs than a read follows.
+    Unreadable,
+}
+
+/// The most runs of the flash one read of an open file follows: a 4 KB read crosses at most two sectors.
+const OPEN_FILE_EXTENTS: usize = 4;
+
+/// A file opened for reading parts of it, with where its bytes lie, so a read needs no look-up and no store lock.
+///
+/// Its map stays right until the store next erases or programs anything, which `STORE_CHANGES` counts; the next
+/// read then looks the file up again. A file kept as a record has no map and is read through the store.
+pub struct OpenFile {
+    path: heapless::String<{ battletime_flash_store::LONGEST_PATH_BYTES }>,
+    map: Option<FileMap>,
+    checked_at: u32,
+}
+
+impl OpenFile {
+    pub fn path(&self) -> &str {
+        &self.path
+    }
 }
 
 /// A whole file the shell wrote, or a file it deleted, on its way to the flash.
@@ -986,6 +1021,70 @@ impl Files {
             ))
             .ok()?
         })?
+    }
+
+    /// Opens a file for reading parts of it without looking it up each time, or says why it cannot.
+    pub fn open_now(&self, path: &str) -> Result<OpenFile, ReadError> {
+        let checked_at = STORE_CHANGES.load(Ordering::Acquire);
+        let map = self
+            .now_leaving_queue(|store| run_on_heap(store.file_map(path)))
+            .ok_or(ReadError::Busy)?
+            .map_err(|_| ReadError::Unreadable)?;
+        let path = heapless::String::try_from(path).map_err(|_| ReadError::Missing)?;
+        Ok(OpenFile {
+            path,
+            map,
+            checked_at,
+        })
+    }
+
+    /// Reads part of an open file: one DMA read when its map is still right, else a fresh look-up first.
+    ///
+    /// A queued write of the file answers from RAM, and a file kept as a record is read through the store.
+    pub fn read_open_now(
+        &self,
+        file: &mut OpenFile,
+        offset: u32,
+        out: &mut [u8],
+    ) -> Result<usize, ReadError> {
+        let length = out.len();
+        if let Some(read) = self.with_queued_write(&file.path, |bytes| {
+            let part = part_of(bytes?, offset as usize, length);
+            out[..part.len()].copy_from_slice(part);
+            Some(part.len())
+        }) {
+            return read.ok_or(ReadError::Missing);
+        }
+        if file.checked_at != STORE_CHANGES.load(Ordering::Acquire) {
+            *file = self.open_now(&file.path)?;
+        }
+        let Some(map) = file.map.as_ref() else {
+            return self
+                .read_part_now(&file.path, offset, out)
+                .ok_or(ReadError::Missing);
+        };
+        let mut extents = [Extent::default(); OPEN_FILE_EXTENTS];
+        let found = map
+            .extents_of(offset as usize, length, &mut extents)
+            .ok_or(ReadError::Unreadable)?;
+        if found.count == 0 {
+            return Ok(0);
+        }
+        self.external_flash
+            .lock(|flash| {
+                let mut flash = flash.borrow_mut();
+                flash.wake_if_asleep()?;
+                flash.prepare_read(extents[0].address, found.bytes)
+            })
+            .map_err(|_| ReadError::Unreadable)?;
+        let mut done = 0;
+        for extent in &extents[..found.count] {
+            let length = extent.length as usize;
+            crate::display_dma::read_flash(extent.address, &mut out[done..done + length]);
+            done += length;
+        }
+        self.sleep_flash_if_idle();
+        Ok(done)
     }
 
     /// Reads the flash at `address` straight into `out` by DMA with the store held, for the bench's raw timings.

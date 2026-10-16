@@ -1042,3 +1042,79 @@ fn file_extents_follow_a_file_whose_sectors_are_scattered() {
 
     assert_eq!(read_extents(&store, &extents[..found.count]), data[100..19_100]);
 }
+
+// ============================================================================
+// File maps
+// ============================================================================
+
+/// A file whose sectors lie apart, as `file_extents_follow_a_file_whose_sectors_are_scattered` makes one.
+fn scattered_file(store: &mut TestStore) -> Vec<u8> {
+    block_on(store.write_file("/first", &filler(5000, 7))).unwrap();
+    block_on(store.write_file("/between", &filler(5000, 8))).unwrap();
+    block_on(store.delete_file("/first")).unwrap();
+    let data = filler(20_000, 9);
+    block_on(store.write_file("/scattered", &data)).unwrap();
+    data
+}
+
+#[test]
+fn a_file_map_gives_every_part_of_a_scattered_file() {
+    let mut store = blank_store();
+    let data = scattered_file(&mut store);
+    let map = block_on(store.file_map("/scattered")).unwrap().unwrap();
+    let mut extents = [Extent::default(); 8];
+
+    assert_eq!(map.length(), data.len());
+    for (offset, length) in [(0, 20_000), (100, 19_000), (3871, 2), (4096, 4096), (19_990, 64)] {
+        let found = map.extents_of(offset, length, &mut extents).unwrap();
+        let end = (offset + length).min(data.len());
+        assert_eq!(found.bytes, end - offset, "from {offset}");
+        assert_eq!(
+            read_extents(&store, &extents[..found.count]),
+            data[offset..end],
+            "from {offset}"
+        );
+    }
+}
+
+#[test]
+fn a_file_map_matches_file_extents() {
+    let mut store = blank_store();
+    scattered_file(&mut store);
+    let map = block_on(store.file_map("/scattered")).unwrap().unwrap();
+    let (mut from_map, mut from_store) = ([Extent::default(); 8], [Extent::default(); 8]);
+
+    let mapped = map.extents_of(3000, 9000, &mut from_map).unwrap();
+    let looked_up = block_on(store.file_extents("/scattered", 3000, 9000, &mut from_store))
+        .unwrap()
+        .unwrap();
+
+    assert_eq!(mapped, looked_up);
+    assert_eq!(from_map[..mapped.count], from_store[..looked_up.count]);
+}
+
+#[test]
+fn a_file_map_gives_nothing_past_the_end_and_none_for_too_few_extents() {
+    let mut store = blank_store();
+    scattered_file(&mut store);
+    let map = block_on(store.file_map("/scattered")).unwrap().unwrap();
+    let mut no_extents: [Extent; 0] = [];
+    let mut extents = [Extent::default(); 8];
+
+    let past_end = map.extents_of(25_000, 10, &mut extents).unwrap();
+    let too_few = map.extents_of(0, 20_000, &mut no_extents);
+
+    assert_eq!((past_end.count, past_end.bytes), (0, 0));
+    assert_eq!(too_few, None);
+}
+
+#[test]
+fn there_is_no_file_map_for_a_record_or_a_missing_file() {
+    let mut store = blank_store();
+    block_on(store.write_file("/small", b"tiny")).unwrap();
+
+    let small = block_on(store.file_map("/small")).unwrap();
+    let missing = block_on(store.file_map("/missing")).unwrap();
+
+    assert_eq!((small, missing), (None, None));
+}

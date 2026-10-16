@@ -60,6 +60,11 @@ MEASURES = [
     "large loop from flash", "large loop from RAM", "large loop from RAM's code alias",
     "large loop flash cache hits (count)", "large loop flash cache misses (count)",
     "bytes the 4 KB store read found (count)",
+    "open-file read 32 B (mean)", "open-file read 32 B (most)",
+    "open-file read 256 B (mean)", "open-file read 256 B (most)",
+    "open-file read 1 KB (mean)", "open-file read 1 KB (most)",
+    "open-file read 4 KB (mean)", "open-file read 4 KB (most)",
+    "open-file reads match the store (count)",
 ]
 
 # ============================================================================

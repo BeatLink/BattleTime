@@ -71,9 +71,20 @@ pub enum Measure {
     LargeLoopCacheMisses,
     /// Bytes the last 4 KB store read found, 0 when `/bench/data` is missing, so its store timings are not real.
     StoreReadBytesFound,
+    /// The same reads through an `OpenFile`, as the shell's `read_file` makes them.
+    OpenRead32Mean,
+    OpenRead32Most,
+    OpenRead256Mean,
+    OpenRead256Most,
+    OpenRead1kMean,
+    OpenRead1kMost,
+    OpenRead4kMean,
+    OpenRead4kMost,
+    /// 1 when every open-file read gave the same bytes as the store read, 0 when one differed.
+    OpenReadsMatch,
 }
 
-pub const RESULT_COUNT: usize = Measure::StoreReadBytesFound as usize + 1;
+pub const RESULT_COUNT: usize = Measure::OpenReadsMatch as usize + 1;
 const FINISHED: u32 = 0xBE7C_0001;
 
 pub static RESULTS: [AtomicU32; RESULT_COUNT] = [const { AtomicU32::new(0) }; RESULT_COUNT];
@@ -109,8 +120,12 @@ fn start_clocks() {
     }
     let timer = nrf_pac::TIMER2;
     timer.tasks_stop().write_value(1);
-    timer.mode().write(|w| w.set_mode(nrf_pac::timer::vals::Mode::Timer));
-    timer.bitmode().write(|w| w.set_bitmode(nrf_pac::timer::vals::Bitmode::_32bit));
+    timer
+        .mode()
+        .write(|w| w.set_mode(nrf_pac::timer::vals::Mode::Timer));
+    timer
+        .bitmode()
+        .write(|w| w.set_bitmode(nrf_pac::timer::vals::Bitmode::_32bit));
     timer.prescaler().write(|w| w.set_prescaler(0));
     timer.tasks_clear().write_value(1);
     timer.tasks_start().write_value(1);
@@ -167,6 +182,7 @@ pub async fn run_bench(display: &'static SharedDisplay, files: &'static storage:
 
     measure_raw_reads(&mut buffer, files).await;
     measure_store_reads(&mut buffer, files).await;
+    measure_open_reads(&mut buffer, files).await;
     measure_frames(display, files).await;
     measure_loops().await;
 
@@ -216,7 +232,9 @@ async fn measure_store_reads(buffer: &mut [u8], files: &storage::Files) {
         let (taken_mean, taken_most) = repeat(|| {
             // An offset past the first sector's start, so 4 KB crosses into a second sector, as most reads would.
             time(|| {
-                found = files.read_part_now(DATA_PATH, 3000, &mut buffer[..size]).unwrap_or(0);
+                found = files
+                    .read_part_now(DATA_PATH, 3000, &mut buffer[..size])
+                    .unwrap_or(0);
             })
         })
         .await;
@@ -232,6 +250,37 @@ async fn measure_store_reads(buffer: &mut [u8], files: &storage::Files) {
     .await;
     record(Measure::RecordReadMean, taken_mean);
     record(Measure::RecordReadMost, taken_most);
+}
+
+async fn measure_open_reads(buffer: &mut [u8], files: &storage::Files) {
+    const MEASURES: [(Measure, Measure); 4] = [
+        (Measure::OpenRead32Mean, Measure::OpenRead32Most),
+        (Measure::OpenRead256Mean, Measure::OpenRead256Most),
+        (Measure::OpenRead1kMean, Measure::OpenRead1kMost),
+        (Measure::OpenRead4kMean, Measure::OpenRead4kMost),
+    ];
+    let Ok(mut file) = files.open_now(DATA_PATH) else {
+        return;
+    };
+    let mut expected = alloc::vec![0u8; 4096].into_boxed_slice();
+    let mut all_match = true;
+    for (size, (mean, most)) in READ_SIZES.into_iter().zip(MEASURES) {
+        let found = files
+            .read_part_now(DATA_PATH, 3000, &mut expected[..size])
+            .unwrap_or(0);
+        let mut matches = true;
+        let (taken_mean, taken_most) = repeat(|| {
+            let mut read = Ok(0);
+            let taken = time(|| read = files.read_open_now(&mut file, 3000, &mut buffer[..size]));
+            matches &= read == Ok(found) && buffer[..found] == expected[..found];
+            taken
+        })
+        .await;
+        all_match &= matches && found == size;
+        record(mean, taken_mean);
+        record(most, taken_most);
+    }
+    record(Measure::OpenReadsMatch, all_match as u32);
 }
 
 // ============================================================================
@@ -263,19 +312,43 @@ async fn measure_frames(display: &'static SharedDisplay, files: &storage::Files)
         (Measure::FrameEmptyRead256EveryStrip, 0, every_strip(256)),
         (Measure::FrameEmptyRead1920EveryStrip, 0, every_strip(1920)),
         (Measure::FrameBusy, BUSY_DRAW_CYCLES, None),
-        (Measure::FrameBusyRead64EveryStrip, BUSY_DRAW_CYCLES, every_strip(64)),
+        (
+            Measure::FrameBusyRead64EveryStrip,
+            BUSY_DRAW_CYCLES,
+            every_strip(64),
+        ),
         (
             Measure::FrameBusyRead256EightStrips,
             BUSY_DRAW_CYCLES,
-            Some(Reads { bytes: 256, every: STRIP_COUNT / 8 }),
+            Some(Reads {
+                bytes: 256,
+                every: STRIP_COUNT / 8,
+            }),
         ),
-        (Measure::FrameBusyRead256EveryStrip, BUSY_DRAW_CYCLES, every_strip(256)),
-        (Measure::FrameBusyRead1920EveryStrip, BUSY_DRAW_CYCLES, every_strip(1920)),
+        (
+            Measure::FrameBusyRead256EveryStrip,
+            BUSY_DRAW_CYCLES,
+            every_strip(256),
+        ),
+        (
+            Measure::FrameBusyRead1920EveryStrip,
+            BUSY_DRAW_CYCLES,
+            every_strip(1920),
+        ),
     ];
     for (measure, draw_cycles, reads) in frames {
         let mut best = u32::MAX;
         for _ in 0..4 {
-            let taken = redraw(display, buffers, files, &mut read_buffer, draw_cycles, reads, false).await;
+            let taken = redraw(
+                display,
+                buffers,
+                files,
+                &mut read_buffer,
+                draw_cycles,
+                reads,
+                false,
+            )
+            .await;
             best = best.min(taken);
             Timer::after(PAUSE).await;
         }
@@ -283,7 +356,16 @@ async fn measure_frames(display: &'static SharedDisplay, files: &storage::Files)
     }
     let mut best = u32::MAX;
     for _ in 0..4 {
-        let taken = redraw(display, buffers, files, &mut read_buffer, BUSY_DRAW_CYCLES, None, true).await;
+        let taken = redraw(
+            display,
+            buffers,
+            files,
+            &mut read_buffer,
+            BUSY_DRAW_CYCLES,
+            None,
+            true,
+        )
+        .await;
         best = best.min(taken);
         Timer::after(PAUSE).await;
     }
@@ -409,13 +491,21 @@ async fn measure_loops() {
             small,
             small_end,
             SMALL_LOOP_ROUNDS,
-            [Measure::SmallLoopFlash, Measure::SmallLoopRam, Measure::SmallLoopCodeAlias],
+            [
+                Measure::SmallLoopFlash,
+                Measure::SmallLoopRam,
+                Measure::SmallLoopCodeAlias,
+            ],
         ),
         (
             large,
             large_end,
             LARGE_LOOP_ROUNDS,
-            [Measure::LargeLoopFlash, Measure::LargeLoopRam, Measure::LargeLoopCodeAlias],
+            [
+                Measure::LargeLoopFlash,
+                Measure::LargeLoopRam,
+                Measure::LargeLoopCodeAlias,
+            ],
         ),
     ] {
         let start = code as usize & !1;
@@ -441,8 +531,14 @@ async fn measure_loops() {
             code(rounds, word);
         });
         if rounds == LARGE_LOOP_ROUNDS {
-            record(Measure::LargeLoopCacheHits, nrf_pac::NVMC.ihit().read().wrapping_sub(hits_before));
-            record(Measure::LargeLoopCacheMisses, nrf_pac::NVMC.imiss().read().wrapping_sub(misses_before));
+            record(
+                Measure::LargeLoopCacheHits,
+                nrf_pac::NVMC.ihit().read().wrapping_sub(hits_before),
+            );
+            record(
+                Measure::LargeLoopCacheMisses,
+                nrf_pac::NVMC.imiss().read().wrapping_sub(misses_before),
+            );
         }
         record(measures[0], from_flash);
         Timer::after(PAUSE).await;

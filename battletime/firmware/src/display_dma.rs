@@ -12,7 +12,9 @@
 //! Flash reads also move by EasyDMA, a piece of at most 255 bytes at a time, each piece's end
 //! raising the same interrupt, which starts the next. They fill the moments the display leaves the
 //! bus free, such as while the next strip is drawn, and stop after their current piece whenever
-//! the display asks for the bus, so they never slow drawing by more than one piece.
+//! the display asks for the bus. A read may move a piece before each of the display's commands as
+//! well as before a strip, so a strip can wait for several pieces. `read_flash` sleeps the whole
+//! executor in WFE until its bytes have moved.
 
 use alloc::boxed::Box;
 use core::{

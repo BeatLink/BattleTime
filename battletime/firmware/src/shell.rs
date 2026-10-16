@@ -40,7 +40,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use alloc::vec;
+use alloc::{boxed::Box, vec};
 use core::fmt::Write;
 
 use battletime_accelerometer::wake_gestures::WakeGesture;
@@ -268,6 +268,8 @@ struct WatchSystem {
     free_storage_wanted: Cell<bool>,
     /// The part of a file the open app read ahead with `prefetch_file`, until a `file_bytes` takes it.
     prefetch: RefCell<Option<Prefetch>>,
+    /// The file the open app last read a part of, kept open so its next parts need no look-up.
+    open_file: RefCell<Option<Box<storage::OpenFile>>>,
     /// The closed apps with subscriptions still to run, and when each comes due.
     closed_apps: ClosedApps,
     /// While a closed app runs, what it asked of the screen.
@@ -467,7 +469,7 @@ impl SystemValues for WatchSystem {
 
     fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
         self.read_prefetched(path, offset, out)
-            .or_else(|| self.files.read_part_now(path, offset, out))
+            .or_else(|| self.read_through_open_file(path, offset, out))
     }
 }
 
@@ -496,6 +498,16 @@ impl WatchSystem {
             reaches_file_end: part.len() < length,
             part,
         });
+    }
+
+    /// Reads part of a file through the file kept open, opening `path` in its place first if it is another.
+    fn read_through_open_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        let mut kept = self.open_file.borrow_mut();
+        if kept.as_ref().is_none_or(|file| file.path() != path) {
+            *kept = self.files.open_now(path).ok().map(Box::new);
+        }
+        let file = kept.as_mut()?;
+        self.files.read_open_now(file, offset, out).ok()
     }
 
     /// Copies a read the part read ahead covers, waiting for its last bytes if they are still moving.
@@ -839,6 +851,7 @@ impl Shell {
             self.note_closed_app(&host, now);
         }
         *self.system.prefetch.get_mut() = None;
+        *self.system.open_file.get_mut() = None;
         self.system.folder.clear();
         self.system.folder_wanted = None;
     }
@@ -1908,6 +1921,7 @@ pub async fn run_shell(
             free_storage_kilobytes: Cell::new(None),
             free_storage_wanted: Cell::new(false),
             prefetch: RefCell::new(None),
+            open_file: RefCell::new(None),
             folder: FolderListing::new(),
             folder_wanted: None,
             call_ringing_until: None,

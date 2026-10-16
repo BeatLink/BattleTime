@@ -106,6 +106,14 @@ library and keeps the bitmap font, as do the bootloader and its updater. Startin
 library and erased external flash, which shows the status page and then the help screen in that
 font, peaked at 5,316 B of stack, 4,140 B spare.
 
+Open files, which keep a file's map of flash runs so the shell reads any part of it in one DMA read
+with no look-up (`Files::open_now`, `FlashStore::file_map`), added 1,992 B of code and 8 B of
+constants, measured with `cargo size` against master e30358e4 on 2026-10-15 (432,020 B to 434,020 B of
+text and rodata), and 16 B of static RAM. The shell keeps the file it last read open, a boxed few
+dozen bytes plus a heap list of the file's runs, until the app closes. Notes reading a 6.8 KB note
+from the launcher peaked at 6,332 B of stack, 3,124 B spare, against master's 6,188 B and 3,268 B.
+Awaiting store reads instead of sleeping in WFE was measured too, at 4,600 B more code, and left out.
+
 Queuing the shell's store writes for the storage task and writing the update and recovery slots
 through `SlotFlash`, so neither spins on the flash chip, added 4,048 B to the firmware's code image,
 measured with `cargo objcopy` against master on 2026-10-15 (428,660 B to 432,708 B), leaving 9,089 B

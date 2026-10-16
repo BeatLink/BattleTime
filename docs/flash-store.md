@@ -58,7 +58,9 @@ heart rate and battery logs keep their days this way, so a slot every six minute
 the whole file. `file_extents` instead says where a part of a file lies in the flash, as up to a
 given number of runs of addresses, so a caller can read it itself, such as by DMA while the screen
 draws; it gives none for a file kept as a record or one that needs more runs, and bytes read this
-way skip the checksum.
+way skip the checksum. `file_map` gives all of a file's runs at once, on the heap and only as many
+as it needs, and `FileMap::extents_of` then finds those of any part without the store; the map
+stays right until the store next erases or programs the flash, which the caller watches for.
 
 ### Records
 

@@ -351,10 +351,10 @@ The shell draws through `DrawingScreen` (`drawing_screen.rs`) and the DMA code i
   takes the SPIM out of list mode, deselects the display, wakes whoever awaits `bus_is_free` and
   sends SEV, so a waiter in WFE always wakes.
 - **Sharing the bus.** The bus (`SpiBus`, the SPIM with the display's chip select and the chain) is
-  taken for one transaction at a time. The flash store awaits `bus_is_free` before each read,
-  program, erase and status poll, so it never waits on a strip either; a caller that cannot await,
-  such as a display command from the status page or a store call the shell runs to its end, sleeps
-  in WFE until the interrupt.
+  taken for one transaction at a time. The flash store awaits `bus_is_free` before each program,
+  erase and status poll, so it never waits on a strip either; its reads, and a caller that cannot
+  await, such as a display command from the status page or a store call the shell runs to its end,
+  sleep in WFE until the interrupt.
 - **Flash reads by DMA.** `read_flash`, and `start_flash_read`, which returns at once with a
   `FlashReadInProgress` that owns its buffer and whose drop waits for the read to end, read up to
   four extents one after another, a piece of at most 255 bytes at a time: a 4-byte read command for

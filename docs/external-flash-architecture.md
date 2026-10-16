@@ -144,13 +144,13 @@ data. The emulator showed no difference for the small loop and missed the system
 Docs and comments the code contradicts, as of e30358e4:
 
 - `StoreFlash::read` (`firmware/src/storage/watch.rs`) is an `async fn` that calls the blocking
-  `read_flash`, which sleeps the whole executor in WFE. Its comment, `docs/firmware.md`,
-  `docs/storage.md` and [architecture-assessment.md](architecture-assessment.md) say store reads
-  await the bus.
-- `display_dma.rs`'s header and `docs/storage.md` say a flash read never slows drawing by more than
-  one piece. A read may resume before each of `set_window`'s three commands and before the pixels,
-  up to four pieces a strip, every 64 B in blocking fills, and in full on the async `ready()` path,
-  which never sets `DISPLAY_IS_WAITING`.
+  `read_flash`, which sleeps the whole executor in WFE. Its comment, `docs/firmware.md` and
+  `docs/storage.md` said store reads await the bus; they are corrected on this branch, and
+  [architecture-assessment.md](architecture-assessment.md) still says so.
+- `display_dma.rs`'s header and `docs/storage.md` said a flash read never slows drawing by more
+  than one piece. A read may resume before each of `set_window`'s three commands and before the
+  pixels, up to four pieces a strip, every 64 B in blocking fills, and in full on the async
+  `ready()` path, which never sets `DISPLAY_IS_WAITING`. Both are corrected on this branch.
 - The shell's store calls use `try_lock`; a busy store reads as nothing, and `file_bytes` then
   fills zeros without an error.
 - "About 12 KB of RAM per app" (CLAUDE.md, `docs/app-runtime.md`) appears in code only as a test
@@ -160,13 +160,19 @@ Docs and comments the code contradicts, as of e30358e4:
 
 ## Order of work
 
-0. **Measure**, emulator first, then this bench on the watch.
+0. **Measure**, emulator first, then this bench on the watch. Done.
 1. **Store and bus fixes:**
-   - open file handles;
-   - truly async reads;
-   - an error instead of zeros when the store is busy;
-   - `set_window` as one transaction;
-   - a pool of erased sectors so reads rarely wait behind a 45 ms erase.
+   - Open files: done. `Files::open_now` keeps a file's map, so a read is one DMA read with no
+     look-up or store lock, 62 µs for 32 B against 178 µs, for 2 KB of flash. The shell's
+     `read_file` reads through the file it last opened.
+   - Awaiting store reads: measured at 4.6 KB of flash, since every store function that reads
+     grows by an await, and left out. Only background tasks would gain; the shell's reads run to
+     their end either way.
+   - A busy store: an open file needs the store only when it looks its file up again after a
+     write, so the shell's reads now find it busy only during a write. `file_bytes` still reads
+     zeros then; telling the app needs an error the runtime can act on.
+   - `set_window` as one transaction, and a pool of erased sectors so reads rarely wait behind a
+     45 ms erase: still to do.
 2. **Load before painting**, with icons still internal.
 3. **The resource bundle and safe mode:** icons and accelerometer configurations leave the firmware
    image (about 43 KB), shipped beside it in each DFU package.

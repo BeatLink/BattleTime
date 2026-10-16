@@ -95,10 +95,18 @@ or copies their days on each [sync](sync.md); the layout of each is in
   only program pages. Closed apps' timers run only once no store write is under way.
 - **Reads by DMA.** The flash shares its SPI bus with the screen. Reads move by EasyDMA, up to
   255 bytes a piece, in the moments the display leaves the bus free, such as while the next strip
-  is drawn, and stop after the current piece whenever the display asks for the bus, so they never
-  slow drawing by more than one piece. The store's `file_extents` says where a part of a file lies,
-  so the firmware reads it straight from the flash; a file kept as a record is read at once
-  instead.
+  is drawn, and stop after the current piece whenever the display asks for the bus. A read may
+  take a piece before each of the display's commands as well as before a strip, so a strip can
+  wait for several pieces. The CPU sleeps in WFE while a store read moves; awaiting it instead
+  would cost 4.6 KB of flash across the store's code. The store's `file_extents` says where a part
+  of a file lies, so the firmware reads it straight from the flash; a file kept as a record is read
+  at once instead.
+- **Open files.** `Files::open_now` keeps a file's `FileMap`, every run of flash it lies in, so
+  `read_open_now` reads any part of it in one DMA read with no look-up and no store lock: 62 µs
+  for 32 bytes in the emulator, against 178 µs through the store. Every erase and page program the
+  store starts bumps a counter, and the next read of an open file whose count is older looks the
+  file up again. The shell's `read_file` keeps the file it last read open, and lets it go when the
+  app closes. A file kept as a record has no map and is read through the store.
 - **Reading ahead.** An app reads a file larger than its memory a part at a time:
   `file_bytes(path, length, offset)` reads from an offset, and the `prefetch_file` effect starts reading up
   to 4 KB of a file in the background, which the next `file_bytes` of that part takes from RAM.
