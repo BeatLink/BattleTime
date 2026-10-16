@@ -215,6 +215,13 @@ It is signed with the release key, which the repository keeps in its secrets:
 
 Every later release must be signed with the same key, or phones refuse it as an update.
 
+Each push to the `dev` branch builds the same signed APK and puts it in the `dev-latest`
+pre-release as `BattleTime-Companion-dev.apk` ([dev.yml](../.github/workflows/dev.yml)), replacing
+the last one. Its version is the next patch after the newest `v*` tag, so it installs over that
+release, and the release after it installs over every dev build. The watch's and companion's
+checks run on `dev` pushes as they do on `master`, but only `master` measures the memory map back
+into the docs.
+
 ## Layout
 
 ```

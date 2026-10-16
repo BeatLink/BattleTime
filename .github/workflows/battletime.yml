@@ -3,7 +3,7 @@ name: BattleTime
 
 on:
   push:
-    branches: [master]
+    branches: [master, dev]
     paths: ["battletime/**", "docs/**", "tools/**", "flake.nix", "flake.lock", ".github/workflows/battletime.yml"]
   pull_request:
     paths: ["battletime/**", "docs/**", "tools/**", "flake.nix", "flake.lock", ".github/workflows/battletime.yml"]

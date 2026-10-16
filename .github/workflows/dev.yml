@@ -1,0 +1,95 @@
+# Builds the companion's signed Android app from each push to the dev branch, and puts it in the
+# dev-latest pre-release, which always holds the newest dev build.
+name: Development build
+
+on:
+  push:
+    branches: [dev]
+  workflow_dispatch:
+
+# Only the newest dev push publishes; an older run still building is cancelled.
+concurrency:
+  group: dev-build
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Companion for Android
+    runs-on: ubuntu-latest
+    steps:
+      # Every tag comes too, so the build can number itself after the newest release.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@v31
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: companion -> target
+      - name: Install the companion's dependencies
+        working-directory: companion
+        run: nix develop ..#companion-android --command npm ci
+      # The key comes from the repository's secrets and is deleted again whatever happens.
+      - name: Write the signing key
+        working-directory: companion/tauri/gen/android
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > release.jks
+          {
+            echo "storeFile=release.jks"
+            echo "storePassword=$KEYSTORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+            echo "keyAlias=$KEY_ALIAS"
+          } > keystore.properties
+      # The next patch after the newest release, so a dev build installs over that release, and the
+      # release that follows installs over every dev build.
+      - name: Build the signed app for every phone processor
+        working-directory: companion
+        run: |
+          latest=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*')
+          IFS=. read -r major minor patch <<< "${latest#v}"
+          version="$major.$minor.$((patch + 1))"
+          echo "Building $version from ${GITHUB_SHA::7}, after $latest."
+          nix develop ..#companion-android --command npm run tauri-android:release -- --config "{\"version\":\"$version\"}"
+          mkdir -p ../dev
+          cp tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk \
+            "../dev/BattleTime-Companion-dev.apk"
+          echo "$version ${GITHUB_SHA::7}" > ../dev/VERSION
+      - name: Delete the signing key
+        if: always()
+        working-directory: companion/tauri/gen/android
+        run: rm -f release.jks keystore.properties
+      - uses: actions/upload-artifact@v4
+        with:
+          name: companion-android-dev
+          path: dev/
+
+  latest:
+    # A phone downloads from the release without a GitHub account, unlike the artifact.
+    name: Publish dev-latest
+    needs: android
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: companion-android-dev
+          path: dev
+      - name: Move dev-latest to this commit and replace its files
+        run: |
+          read -r version commit < dev/VERSION
+          notes="The companion for Android, $version, built from the dev branch at $commit. Not a release."
+          if ! gh release view dev-latest > /dev/null 2>&1; then
+            gh release create dev-latest --prerelease --target "$GITHUB_SHA" --title "Development build (dev)" --notes "$notes"
+          fi
+          gh api --method PATCH "repos/$GH_REPO/git/refs/tags/dev-latest" -f sha="$GITHUB_SHA" -F force=true > /dev/null \
+            || gh api --method POST "repos/$GH_REPO/git/refs" -f ref=refs/tags/dev-latest -f sha="$GITHUB_SHA" > /dev/null
+          gh release edit dev-latest --notes "$notes"
+          gh release upload dev-latest dev/BattleTime-Companion-dev.apk --clobber

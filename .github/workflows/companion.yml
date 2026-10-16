@@ -3,7 +3,7 @@ name: Companion
 
 on:
   push:
-    branches: [master]
+    branches: [master, dev]
     paths: ["companion/**", "flake.nix", "flake.lock", ".github/workflows/companion.yml"]
   pull_request:
     paths: ["companion/**", "flake.nix", "flake.lock", ".github/workflows/companion.yml"]
