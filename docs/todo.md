@@ -155,7 +155,6 @@ document for its part instead.
 
 - [ ] **Accelerometer on the PineTime.** The firmware counts steps with
   `battletime-accelerometer` on the watch, but these checks have not been made:
-  - `start` succeeds and names the chip the watch really has, which on this watch is a BMA425;
   - lying flat with the screen up reads about +1000 milli-g on z, and tilting it reads the
     expected signs on x and y, which settles whether `Orientation::PINETIME` is right;
   - walking raises `read_step_count`, and `reset_step_count` sets it back to 0;
@@ -405,8 +404,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   subscriptions are on. Switching profiles only reads files, so it writes nothing to flash.
 - [ ] **Temporary apps the companion sends by itself.** The watch runs temporary apps from `/temp`
   and the companion can send one by hand (`battletime apps run`, `battletime ask`), but nothing sends a
-  call screen, a custom notification page or a game score when a call, a notification or a score
-  arrives on the phone, and the companion app has no screen for choosing them.
+  custom notification page or a game score when a notification or a score arrives on the phone, and
+  the companion app has no screen for choosing them.
 - [ ] **Try temporary apps on the watch.** They have run only in the emulator. On the watch, check
   that `battletime ask` opens the prompt over the face and over another app with the screen dark and
   lit, that Yes and No reach the computer and go back, that a second `battletime ask` reuses the cached
@@ -534,8 +533,9 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
 - [ ] **Packages in the simulator.** The simulator gives no `packages` values, so the Software app
   shows an empty list there; feed it the apps it loaded, through `battletime-packages`'s checks.
 - [ ] **Count the heap's peak exactly.** The emulator measures the allocator's bytes in use and
-  the highest heap byte touched, which misses allocations filled with zeros. A peak counter in the
-  allocator, read over the diagnostics characteristic, would check the heap estimate against every
+  the highest heap byte touched, which misses allocations filled with zeros. The allocator's
+  low-water mark (`restart::least_free_heap_bytes`, on the About app's memory page) is not read over
+  the diagnostics characteristic yet; reading it there would check the heap estimate against every
   app's worst moment rather than its first screen.
 
 ## Display and SPI bus
@@ -555,13 +555,13 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
 
 ### Board and system
 
-- [ ] **Turn on the DC/DC regulator.** The firmware keeps embassy-nrf's default, the LDO.
-  InfiniTime sets `DCDCEN` at start, which cuts the current the chip draws, most of all while the
-  radio is on. Set `config.dcdc.reg1 = true` in the firmware and the bootloader.
+- [ ] **Turn on the DC/DC regulator in the bootloader.** The firmware sets
+  `config.dcdc.reg1 = true`, but the bootloader keeps embassy-nrf's default, the LDO. InfiniTime
+  sets `DCDCEN` at start, which cuts the current the chip draws, most of all while the radio is on.
 - [ ] **Recover the I2C bus.** InfiniTime clocks SCL 16 times at start to free a bus a sensor left
   held, runs the TWIM at about 390 kHz because of the nRF52832's 400 kHz timing erratum, and resets
   the TWIM when a transfer never finishes. BattleTime runs at 400 kHz with no time limit, so a frozen
-  bus stops touch and steps for good. InfiniTime also turns the TWIM off between transfers.
+  bus stops touch and steps for good.
 - [ ] **Warn when a part fails at start.** InfiniTime shows a warning screen when the touch
   controller does not start; BattleTime shows nothing.
 
@@ -633,10 +633,8 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
 - [ ] **An emulator suite for closed apps.** A timer ringing while closed was measured by hand in
   the emulator ([memory-map.md](memory-map.md)); no suite under `tests/emulator` repeats it, so a
   later change to that path is not checked for its stack and heap.
-- [ ] **Deliver the remaining sensor and phone events to apps.** The shell pushes steps,
-  acceleration, shakes, heart rate and phone notifications. Push the other `motion` kinds (wrist raise, tap,
-  double tap, still, moving), battery changes, calls, music, navigation and weather
-  once those services exist.
+- [ ] **Deliver the remaining motion events to apps.** Of the `motion` kinds the shell pushes
+  only shakes; push wrist raise, tap, double tap, still and moving.
 - [ ] **Try acceleration and shakes on the watch.** The motion and level apps should follow the
   watch's tilt with the right axes and signs, a firm shake should roll the dice once, and walking
   should not. Tune `JOLT_THRESHOLD_IN_MILLI_G` if needed.
@@ -674,9 +672,9 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
   column now; `Pages` does the swiping without tabs.
 - [ ] **Cyrillic text.** InfiniTime's 20 px font has Cyrillic letters for notifications and music
   titles. Add them to `app-host/fonts/geometric.txt`.
-- [ ] **More library icons:** brightness levels, sleep, notifications on and off, list,
-  home, eye, ban, phone off, volume mute, tachometer, paintbrush, paddle, map, shield, and the
-  moon and night rain weather icons. Quick settings and the ports need them.
+- [ ] **More library icons:** brightness levels, sleep, list, home, eye, ban, phone off,
+  volume mute, tachometer, paintbrush, paddle, map, shield, and the night rain weather icon.
+  Quick settings and the ports need them.
 - [ ] **UI design guidelines.** Add InfiniTime's rules to `app-reference.md`: buttons at least 50
   pixels high and on the bottom edge, room for a page indicator and top bar, switches twice as
   wide as tall, and black backgrounds.
@@ -693,11 +691,12 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
   is sent with the bootloader updater.
 - [ ] **The display's state on the About app's pages,** as InfiniTime's System Info screen shows.
 - [ ] **The full set of navigation turns.** Phones send about 50 icon names, such as forks,
-  merges, ramps, ferries and roundabout exits, and the distance as text. BattleTime has 10 turns and
-  always prints metres. Add InfiniTime's navigation pictures, map each name to one, and show the
-  distance as the phone writes it.
+  merges, ramps, ferries and roundabout exits, and the distance as text. BattleTime has 10 turns. Add
+  InfiniTime's navigation pictures, map each name to one, and show the distance as the phone writes
+  it.
 - [ ] **Night icons in the weather app.** It shows the sun at night where InfiniTime shows the
-  moon. One shared night-aware lookup would also replace the copies in the faces.
+  moon. The digital and PineTimeStyle faces use the shared `weather_icon_at`; the weather app and
+  the lite-weather face still call `icon_named`.
 - [ ] **Bebas Neue and Teko for Infineat,** which draws its time and date in them; BattleTime
   substitutes its own font of lines and arcs.
 - [ ] **The rest of the music values.** InfiniTime's music service also carries the album, the track
@@ -771,13 +770,12 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   the launcher's first row, so with only the heart app installed it measures that: 7,080 B, 1,608 B
   spare, under the 2 KB the rest keep. The alarm's 10.5 KB peak and the About app's still cannot
   be measured again. Let it open a named app, and shrink the heart app's peak.
-- [ ] **Clippy fails with warnings denied.** `cargo clippy --release -- -D warnings` stops on two
-  `needless_borrow`s in `firmware/src/main.rs` (`with_attribute_server(&server)`) and three in
-  `battletime-runtime`.
+- [ ] **Clippy fails with warnings denied.** `cargo clippy --release -- -D warnings` stops on three
+  `needless_borrow`s in `battletime-runtime`.
 - [ ] **No MPU in pinetime-engine.** The engine models no memory protection unit, so the
   stack-guard test skips there.
 - [ ] **A DFU upload tool in `tools/`** that sends a zip over BlueZ, as wasp-os's `dfu.py` does,
-  including type `0x08` for the recovery slot, which no client sends yet.
+  including type `0x08` for the recovery slot, as `battletime recovery` does.
 - [ ] **Flashing a watch over SWD.** One image with the bootloader and the firmware, a way to fill
   the recovery slot on a watch flashed this way, and a page on probes, the SWD pins and RTT logs.
 - [ ] **Releases.** A version scheme, and a page saying what each firmware file in a release is
@@ -839,9 +837,7 @@ full report is
 
 ### UI toolkit
 
-- [ ] **Widgets:** status bar, battery meter, clock, notification bar, button,
-  toggle, checkbox, slider, spinner, stopwatch and confirmation view.
-- [ ] **App icons:** monochrome Font Awesome icons per app.
+- [ ] **Widgets:** a digital clock and a stopwatch.
 - [ ] **The rest of InfiniTime's grid launcher:** remember the last page, and grey out apps and
   faces whose resources are missing. Lists and grids, chosen in the companion, are done.
 

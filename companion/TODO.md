@@ -4,13 +4,9 @@ What is known to be unfinished in this app. Remove an item in the same change th
 
 ## Waiting for the firmware
 
-The firmware side is described in `../docs/companion-protocol.md` and is being
-built in this order: the UART channel with the settings message, the Battery service, the remaining
-Gadgetbridge messages. Each of these is built and tested here against the
-mock watch only.
+The firmware side is described in `../docs/companion-protocol.md`; the remaining Gadgetbridge
+messages are the ones it lists as not served yet.
 
-- **Theme and settings keys.** `src/protocol/theme.ts` and the watch settings screen still use the
-  earlier eleven-colour layout. Switch them to BattleTime's keys once they are in the protocol doc.
 - **Watch face list.** The settings reply names the faces; previews of BattleTime's faces could come
   from its `docs/images`.
 
@@ -35,10 +31,8 @@ mock watch only.
 
 - **Installing apps.** The firmware now serves the packages characteristic, but the Apps and setup
   screens have run only against the mock watch.
-- **Files over BLEFS.** The client runs against the mock watch, and the firmware's service against a
-  raw HCI client in the emulator, but the two have not met over a real radio.
-- **Firmware updates against BattleTime.** The DFU flow and the reconnect that keeps the update run
-  against the mock watch only; BattleTime's own Bluetooth controller has not run on hardware yet.
+- **Firmware updates against BattleTime.** `battletime flash` has updated the real watch, but it
+  sometimes reports that the watch did not come back, so check the reconnect that keeps the update.
 - **The app's window on a watch.** It shares the protocol code with the command line tool, but its
   Bluetooth runs in the Rust core; see "The app" below for what it has done on the real watch.
 - **Forwarding from the desktop app.** Desktop notifications, MPRIS players and Do Not Disturb are
@@ -96,7 +90,7 @@ mock watch only.
 ## Quick apps
 
 - **Untried with a watch.** Reading and writing `/settings/quick_apps` has run only against the
-  mock watch, and the firmware's ring has not landed yet. Check that a saved ring changes what a
+  mock watch. Check that a saved ring changes what a
   swipe on the face opens at once, that "Use the default" brings back the built-in ring, and that
   `battletime quick-apps` works over BlueZ.
 
@@ -104,8 +98,7 @@ mock watch only.
 
 The Android bridge in [src/services/phone](src/services/phone/README.md) is wired into the
 Notifications tab and the watch provider, and compiles in a debug APK from `nix develop .#companion-android`,
-but has never run on a phone. The keep-alive notification needs `POST_NOTIFICATIONS` asked for on
-Android 13 and later.
+but has never run on a phone.
 
 ## Tests
 
