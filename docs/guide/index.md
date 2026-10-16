@@ -4,7 +4,8 @@ BattleTime turns a PineTime into a watch that merges the best of InfiniTime and 
 apps you choose and install from the phone, swipes and a side button that always take you back
 the way you came, and the phone's notifications, calls, music and weather on your wrist. This
 guide walks through it by topic. Work not done yet is in [todo.md](../todo.md), and how the parts
-are built is in [architecture.md](../architecture.md).
+are built is in [architecture.md](../architecture.md). To put BattleTime on a watch, start at
+[Installing BattleTime](installing.md).
 
 <div class="screens" markdown>
 ![The digital watch face](../../battletime/harness/snapshots/screens/face-digital.png){ .screen }

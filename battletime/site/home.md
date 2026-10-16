@@ -12,7 +12,8 @@ InfiniTime, with the easy, loadable apps and desktop simulator of wasp-os.
 Apps are written in **Preact and TypeScript**, the way you would build a web page. No Rust or
 embedded knowledge is needed: the compiler turns an app into bytecode the watch runs.
 
-[Using the watch](guide/index.md){ .md-button .md-button--primary }
+[Installing BattleTime](guide/installing.md){ .md-button .md-button--primary }
+[Using the watch](guide/index.md){ .md-button }
 [Writing apps](writing-apps.md){ .md-button }
 [Source on GitHub](https://github.com/BeatLink/BattleTime){ .md-button }
 

@@ -56,6 +56,9 @@ To try the firmware without a watch, run it in PineTimeEmulator, as
 
 The docs are also on the website, <https://beatlink.github.io/BattleTime/>, in four parts.
 
+**Installing** — [installing BattleTime](docs/guide/installing.md) moves a watch from InfiniTime or
+wasp-os onto BattleTime and sets it up.
+
 **Using the watch** — start at [the guide](docs/guide/index.md).
 
 - [Getting around](docs/guide/getting-around.md), [screen and battery](docs/guide/screen-and-battery.md),
