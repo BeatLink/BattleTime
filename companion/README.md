@@ -95,7 +95,8 @@ window from Vite's dev server, reloading it on each change.
 Everything the app does to a watch can be done from a terminal on Linux; its commands are in
 [the command line guide](../docs/companion/command-line.md). `npm run battletime -- <command>` rebuilds
 it with esbuild and runs it. It imports the same `src/` modules the screens do, and talks to BlueZ
-through node-ble in [node/ble.js](node/ble.js), so each protocol exists only once.
+through node-ble in [node/ble.js](node/ble.js), so each protocol exists only once. When the app is
+running it goes through the app's socket instead ([cli/daemon.ts](cli/daemon.ts)), so the two share one link.
 
 The first scan remembers the watch in `~/.config/battletime-companion/cli.json`, so later commands
 need no address; `--address` and `BATTLETIME_ADDRESS` override it. The tool connects to a remembered
@@ -113,6 +114,9 @@ does.
   the time, to check it against a real watch.
 - `core/src/sync` keeps a copy of the watch ([docs/sync.md](../docs/sync.md)), and
   `core/src/plugins` runs [plugins](../docs/plugins.md) in QuickJS.
+- `core/src/daemon` is the [daemon](../docs/companion/daemon.md): it owns the link, the settings,
+  the plugins and the sync, reconnects to the watch, and does every background job, so the watch
+  stays looked after with no window open. The window follows it through `src/services/daemon.ts`.
 
 [tauri/](tauri) is the app around it. Desktop-only Rust sits behind `#[cfg(desktop)]`:
 
@@ -125,8 +129,9 @@ does.
 
 On a phone the app forwards what the phone knows; on the desktop the computer plays that part,
 through [tauri/src/desktop.rs](tauri/src/desktop.rs) and
-[src/services/phone/desktop.ts](src/services/phone/desktop.ts) in the window. Both share the
-`phoneBridge` interface, so the watch provider and the screens do not know which one they have.
+[tauri/src/desktop_events.rs](tauri/src/desktop_events.rs), which hands the daemon the same phone
+events Android's bridge sends. The window's [src/services/phone/desktop.ts](src/services/phone/desktop.ts)
+reads the same facts for the screens, behind the `phoneBridge` interface.
 
 | On a phone | On Linux |
 | --- | --- |
@@ -138,8 +143,9 @@ through [tauri/src/desktop.rs](tauri/src/desktop.rs) and
 | The clock | The computer's clock |
 
 The watch's clock is set on every connection and again whenever this device's clock jumps (set by
-hand, synced, a new time zone, waking from sleep), and every six hours anyway, by
-[src/state/clock-changes.ts](src/state/clock-changes.ts). That part runs on phones too.
+hand, synced, a new time zone, waking from sleep), and every six hours anyway, by the daemon's
+[core/src/daemon/clock.rs](core/src/daemon/clock.rs), and by
+[src/state/clock-changes.ts](src/state/clock-changes.ts) in a plain browser.
 
 Weather from the computer's location needs GeoClue running; on NixOS that is
 `services.geoclue2.enable = true`, and GeoClue knows the app as `battletime-companion`.
@@ -174,6 +180,20 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
   intents. Its `build.rs` copies in btleplug's Java. `bridge.js` gives the window
   `window.battletime.phone` in place of the desktop's `desktop` and `remote`, and
   `src/services/phone/tauri-android.ts` turns it into the `phoneBridge`.
+- **The daemon outlives the window.** There is one per process, made by whichever comes first: the
+  window's Tauri setup or `KeepAliveService`, which loads the app's library and calls
+  `NativeDaemon.start` with the same data folder Tauri uses (`Context.dataDir`). The daemon's device
+  is `tauri/src/phone_device.rs`, whose requests reach `DaemonHost.kt` over JNI
+  (`tauri/src/android.rs`); `DaemonHost` hands the plugin's phone events straight to the daemon, so
+  the window never forwards them. The daemon asks the service to run while it keeps a watch, and to
+  stop when it lets go; the service is `START_STICKY` and shows the `connectedDevice` notification.
+- **Starting in the background.** Android 12 and later let a foreground service start from the
+  background only in some cases. The window makes the watch a companion device through
+  CompanionDeviceManager before connecting, while the watch still advertises; that exempts the app,
+  and on Android 12 and later `WatchPresenceService` starts the service when the watch comes into
+  range. `BootReceiver` starts it after a boot or an update when the daemon's
+  `companion/settings.json` remembers a watch to reconnect to. Settings offers to lift the battery
+  limits, which some makers' phones need before they leave a service running.
 - **Files** chosen for a note or a plugin come from Android's picker as `content://` links, read
   through Tauri's fs plugin; a note is read again on each check rather than watched.
 - **Plugin pages** are served at `http://plugin.localhost/<id>/`, since Android's webview reaches

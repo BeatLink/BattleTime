@@ -297,6 +297,144 @@ impl Transport for TrustingTlsTransport {
 }
 
 // ============================================================================
+// How to reach an address, as the companion's settings keep it
+// ============================================================================
+
+// Everything about reaching an address besides the address itself, as src/services/web-request.ts keeps it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebAccess {
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub headers: BTreeMap<String, String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certificate: Option<CertificateTrust>,
+    // The pinned certificate's SHA-256 fingerprint, as 64 lowercase hex digits.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub certificate_sha256: Option<String>,
+}
+
+impl WebAccess {
+    // The access settings in stored data, dropping anything malformed, as readWebAccess does.
+    pub fn read(value: &serde_json::Value) -> WebAccess {
+        let mut access = WebAccess::default();
+        let Some(stored) = value.as_object() else {
+            return access;
+        };
+        if let Some(headers) = stored.get("headers").and_then(|headers| headers.as_object()) {
+            for (name, item) in headers {
+                if let Some(text) = item.as_str() {
+                    access.headers.insert(name.clone(), text.to_string());
+                }
+            }
+        }
+        let filled_text = |key: &str| {
+            stored
+                .get(key)
+                .and_then(|item| item.as_str())
+                .filter(|text| !text.is_empty())
+                .map(str::to_string)
+        };
+        access.username = filled_text("username");
+        access.password = filled_text("password");
+        let fingerprint = stored
+            .get("certificateSha256")
+            .and_then(|item| item.as_str())
+            .and_then(normalized_fingerprint);
+        match stored.get("certificate").and_then(|item| item.as_str()) {
+            Some("any") => access.certificate = Some(CertificateTrust::Any),
+            Some("pinned") if fingerprint.is_some() => {
+                access.certificate = Some(CertificateTrust::Pinned);
+                access.certificate_sha256 = fingerprint;
+            }
+            _ => {}
+        }
+        access
+    }
+
+    // The headers a request sends: the user's own, plus an Authorization header when a login is set.
+    pub fn headers(&self) -> BTreeMap<String, String> {
+        let mut headers = self.headers.clone();
+        if self.username.is_some() || self.password.is_some() {
+            let login = format!(
+                "{}:{}",
+                self.username.as_deref().unwrap_or_default(),
+                self.password.as_deref().unwrap_or_default()
+            );
+            headers.insert(
+                "Authorization".into(),
+                format!("Basic {}", base64(login.as_bytes())),
+            );
+        }
+        headers
+    }
+
+    // Checks the address and gives the request to make, as nativeRequest does.
+    pub fn request(
+        &self,
+        method: &str,
+        url: &str,
+        body: Option<String>,
+        timeout_ms: u64,
+    ) -> Result<WebRequest, String> {
+        let lowercase = url.to_ascii_lowercase();
+        if !lowercase.starts_with("http://") && !lowercase.starts_with("https://") {
+            return Err(format!("{url} is not an http or https URL."));
+        }
+        let certificate = self.certificate.unwrap_or(CertificateTrust::System);
+        let certificate_sha256 = match certificate {
+            CertificateTrust::Pinned => Some(
+                self.certificate_sha256
+                    .clone()
+                    .ok_or("Give the SHA-256 fingerprint of the certificate to trust.")?,
+            ),
+            _ => None,
+        };
+        Ok(WebRequest {
+            method: method.to_string(),
+            url: url.to_string(),
+            headers: self.headers(),
+            body,
+            timeout_ms,
+            certificate,
+            certificate_sha256,
+        })
+    }
+}
+
+// The fingerprint as 64 lowercase hex digits, whether written with colons, spaces or neither.
+pub fn normalized_fingerprint(text: &str) -> Option<String> {
+    let digits: String = text
+        .chars()
+        .filter(|character| !character.is_whitespace() && *character != ':')
+        .collect::<String>()
+        .to_lowercase();
+    let well_formed = digits.len() == 64 && digits.chars().all(|character| character.is_ascii_hexdigit());
+    well_formed.then_some(digits)
+}
+
+fn base64(bytes: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    for group in bytes.chunks(3) {
+        let joined = group.iter().enumerate().fold(0u32, |joined, (place, byte)| {
+            joined | (*byte as u32) << (16 - 8 * place)
+        });
+        for place in 0..4 {
+            if place <= group.len() {
+                out.push(ALPHABET[(joined >> (18 - 6 * place) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -440,5 +578,56 @@ mod tests {
     fn a_malformed_fingerprint_is_refused() {
         assert!(fingerprint_bytes("abc").is_err());
         assert!(fingerprint_bytes(&"g".repeat(64)).is_err());
+    }
+
+    #[test]
+    fn stored_access_keeps_only_what_is_well_formed() {
+        let access = WebAccess::read(&serde_json::json!({
+            "headers": { "X-Key": "1", "X-Number": 2 },
+            "username": "me",
+            "password": "",
+            "certificate": "pinned",
+            "certificateSha256": "AB:".repeat(31) + "AB",
+        }));
+
+        assert_eq!(access.headers, BTreeMap::from([("X-Key".into(), "1".into())]));
+        assert_eq!(access.username.as_deref(), Some("me"));
+        assert_eq!(access.password, None);
+        assert_eq!(access.certificate, Some(CertificateTrust::Pinned));
+        assert_eq!(access.certificate_sha256, Some("ab".repeat(32)));
+        let unpinned =
+            WebAccess::read(&serde_json::json!({ "certificate": "pinned", "certificateSha256": "ab" }));
+        assert_eq!(unpinned.certificate, None);
+    }
+
+    #[test]
+    fn a_login_becomes_a_basic_authorization_header() {
+        let access = WebAccess {
+            username: Some("me".into()),
+            password: Some("secret".into()),
+            ..WebAccess::default()
+        };
+
+        assert_eq!(access.headers()["Authorization"], "Basic bWU6c2VjcmV0");
+        assert_eq!(base64(b"a"), "YQ==");
+        assert_eq!(base64(b"ab"), "YWI=");
+        assert_eq!(base64(b"abc"), "YWJj");
+    }
+
+    #[test]
+    fn only_web_addresses_are_requested() {
+        let access = WebAccess::default();
+
+        assert_eq!(
+            access
+                .request("GET", "ftp://example.org", None, 15000)
+                .unwrap_err(),
+            "ftp://example.org is not an http or https URL."
+        );
+        let request = access
+            .request("POST", "HTTPS://example.org", Some("x".into()), 15000)
+            .unwrap();
+        assert_eq!(request.certificate, CertificateTrust::System);
+        assert_eq!(request.body.as_deref(), Some("x"));
     }
 }

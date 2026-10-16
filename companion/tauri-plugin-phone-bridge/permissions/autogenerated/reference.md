@@ -12,8 +12,9 @@ Lets the companion's window use every part of the phone bridge.
 - `allow-reject-call`
 - `allow-silence-call`
 - `allow-media-command`
-- `allow-start-keep-alive`
-- `allow-stop-keep-alive`
+- `allow-is-ignoring-battery-optimizations`
+- `allow-request-ignore-battery-optimizations`
+- `allow-associate-watch`
 - `allow-locate`
 - `allow-open-uri`
 - `allow-start-activity`
@@ -52,6 +53,32 @@ Enables the answer_call command without any pre-configured scope.
 <td>
 
 Denies the answer_call command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:allow-associate-watch`
+
+</td>
+<td>
+
+Enables the associate_watch command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:deny-associate-watch`
+
+</td>
+<td>
+
+Denies the associate_watch command without any pre-configured scope.
 
 </td>
 </tr>
@@ -104,6 +131,32 @@ Enables the is_do_not_disturb command without any pre-configured scope.
 <td>
 
 Denies the is_do_not_disturb command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:allow-is-ignoring-battery-optimizations`
+
+</td>
+<td>
+
+Enables the is_ignoring_battery_optimizations command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:deny-is-ignoring-battery-optimizations`
+
+</td>
+<td>
+
+Denies the is_ignoring_battery_optimizations command without any pre-configured scope.
 
 </td>
 </tr>
@@ -319,6 +372,32 @@ Denies the request_call_permissions command without any pre-configured scope.
 <tr>
 <td>
 
+`phone-bridge:allow-request-ignore-battery-optimizations`
+
+</td>
+<td>
+
+Enables the request_ignore_battery_optimizations command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:deny-request-ignore-battery-optimizations`
+
+</td>
+<td>
+
+Denies the request_ignore_battery_optimizations command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `phone-bridge:allow-send-broadcast`
 
 </td>
@@ -390,58 +469,6 @@ Enables the start_activity command without any pre-configured scope.
 <td>
 
 Denies the start_activity command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`phone-bridge:allow-start-keep-alive`
-
-</td>
-<td>
-
-Enables the start_keep_alive command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`phone-bridge:deny-start-keep-alive`
-
-</td>
-<td>
-
-Denies the start_keep_alive command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`phone-bridge:allow-stop-keep-alive`
-
-</td>
-<td>
-
-Enables the stop_keep_alive command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`phone-bridge:deny-stop-keep-alive`
-
-</td>
-<td>
-
-Denies the stop_keep_alive command without any pre-configured scope.
 
 </td>
 </tr>

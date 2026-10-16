@@ -22,9 +22,10 @@ export type TauriPhoneDevice = {
   rejectCall(): Promise<BridgeResult>;
   silenceCall(): Promise<BridgeResult>;
   mediaCommand(command: MediaCommand): Promise<BridgeResult>;
-  startKeepAlive(watchName: string): Promise<BridgeResult>;
-  stopKeepAlive(): Promise<BridgeResult>;
   locate(): Promise<BridgeResult>;
+  associateWatch(address: string): Promise<BridgeResult>;
+  isIgnoringBatteryOptimizations(): Promise<BridgeResult>;
+  requestIgnoreBatteryOptimizations(): Promise<BridgeResult>;
   openUri(uri: string): Promise<BridgeResult>;
   startActivity(
     packageName: string,
@@ -73,12 +74,13 @@ export function createTauriPhoneBridge(device: TauriPhoneDevice): PhoneBridge {
     rejectCall: () => unwrap<void>(device.rejectCall()),
     silenceCall: () => unwrap<void>(device.silenceCall()),
     mediaCommand: (command) => unwrap<void>(device.mediaCommand(command)),
-    startKeepAlive: (watchName) => unwrap<void>(device.startKeepAlive(watchName)),
-    stopKeepAlive: () => unwrap<void>(device.stopKeepAlive()),
     async locate(): Promise<DeviceLocation> {
       const found = await unwrap<{ latitude: number; longitude: number; name: string }>(device.locate());
       return { latitude: found.latitude, longitude: found.longitude, name: found.name || 'Here' };
     },
+    associateWatch: (id) => unwrap<boolean>(device.associateWatch(id)),
+    isIgnoringBatteryOptimizations: () => unwrap<boolean>(device.isIgnoringBatteryOptimizations()),
+    requestIgnoreBatteryOptimizations: () => unwrap<boolean>(device.requestIgnoreBatteryOptimizations()),
   };
 }
 

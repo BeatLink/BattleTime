@@ -45,6 +45,9 @@ export type Settings = {
   remoteOnWatch: RemoteOnWatch | null;
   // How often everything on the watch is read again while it is connected.
   syncIntervalSeconds: number;
+  // On the desktop: keep the watch after the window closes, and start hidden with the computer.
+  runInBackground: boolean;
+  startWithComputer: boolean;
 };
 
 export const defaultSettings: Settings = {
@@ -74,28 +77,35 @@ export const defaultSettings: Settings = {
   remoteButtons: [],
   remoteOnWatch: null,
   syncIntervalSeconds: DEFAULT_SYNC_INTERVAL_SECONDS,
+  runInBackground: true,
+  startWithComputer: false,
 };
 
 const STORAGE_KEY = 'battletime.settings.v1';
 
+// Settings as stored, with every key checked and the defaults filled in.
+export function readSettings(parsed: unknown): Settings {
+  if (!parsed || typeof parsed !== 'object') {
+    return defaultSettings;
+  }
+  const raw = parsed as Partial<Settings>;
+  const stored = { ...defaultSettings, ...raw };
+  // Settings saved before there was a choice of source kept only a file.
+  if (!(NOTE_SOURCES as readonly unknown[]).includes(raw.noteSource)) {
+    stored.noteSource = stored.noteFile ? 'file' : 'typed';
+  }
+  // Buttons are checked one by one, so a malformed one never reaches the watch or runs.
+  return {
+    ...stored,
+    noteUrlAccess: readWebAccess(stored.noteUrlAccess),
+    remoteButtons: readRemoteButtons(stored.remoteButtons),
+  };
+}
+
 export async function loadSettings(storage: KeyValueStorage = appStorage): Promise<Settings> {
   try {
     const raw = await storage.getItem(STORAGE_KEY);
-    if (!raw) {
-      return defaultSettings;
-    }
-    const parsed = JSON.parse(raw);
-    const stored = { ...defaultSettings, ...parsed };
-    // Settings saved before there was a choice of source kept only a file.
-    if (!(NOTE_SOURCES as readonly unknown[]).includes(parsed.noteSource)) {
-      stored.noteSource = stored.noteFile ? 'file' : 'typed';
-    }
-    // Buttons are checked one by one, so a malformed one never reaches the watch or runs.
-    return {
-      ...stored,
-      noteUrlAccess: readWebAccess(stored.noteUrlAccess),
-      remoteButtons: readRemoteButtons(stored.remoteButtons),
-    };
+    return raw ? readSettings(JSON.parse(raw)) : defaultSettings;
   } catch {
     return defaultSettings;
   }

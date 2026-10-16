@@ -17,7 +17,8 @@ export const unavailablePhoneBridge: PhoneBridge = {
   rejectCall: unsupported,
   silenceCall: unsupported,
   mediaCommand: unsupported,
-  startKeepAlive: unsupported,
-  stopKeepAlive: async () => {},
   locate: () => Promise.reject(new Error('This device cannot tell where it is')),
+  associateWatch: async () => false,
+  isIgnoringBatteryOptimizations: async () => false,
+  requestIgnoreBatteryOptimizations: async () => false,
 };

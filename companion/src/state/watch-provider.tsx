@@ -2,6 +2,7 @@ import { createContext, type ComponentChildren } from 'preact';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'preact/hooks';
 
 import { createTransport, detectTransportKind } from '@/ble/create-transport';
+import { TauriTransport } from '@/ble/tauri-transport';
 import { remoteTapLine } from '@/ble/mock-gadgetbridge';
 import { MockTransport } from '@/ble/mock-transport';
 import type {
@@ -51,13 +52,14 @@ import {
   unavailableReason,
   type RemoteLogEntry,
 } from '@/services/remote-actions';
+import { daemonBridge, daemonValue, type DaemonBridge, type DaemonState } from '@/services/daemon';
 import { remotePlatform } from '@/services/remote-platform';
 import { shareSyncInterval, syncBridge, syncIntervalMs } from '@/services/sync';
 import { currentWeather, weatherPlace } from '@/services/weather';
 import { watchClockChanges } from '@/state/clock-changes';
 import { NoteSync, type NoteStatus } from '@/state/note-sync';
 import { RemoteSync, type RemoteStatus } from '@/state/remote-sync';
-import { defaultSettings, loadSettings, saveSettings, type Settings } from '@/state/settings';
+import { defaultSettings, loadSettings, readSettings, saveSettings, type Settings } from '@/state/settings';
 
 export type ConsoleEntry = {
   id: number;
@@ -157,6 +159,17 @@ const WEATHER_INTERVAL_MS = 30 * 60 * 1000;
 
 const WatchContext = createContext<WatchContextValue | null>(null);
 
+// The daemon's settings, or the ones this window kept before there was a daemon, which it hands over once.
+async function loadDaemonSettings(daemon: DaemonBridge): Promise<Settings> {
+  const stored = await daemonValue(daemon.settings());
+  if (Object.keys(stored).length > 0) {
+    return readSettings(stored);
+  }
+  const kept = await loadSettings();
+  await daemonValue(daemon.importSettings(kept));
+  return kept;
+}
+
 // Owns the single transport for the app and exposes connection, traffic and settings to every screen.
 export function WatchProvider({ children }: { children: ComponentChildren }) {
   const transportRef = useRef<WatchTransport | null>(null);
@@ -165,6 +178,9 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
   const packagesRef = useRef<Promise<PackagesClient> | null>(null);
   const nextId = useRef(1);
   const callSummaryRef = useRef(new CallSummary());
+  // In the app the daemon keeps the watch and does the background work; the window shows what it reports.
+  const daemon = useMemo(() => daemonBridge(), []);
+  const [daemonState, setDaemonState] = useState<DaemonState | null>(null);
 
   const [connection, setConnection] = useState<ConnectionState>('disconnected');
   const [watchMode, setWatchMode] = useState<WatchMode>('application');
@@ -226,7 +242,7 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
   }, []);
 
   const handleMessage = useCallback((message: WatchToPhoneMessage) => {
-    if (router.push(message)) {
+    if (router.push(message) || daemon) {
       return;
     }
     switch (message.t) {
@@ -269,7 +285,7 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       case 'info':
         break;
     }
-  }, [router, addRemoteLog]);
+  }, [router, addRemoteLog, daemon]);
 
   useEffect(() => {
     const transport = createTransport();
@@ -302,7 +318,8 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       onError: (error) => setLastError(error.message),
     });
 
-    loadSettings().then((loaded) => {
+    const loading = daemon ? loadDaemonSettings(daemon).catch(() => loadSettings()) : loadSettings();
+    loading.then((loaded) => {
       setSettings(loaded);
       setSettingsLoaded(true);
     });
@@ -311,7 +328,39 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       transport.destroy();
       transportRef.current = null;
     };
-  }, [handleMessage, log, router]);
+  }, [handleMessage, log, router, daemon]);
+
+  // Follow the daemon: its state, the settings it keeps, and the lines it sends the watch.
+  useEffect(() => {
+    if (!daemon) {
+      return;
+    }
+    const stops = [
+      daemon.onState(setDaemonState),
+      daemon.onSettings((all) => setSettings(readSettings(all))),
+      daemon.onSent((line) => log('out', line)),
+    ];
+    void daemonValue(daemon.state())
+      .then(setDaemonState)
+      .catch(() => {});
+    return () => stops.forEach((stop) => stop());
+  }, [daemon, log]);
+
+  const daemonError = daemonState?.lastError ?? null;
+  useEffect(() => {
+    if (daemonError) {
+      setLastError(daemonError);
+    }
+  }, [daemonError]);
+
+  // The daemon may connect on its own, so the window's raw link follows whichever watch it holds.
+  const daemonWatchId = daemonState?.watch?.id ?? null;
+  useEffect(() => {
+    const transport = transportRef.current;
+    if (daemonWatchId && transport instanceof TauriTransport) {
+      transport.setDeviceId(daemonWatchId);
+    }
+  }, [daemonWatchId]);
 
   const startScan = useCallback(async () => {
     setFound([]);
@@ -332,13 +381,21 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
     setScanning(false);
   }, []);
 
-  const updateSettings = useCallback(async (patch: Partial<Settings>) => {
-    setSettings((current) => {
-      const next = { ...current, ...patch };
-      void saveSettings(next);
-      return next;
-    });
-  }, []);
+  const updateSettings = useCallback(
+    async (patch: Partial<Settings>) => {
+      setSettings((current) => {
+        const next = { ...current, ...patch };
+        if (!daemon) {
+          void saveSettings(next);
+        }
+        return next;
+      });
+      if (daemon) {
+        await daemonValue(daemon.updateSettings(patch)).catch((error: Error) => setLastError(error.message));
+      }
+    },
+    [daemon],
+  );
 
   const connect = useCallback(
     async (target: DiscoveredWatch) => {
@@ -346,18 +403,31 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       setLastError(null);
       setWatch(target);
       try {
+        if (daemon) {
+          // Android finds the watch for its companion question only while it advertises, so it is asked before connecting.
+          if (phoneBridge.kind === 'phone') {
+            await phoneBridge.associateWatch(target.id).catch(() => false);
+          }
+          // The daemon remembers the watch itself once the link is up.
+          await daemonValue(daemon.connect(target.id, target.name));
+          return;
+        }
         await transportRef.current?.connect(target.id);
         await updateSettings({ lastWatchId: target.id, lastWatchName: target.name });
       } catch (error) {
         setLastError((error as Error).message);
       }
     },
-    [stopScan, updateSettings],
+    [stopScan, updateSettings, daemon],
   );
 
   const disconnect = useCallback(async () => {
+    if (daemon) {
+      await daemonValue(daemon.disconnect()).catch((error: Error) => setLastError(error.message));
+      return;
+    }
     await transportRef.current?.disconnect();
-  }, []);
+  }, [daemon]);
 
   const sendRaw = useCallback(
     async (text: string) => {
@@ -377,9 +447,12 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
     router.setSender(send);
   }, [send, router]);
 
-  const watchReady = connection === 'connected' && watchMode === 'application';
+  const shownConnection = daemonState?.connection ?? connection;
+  const shownMode = daemonState?.mode ?? watchMode;
+  const shownCapabilities = daemonState?.capabilities ?? capabilities;
+  const watchReady = shownConnection === 'connected' && shownMode === 'application';
   // The UART features need the message channel as well as running firmware.
-  const uartReady = watchReady && capabilities.uart;
+  const uartReady = watchReady && shownCapabilities.uart;
   // Phone events arrive whenever the platform sends them, so they check the link themselves.
   const readyRef = useRef(uartReady);
   useEffect(() => {
@@ -388,6 +461,10 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
 
   // Forward what the phone reports, unless the user turned it off or the phone is in Do Not Disturb.
   useEffect(() => {
+    if (daemon) {
+      // The daemon hears the computer or the phone itself, through its device.
+      return;
+    }
     const quiet = async () =>
       settingsRef.current.respectDoNotDisturb && (await phoneBridge.isDoNotDisturb().catch(() => false));
 
@@ -441,12 +518,12 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
     };
 
     return phoneBridge.subscribe((event) => void forward(event));
-  }, [send]);
+  }, [send, daemon]);
 
   // Find out what the watch serves, then set its clock, as Gadgetbridge does. Writing the time is also
   // the exchange that makes BattleTime keep a firmware it is trying out.
   useEffect(() => {
-    if (!watchReady) {
+    if (!watchReady || daemon) {
       return;
     }
     let cancelled = false;
@@ -473,10 +550,10 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [watchReady]);
+  }, [watchReady, daemon]);
 
   // Set the watch again whenever this device's clock or time zone changes, and every few hours anyway.
-  const clockOn = watchReady && capabilities.time;
+  const clockOn = watchReady && capabilities.time && !daemon;
   useEffect(() => {
     if (!clockOn) {
       return;
@@ -498,6 +575,10 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
   }, []);
 
   const refreshStatus = useCallback(async () => {
+    if (daemon) {
+      await daemonValue(daemon.refreshStatus());
+      return;
+    }
     if (!capabilities.uart) {
       await readBattery();
       return;
@@ -505,10 +586,10 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
     const reply = await readStatus(router);
     setStatus(reply);
     setLastSynced(Date.now());
-  }, [router, capabilities.uart, readBattery]);
+  }, [router, capabilities.uart, readBattery, daemon]);
 
   // Read the battery and step count once the clock is set, then on the sync interval.
-  const statusOn = uartReady || (watchReady && capabilities.battery);
+  const statusOn = !daemon && (uartReady || (watchReady && capabilities.battery));
   const statusEvery = syncIntervalMs(settings.syncIntervalSeconds);
   useEffect(() => {
     if (!statusOn) {
@@ -527,32 +608,24 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
   const syncIntervalSeconds = settings.syncIntervalSeconds;
   useEffect(() => {
     const bridge = syncBridge();
-    if (settingsLoaded && bridge) {
+    if (settingsLoaded && bridge && !daemon) {
       shareSyncInterval(bridge, syncIntervalMs(syncIntervalSeconds) / 1000).catch(() => {});
     }
-  }, [settingsLoaded, syncIntervalSeconds]);
-
-  // Keep the app running in the background while a watch is connected, so the link survives.
-  const watchName = watch?.name ?? 'watch';
-  useEffect(() => {
-    if (!watchReady || !phoneBridge.available) {
-      return;
-    }
-    void phoneBridge.startKeepAlive(watchName).catch(() => {});
-    return () => {
-      void phoneBridge.stopKeepAlive().catch(() => {});
-    };
-  }, [watchReady, watchName]);
+  }, [settingsLoaded, syncIntervalSeconds, daemon]);
 
   const sendWeather = useCallback(async () => {
+    if (daemon) {
+      await daemonValue(daemon.sendWeather());
+      return;
+    }
     const current = settingsRef.current;
     const locate = current.weatherFromDevice && phoneBridge.supportsLocation ? () => phoneBridge.locate() : null;
     await send(await currentWeather(await weatherPlace(current.weatherPlace, locate)));
-  }, [send]);
+  }, [send, daemon]);
 
   // Send the weather when a watch connects and every half hour after that.
   const weatherFromDevice = settings.weatherFromDevice && phoneBridge.supportsLocation;
-  const weatherOn = uartReady && settings.forwardWeather && (settings.weatherPlace !== null || weatherFromDevice);
+  const weatherOn = !daemon && uartReady && settings.forwardWeather && (settings.weatherPlace !== null || weatherFromDevice);
   useEffect(() => {
     if (!weatherOn) {
       return;
@@ -616,7 +689,7 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
   const noteFile = noteSource === 'file' ? settings.noteFile : null;
   const watchId = watch?.id ?? null;
   const hasNote = noteReader(settings, noteFiles) !== null;
-  const notesOn = watchReady && capabilities.files && hasNote && watchId !== null;
+  const notesOn = !daemon && watchReady && capabilities.files && hasNote && watchId !== null;
   useEffect(() => {
     if (!notesOn || watchId === null) {
       noteSyncRef.current = null;
@@ -652,10 +725,18 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
   }, [noteFont, noteText, noteUrl, noteUrlAccess]);
 
   const syncNote = useCallback(async () => {
+    if (daemon) {
+      await daemonValue(daemon.syncNote());
+      return;
+    }
     await noteSyncRef.current?.sync();
-  }, []);
+  }, [daemon]);
 
   const forgetNote = useCallback(async () => {
+    if (daemon) {
+      await daemonValue(daemon.forgetNote());
+      return;
+    }
     const cleared = { typed: { noteText: '' }, file: { noteFile: null }, url: { noteUrl: '' } }[
       settingsRef.current.noteSource
     ];
@@ -664,14 +745,14 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
     if (watchReady && capabilities.files) {
       await removeNote(await files());
     }
-  }, [updateSettings, watchReady, capabilities.files, files]);
+  }, [updateSettings, watchReady, capabilities.files, files, daemon]);
 
   // Keep the watch's remote layout matching the buttons here, once any have been set up.
   const [remoteStatus, setRemoteStatus] = useState<RemoteStatus>({ kind: 'idle' });
   const remoteSyncRef = useRef<RemoteSync | null>(null);
   const remoteButtons = settings.remoteButtons;
   const remoteInUse = remoteButtons.length > 0 || settings.remoteOnWatch !== null;
-  const remoteOn = watchReady && capabilities.files && remoteInUse && watchId !== null;
+  const remoteOn = !daemon && watchReady && capabilities.files && remoteInUse && watchId !== null;
   useEffect(() => {
     if (!remoteOn || watchId === null) {
       remoteSyncRef.current = null;
@@ -696,14 +777,22 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
   }, [remoteButtons]);
 
   const sendRemoteLayout = useCallback(async () => {
+    if (daemon) {
+      await daemonValue(daemon.sendRemoteLayout());
+      return;
+    }
     if (!remoteSyncRef.current) {
       throw new Error('Connect to a watch that serves files first.');
     }
     await remoteSyncRef.current.sync(true);
-  }, []);
+  }, [daemon]);
 
   const testRemoteButton = useCallback(
     async (index: number) => {
+      if (daemon) {
+        await daemonValue(daemon.testRemoteButton(index));
+        return;
+      }
       const button = settingsRef.current.remoteButtons[index];
       if (!button) {
         return;
@@ -711,12 +800,17 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       const outcome = await runRemoteAction(button.action, remoteDevice);
       addRemoteLog({ at: Date.now(), button: index, label: buttonName(button), source: 'test', ...outcome });
     },
-    [remoteDevice, addRemoteLog],
+    [remoteDevice, addRemoteLog, daemon],
   );
 
   const remoteUnavailable = useCallback((action: RemoteAction) => unavailableReason(action, remoteDevice), [remoteDevice]);
 
-  const clearRemoteLog = useCallback(() => setRemoteLog([]), []);
+  const clearRemoteLog = useCallback(() => {
+    if (daemon) {
+      void daemon.clearRemoteLog();
+    }
+    setRemoteLog([]);
+  }, [daemon]);
 
   const simulateRemoteTap = useMemo(
     () =>
@@ -731,21 +825,42 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
     [transportKind],
   );
 
+  // What the daemon reports wins over the window's own copy.
+  const shownWatch = useMemo<DiscoveredWatch | null>(
+    () => (daemonState?.watch ? { ...daemonState.watch, rssi: watch?.rssi ?? null } : watch),
+    [daemonState?.watch, watch],
+  );
+  const shownNowPlaying = useMemo<NowPlaying | null>(() => {
+    if (!daemonState) {
+      return nowPlaying;
+    }
+    return daemonState.nowPlaying ? { type: 'media', ...daemonState.nowPlaying } : null;
+  }, [daemonState, nowPlaying]);
+  const shown = {
+    status: daemonState ? daemonState.status : status,
+    batteryLevel: daemonState ? daemonState.batteryLevel : batteryLevel,
+    lastSynced: daemonState ? daemonState.lastSynced : lastSynced,
+    findPhoneActive: daemonState ? daemonState.findPhone : findPhoneActive,
+    noteStatus: daemonState ? (daemonState.features.noteStatus ?? { kind: 'idle' as const }) : noteStatus,
+    remoteStatus: daemonState ? (daemonState.features.remoteStatus ?? { kind: 'idle' as const }) : remoteStatus,
+    remoteLog: daemonState ? (daemonState.features.remoteLog ?? []) : remoteLog,
+  };
+
   const value = useMemo<WatchContextValue>(
     () => ({
       transportKind,
-      connection,
-      watchMode,
+      connection: shownConnection,
+      watchMode: shownMode,
       watchReady,
-      capabilities,
+      capabilities: shownCapabilities,
       readDiagnostics: readWatchDiagnostics,
-      batteryLevel,
-      watch,
+      batteryLevel: shown.batteryLevel,
+      watch: shownWatch,
       scanning,
       found,
       console: consoleEntries,
       lastError,
-      findPhoneActive,
+      findPhoneActive: shown.findPhoneActive,
       settings,
       settingsLoaded,
       startScan,
@@ -761,16 +876,16 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       dfuLink,
       requests: router,
       sendWeather,
-      status: uartReady ? status : null,
-      lastSynced,
+      status: uartReady ? shown.status : null,
+      lastSynced: shown.lastSynced,
       refreshStatus,
-      nowPlaying,
+      nowPlaying: shownNowPlaying,
       noteFiles,
-      noteStatus,
+      noteStatus: shown.noteStatus,
       syncNote,
       forgetNote,
-      remoteStatus,
-      remoteLog,
+      remoteStatus: shown.remoteStatus,
+      remoteLog: shown.remoteLog,
       clearRemoteLog,
       sendRemoteLayout,
       testRemoteButton,
@@ -778,37 +893,37 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       simulateRemoteTap,
     }),
     [
-      remoteStatus,
-      remoteLog,
+      shownConnection,
+      shownMode,
+      shownCapabilities,
+      shownWatch,
+      shownNowPlaying,
+      shown.status,
+      shown.batteryLevel,
+      shown.lastSynced,
+      shown.findPhoneActive,
+      shown.noteStatus,
+      shown.remoteStatus,
+      shown.remoteLog,
       clearRemoteLog,
       sendRemoteLayout,
       testRemoteButton,
       remoteUnavailable,
       simulateRemoteTap,
       noteFiles,
-      noteStatus,
       syncNote,
       forgetNote,
-      status,
-      lastSynced,
       refreshStatus,
-      nowPlaying,
       watchReady,
       uartReady,
-      capabilities,
       readWatchDiagnostics,
-      batteryLevel,
       sendWeather,
       router,
       transportKind,
-      connection,
-      watchMode,
-      watch,
       scanning,
       found,
       consoleEntries,
       lastError,
-      findPhoneActive,
       settings,
       settingsLoaded,
       startScan,

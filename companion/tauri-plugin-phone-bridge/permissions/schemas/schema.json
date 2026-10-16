@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the answer_call command without any pre-configured scope."
         },
         {
+          "description": "Enables the associate_watch command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-associate-watch",
+          "markdownDescription": "Enables the associate_watch command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the associate_watch command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-associate-watch",
+          "markdownDescription": "Denies the associate_watch command without any pre-configured scope."
+        },
+        {
           "description": "Enables the has_notification_access command without any pre-configured scope.",
           "type": "string",
           "const": "allow-has-notification-access",
@@ -329,6 +341,18 @@
           "type": "string",
           "const": "deny-is-do-not-disturb",
           "markdownDescription": "Denies the is_do_not_disturb command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the is_ignoring_battery_optimizations command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-is-ignoring-battery-optimizations",
+          "markdownDescription": "Enables the is_ignoring_battery_optimizations command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the is_ignoring_battery_optimizations command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-is-ignoring-battery-optimizations",
+          "markdownDescription": "Denies the is_ignoring_battery_optimizations command without any pre-configured scope."
         },
         {
           "description": "Enables the locate command without any pre-configured scope.",
@@ -427,6 +451,18 @@
           "markdownDescription": "Denies the request_call_permissions command without any pre-configured scope."
         },
         {
+          "description": "Enables the request_ignore_battery_optimizations command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-request-ignore-battery-optimizations",
+          "markdownDescription": "Enables the request_ignore_battery_optimizations command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the request_ignore_battery_optimizations command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-request-ignore-battery-optimizations",
+          "markdownDescription": "Denies the request_ignore_battery_optimizations command without any pre-configured scope."
+        },
+        {
           "description": "Enables the send_broadcast command without any pre-configured scope.",
           "type": "string",
           "const": "allow-send-broadcast",
@@ -463,34 +499,10 @@
           "markdownDescription": "Denies the start_activity command without any pre-configured scope."
         },
         {
-          "description": "Enables the start_keep_alive command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-start-keep-alive",
-          "markdownDescription": "Enables the start_keep_alive command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the start_keep_alive command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-start-keep-alive",
-          "markdownDescription": "Denies the start_keep_alive command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the stop_keep_alive command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-stop-keep-alive",
-          "markdownDescription": "Enables the stop_keep_alive command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the stop_keep_alive command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-stop-keep-alive",
-          "markdownDescription": "Denies the stop_keep_alive command without any pre-configured scope."
-        },
-        {
-          "description": "Lets the companion's window use every part of the phone bridge.\n#### This default permission set includes:\n\n- `allow-has-notification-access`\n- `allow-open-notification-access-settings`\n- `allow-request-call-permissions`\n- `allow-is-do-not-disturb`\n- `allow-answer-call`\n- `allow-reject-call`\n- `allow-silence-call`\n- `allow-media-command`\n- `allow-start-keep-alive`\n- `allow-stop-keep-alive`\n- `allow-locate`\n- `allow-open-uri`\n- `allow-start-activity`\n- `allow-send-broadcast`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Lets the companion's window use every part of the phone bridge.\n#### This default permission set includes:\n\n- `allow-has-notification-access`\n- `allow-open-notification-access-settings`\n- `allow-request-call-permissions`\n- `allow-is-do-not-disturb`\n- `allow-answer-call`\n- `allow-reject-call`\n- `allow-silence-call`\n- `allow-media-command`\n- `allow-is-ignoring-battery-optimizations`\n- `allow-request-ignore-battery-optimizations`\n- `allow-associate-watch`\n- `allow-locate`\n- `allow-open-uri`\n- `allow-start-activity`\n- `allow-send-broadcast`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Lets the companion's window use every part of the phone bridge.\n#### This default permission set includes:\n\n- `allow-has-notification-access`\n- `allow-open-notification-access-settings`\n- `allow-request-call-permissions`\n- `allow-is-do-not-disturb`\n- `allow-answer-call`\n- `allow-reject-call`\n- `allow-silence-call`\n- `allow-media-command`\n- `allow-start-keep-alive`\n- `allow-stop-keep-alive`\n- `allow-locate`\n- `allow-open-uri`\n- `allow-start-activity`\n- `allow-send-broadcast`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Lets the companion's window use every part of the phone bridge.\n#### This default permission set includes:\n\n- `allow-has-notification-access`\n- `allow-open-notification-access-settings`\n- `allow-request-call-permissions`\n- `allow-is-do-not-disturb`\n- `allow-answer-call`\n- `allow-reject-call`\n- `allow-silence-call`\n- `allow-media-command`\n- `allow-is-ignoring-battery-optimizations`\n- `allow-request-ignore-battery-optimizations`\n- `allow-associate-watch`\n- `allow-locate`\n- `allow-open-uri`\n- `allow-start-activity`\n- `allow-send-broadcast`\n- `allow-register-listener`\n- `allow-remove-listener`"
         }
       ]
     }

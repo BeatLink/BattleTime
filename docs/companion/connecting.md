@@ -23,8 +23,9 @@ settings it advertises **InfiniTime** instead, for Gadgetbridge; see
 [Using Gadgetbridge instead](phone-features.md#using-gadgetbridge-instead).
 
 The companion remembers the last watch. The Watch screen then offers **Reconnect to** it, and with
-**Reconnect automatically** on in **Settings** it connects as soon as the app opens. **Forget
-watch** in Settings clears it.
+**Reconnect automatically** on in **Settings** the companion keeps it connected: it connects when
+the app starts, and reconnects whenever the watch drops or comes back into range. **Disconnect**
+leaves the watch alone until you connect again. **Forget watch** in Settings clears it.
 
 Only one companion should hold the watch at a time. Close the companion on one device before
 connecting from another.
@@ -71,9 +72,20 @@ until the watch appears, and says so if it never does.
 
 ## When the link drops
 
-The watch drops a connection that has been idle for a while, and the app does not yet reconnect by
-itself; choose **Reconnect** on the Watch screen. On the command line each command connects, does
-its job and disconnects.
+The watch drops a connection that has been idle for a while. With **Reconnect automatically** on,
+the companion tries again a few seconds later, and keeps trying less and less often, up to every
+five minutes, until the watch answers. On the command line each command connects, does its job and
+disconnects.
 
 If a watch shows as connected but nothing reaches it, switching Bluetooth off and on clears it.
 That drops every other Bluetooth device on the computer too.
+
+## Keeping the watch with the window closed
+
+The desktop app keeps the watch connected after its window closes, and goes on forwarding
+notifications and music. Its tray icon, or opening the app again, brings the window back. In
+**Settings**:
+
+- **Keep running in the background** turned off makes closing the window quit the app.
+- **Start with the computer** starts the app at login, connected, with no window open.
+- **Quit** stops it.

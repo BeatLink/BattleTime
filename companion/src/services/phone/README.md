@@ -39,8 +39,11 @@ media, and lets the watch act on them. In the desktop app the computer stands in
   above the phone's own and apart from the watch apps' negative ones. A call rejected on the phone itself reads as missed, since Android reports it the same way.
 - **Do Not Disturb.** `isDoNotDisturb` is true when the interruption filter is anything but "all".
   Nothing is filtered natively; the app decides what to forward.
-- **Keep-alive.** `startKeepAlive` runs a foreground service of type `connectedDevice` with an
-  ongoing notification, so the Bluetooth link survives the app being backgrounded.
-  Call it while the app is in front, because Android refuses to start one from the background.
+- **Running in the background.** The Rust daemon, not the window, keeps the app running: it
+  asks the plugin's `KeepAliveService` to run while it keeps a watch (see the companion's README).
+  `associateWatch` makes the watch Android's companion device, which lets that service start from
+  the background; the window asks it before connecting, while the watch still advertises.
+  `isIgnoringBatteryOptimizations` and `requestIgnoreBatteryOptimizations` back the Battery limits
+  row in Settings.
 
 The Kotlin compiles in the debug APK but has never run on a phone.

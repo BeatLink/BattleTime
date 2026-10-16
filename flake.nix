@@ -247,7 +247,12 @@
           doCheck = false;
 
           nativeBuildInputs = [ pkgs.pkg-config pkgs.wrapGAppsHook3 pkgs.copyDesktopItems ];
-          buildInputs = with pkgs; [ webkitgtk_4_1 gtk3 libsoup_3 glib openssl dbus ];
+          buildInputs = with pkgs; [ webkitgtk_4_1 gtk3 libsoup_3 glib openssl dbus libayatana-appindicator ];
+
+          # The tray icon loads its library when the app starts, so the wrapper puts it on the path.
+          preFixup = ''
+            gappsWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.libayatana-appindicator ]})
+          '';
 
           # Tauri embeds the interface from dist/ while it compiles.
           preBuild = ''

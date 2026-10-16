@@ -1,4 +1,5 @@
 import type { DfuLink, WriteMode } from '@/dfu/link';
+import { daemonBridge } from '@/services/daemon';
 
 import type {
   ConnectionState,
@@ -131,7 +132,10 @@ export class TauriTransport implements WatchTransport {
       off();
     }
     this.unsubscribe = [];
-    void this.bridge.disconnect();
+    // The daemon keeps the watch after the window goes.
+    if (!daemonBridge()) {
+      void this.bridge.disconnect();
+    }
   }
 }
 
@@ -183,6 +187,10 @@ class TauriDfuLink implements DfuLink {
     } finally {
       await this.bridge.filesEnd(begun.value);
     }
+  }
+
+  async hold(held: boolean): Promise<void> {
+    await daemonBridge()?.hold(held);
   }
 
   async reconnect(deviceId: string): Promise<void> {

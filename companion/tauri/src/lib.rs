@@ -1,34 +1,45 @@
 // The BattleTime Companion app, on the desktop and on Android.
 //
-// It runs the same interface as the phone app, from the web export, and answers the window's
-// `window.battletime` bridge (bridge.js) with Bluetooth, D-Bus, note files, remote commands, plugins and sync here.
-// D-Bus, note file watching and shell commands are the desktop's alone; Android has the phone bridge plugin.
+// It hosts the core's daemon, which keeps the watch linked and does the background work, and answers the
+// window's `window.battletime` bridge (bridge.js) from it. D-Bus, note file watching and shell commands
+// are the desktop's alone; Android has the phone bridge plugin, whose keep-alive service can start the
+// daemon before any window (android.rs).
 
+#[cfg(target_os = "android")]
+mod android;
+#[cfg(desktop)]
+mod autostart;
 #[cfg(desktop)]
 mod desktop;
 #[cfg(desktop)]
+mod desktop_events;
+#[cfg(desktop)]
+mod host_device;
+#[cfg(desktop)]
 mod notes;
+// The phone's device is made only on Android, and tested everywhere.
+#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+mod phone_device;
 mod picked_file;
 mod plugins;
 #[cfg(desktop)]
 mod remote;
+#[cfg(desktop)]
+mod single_instance;
 mod sync;
 
-use std::sync::{Arc, OnceLock};
+use std::path::PathBuf;
+use std::sync::{Arc, OnceLock, Weak};
 
 use battletime_companion_core::ble::{BleError, WatchBle};
-use battletime_companion_core::plugins::host::{Fetcher, PluginHost};
-use battletime_companion_core::plugins::http;
-use battletime_companion_core::plugins::store::PluginStore;
-use battletime_companion_core::sync::files::FileClient;
-use battletime_companion_core::sync::store::SyncStore;
-use battletime_companion_core::sync::Syncer;
+use battletime_companion_core::daemon::device::Device;
+use battletime_companion_core::daemon::{Daemon, DaemonSetup, Features};
 use battletime_companion_core::web_request;
 use serde::Serialize;
-use serde_json::json;
-#[cfg(desktop)]
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, Manager, RunEvent, State, WebviewUrl, WebviewWindowBuilder};
+#[cfg(desktop)]
+use tauri::RunEvent;
+use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder};
 use tauri_plugin_phone_bridge::PhoneBridgeExt;
 
 #[cfg(desktop)]
@@ -45,15 +56,21 @@ fn bridge_script(on_android: bool) -> String {
 }
 
 struct Companion {
-    ble: WatchBle,
+    daemon: Arc<Daemon>,
     #[cfg(desktop)]
     desktop: DesktopIntegration,
     #[cfg(desktop)]
     notes: NoteFileWatches,
-    plugins: Arc<PluginHost>,
-    syncer: Arc<Syncer>,
-    lease: Arc<sync::WindowLease>,
 }
+
+impl Companion {
+    fn ble(&self) -> &WatchBle {
+        self.daemon.ble().expect("the app's daemon runs on Bluetooth")
+    }
+}
+
+// One daemon for the whole process, which on Android may outlive the window that started it.
+static DAEMON: OnceLock<Arc<Daemon>> = OnceLock::new();
 
 type Answer<T> = Result<T, String>;
 
@@ -77,44 +94,46 @@ async fn bluetooth_allowed(app: &AppHandle) -> Answer<()> {
 #[tauri::command]
 async fn ble_start_scan(app: AppHandle, companion: State<'_, Companion>) -> Answer<()> {
     bluetooth_allowed(&app).await?;
-    answer(companion.ble.start_scan().await)
+    companion.daemon.set_scanning(true);
+    answer(companion.ble().start_scan().await)
 }
 
 #[tauri::command]
 async fn ble_stop_scan(companion: State<'_, Companion>) -> Answer<()> {
-    answer(companion.ble.stop_scan().await)
+    companion.daemon.set_scanning(false);
+    answer(companion.ble().stop_scan().await)
 }
 
 #[tauri::command]
 async fn ble_connect(app: AppHandle, companion: State<'_, Companion>, id: String) -> Answer<()> {
     bluetooth_allowed(&app).await?;
-    answer(companion.ble.connect(&id).await)
+    answer(companion.ble().connect(&id).await)
 }
 
 #[tauri::command]
 async fn ble_reconnect(app: AppHandle, companion: State<'_, Companion>, id: String) -> Answer<()> {
     bluetooth_allowed(&app).await?;
-    answer(companion.ble.reconnect(&id).await)
+    answer(companion.ble().reconnect(&id).await)
 }
 
 #[tauri::command]
 async fn ble_disconnect(companion: State<'_, Companion>) -> Answer<()> {
-    answer(companion.ble.disconnect().await)
+    answer(companion.ble().disconnect().await)
 }
 
 #[tauri::command]
 async fn ble_write(companion: State<'_, Companion>, text: String) -> Answer<()> {
-    answer(companion.ble.write(&text).await)
+    answer(companion.ble().write(&text).await)
 }
 
 #[tauri::command]
 async fn ble_write_bytes(companion: State<'_, Companion>, data: Vec<u8>) -> Answer<()> {
-    answer(companion.ble.write_bytes(&data).await)
+    answer(companion.ble().write_bytes(&data).await)
 }
 
 #[tauri::command]
 fn ble_gatt_has(companion: State<'_, Companion>, service: String, characteristic: String) -> bool {
-    companion.ble.gatt_has(&service, &characteristic)
+    companion.ble().gatt_has(&service, &characteristic)
 }
 
 #[tauri::command]
@@ -123,7 +142,7 @@ async fn ble_gatt_read(
     service: String,
     characteristic: String,
 ) -> Answer<Vec<u8>> {
-    answer(companion.ble.gatt_read(&service, &characteristic).await)
+    answer(companion.ble().gatt_read(&service, &characteristic).await)
 }
 
 #[tauri::command]
@@ -136,7 +155,7 @@ async fn ble_gatt_write(
 ) -> Answer<()> {
     answer(
         companion
-            .ble
+            .ble()
             .gatt_write(&service, &characteristic, &data, &mode)
             .await,
     )
@@ -148,7 +167,7 @@ async fn ble_gatt_subscribe(
     service: String,
     characteristic: String,
 ) -> Answer<()> {
-    answer(companion.ble.gatt_subscribe(&service, &characteristic).await)
+    answer(companion.ble().gatt_subscribe(&service, &characteristic).await)
 }
 
 #[tauri::command]
@@ -157,7 +176,104 @@ async fn ble_gatt_unsubscribe(
     service: String,
     characteristic: String,
 ) -> Answer<()> {
-    answer(companion.ble.gatt_unsubscribe(&service, &characteristic).await)
+    answer(companion.ble().gatt_unsubscribe(&service, &characteristic).await)
+}
+
+// ============================================================================
+// The daemon
+// ============================================================================
+
+#[tauri::command]
+fn daemon_state(companion: State<'_, Companion>) -> Value {
+    companion.daemon.state()
+}
+
+#[tauri::command]
+fn daemon_settings(companion: State<'_, Companion>) -> Value {
+    companion.daemon.settings_json()
+}
+
+#[tauri::command]
+fn daemon_update_settings(companion: State<'_, Companion>, patch: Value) -> Answer<Value> {
+    companion.daemon.update_settings(&patch)
+}
+
+// The window hands over the settings it kept before the daemon, which takes them only once.
+#[tauri::command]
+fn daemon_import_settings(companion: State<'_, Companion>, settings: Value) -> Answer<bool> {
+    companion.daemon.import_settings(&settings)
+}
+
+#[tauri::command]
+async fn daemon_connect(
+    app: AppHandle,
+    companion: State<'_, Companion>,
+    id: String,
+    name: String,
+) -> Answer<()> {
+    bluetooth_allowed(&app).await?;
+    companion.daemon.connect(&id, &name).await
+}
+
+#[tauri::command]
+async fn daemon_disconnect(companion: State<'_, Companion>) -> Answer<()> {
+    companion.daemon.disconnect().await
+}
+
+// A firmware update holds the daemon back from reconnecting while it moves the link itself.
+#[tauri::command]
+fn daemon_hold(companion: State<'_, Companion>, held: bool) {
+    companion.daemon.hold(held);
+}
+
+#[tauri::command]
+async fn daemon_refresh_status(companion: State<'_, Companion>) -> Answer<()> {
+    companion.daemon.refresh_status().await
+}
+
+#[tauri::command]
+async fn daemon_send_weather(companion: State<'_, Companion>) -> Answer<()> {
+    features(&companion)?.weather.send_now().await
+}
+
+fn features<'state>(companion: &'state State<'_, Companion>) -> Answer<&'state Features> {
+    companion
+        .daemon
+        .features()
+        .ok_or_else(|| "The daemon is still starting.".to_string())
+}
+
+#[tauri::command]
+async fn daemon_sync_note(companion: State<'_, Companion>) -> Answer<()> {
+    features(&companion)?.notes.sync_now().await;
+    Ok(())
+}
+
+#[tauri::command]
+async fn daemon_forget_note(companion: State<'_, Companion>) -> Answer<()> {
+    features(&companion)?.notes.forget().await
+}
+
+#[tauri::command]
+async fn daemon_send_remote_layout(companion: State<'_, Companion>) -> Answer<()> {
+    features(&companion)?.remote.send_layout().await
+}
+
+#[tauri::command]
+async fn daemon_test_remote_button(companion: State<'_, Companion>, index: usize) -> Answer<()> {
+    features(&companion)?.remote.test_button(index).await;
+    Ok(())
+}
+
+#[tauri::command]
+fn daemon_clear_remote_log(companion: State<'_, Companion>) -> Answer<()> {
+    features(&companion)?.remote.clear_log();
+    Ok(())
+}
+
+#[tauri::command]
+fn daemon_stop_finding_phone(companion: State<'_, Companion>) {
+    companion.daemon.stop_finding_phone();
 }
 
 // ============================================================================
@@ -268,58 +384,50 @@ async fn web_request(request: web_request::WebRequest) -> Answer<web_request::We
 // Starting up
 // ============================================================================
 
+// The process's daemon, made by whichever comes first: the window's setup or, on Android, the keep-alive service.
+fn process_daemon(data_dir: PathBuf, device: Arc<dyn Device>) -> Arc<Daemon> {
+    DAEMON
+        .get_or_init(|| {
+            let runtime = tauri::async_runtime::handle().inner().clone();
+            let _entered = runtime.enter();
+            Daemon::start(DaemonSetup {
+                data_dir,
+                device,
+                runtime,
+            })
+        })
+        .clone()
+}
+
+// The process's daemon, with this app's data folder, which on Android is the folder the service passes too.
+fn daemon_for(app: &AppHandle, device: Arc<dyn Device>) -> Result<Arc<Daemon>, Box<dyn std::error::Error>> {
+    if let Some(daemon) = DAEMON.get() {
+        return Ok(daemon.clone());
+    }
+    Ok(process_daemon(app.path().app_data_dir()?, device))
+}
+
 fn companion_for(app: &AppHandle) -> Result<Companion, Box<dyn std::error::Error>> {
-    let ble_app = app.clone();
+    // The device hears the daemon's events only once the daemon exists, so it is handed over afterwards.
+    let daemon_cell: Arc<OnceLock<Weak<Daemon>>> = Arc::new(OnceLock::new());
+    #[cfg(desktop)]
+    let device = Arc::new(host_device::DesktopDevice::new(app, daemon_cell.clone()));
+    #[cfg(desktop)]
+    let desktop = device.integration.clone();
+    #[cfg(target_os = "android")]
+    let device = Arc::new(android::phone_device());
+    let daemon = daemon_for(app, device)?;
+    let _ = daemon_cell.set(Arc::downgrade(&daemon));
 
-    // The plugins write to the watch through the Bluetooth layer, which hands them the watch's text in turn.
-    let ble_cell = Arc::new(OnceLock::new());
-    let output = plugins::DesktopOutput {
-        app: app.clone(),
-        ble: ble_cell.clone(),
-    };
-    let fetcher: Fetcher = Arc::new(http::fetch);
-    let store = PluginStore::new(app.path().app_data_dir()?.join("plugins"));
-    let plugin_host = Arc::new(PluginHost::new(store, Arc::new(output), fetcher));
-
-    // The syncer reads the watch's files through the same link, and the plugins read what it keeps.
-    let files = Arc::new(FileClient::new(Arc::new(sync::BleFiles {
-        ble: ble_cell.clone(),
-    })));
-    let syncer = Arc::new(Syncer::new(
-        files,
-        SyncStore::new(app.path().app_data_dir()?.join("sync")),
-        Arc::new(sync::DesktopSync {
-            app: app.clone(),
-            ble: ble_cell.clone(),
-            plugins: plugin_host.clone(),
-        }),
-    ));
-    let syncer_cell = Arc::new(OnceLock::new());
-    let _ = syncer_cell.set(syncer.clone());
-    plugin_host.set_watch_data(Arc::new(sync::PluginData { syncer: syncer_cell }));
-    let lease = Arc::new(sync::WindowLease::default());
-
-    let (followed, synced, leased) = (plugin_host.clone(), syncer.clone(), lease.clone());
-    let ble = WatchBle::new(Arc::new(move |name, payload| {
-        plugins::follow_watch(&followed, name, &payload);
-        if sync::follow_watch(&synced, &leased, name, &payload) {
-            let _ = ble_app.emit("ble:event", json!({ "name": name, "payload": payload }));
-        }
+    let window = app.clone();
+    daemon.set_host(Arc::new(move |event, payload| {
+        let _ = window.emit(event, payload);
     }));
-    let _ = ble_cell.set(ble.clone());
 
     Ok(Companion {
-        ble,
-        plugins: plugin_host,
-        syncer,
-        lease,
+        daemon,
         #[cfg(desktop)]
-        desktop: {
-            let desktop_app = app.clone();
-            DesktopIntegration::new(Arc::new(move |payload| {
-                let _ = desktop_app.emit("desktop:event", payload);
-            }))
-        },
+        desktop,
         #[cfg(desktop)]
         notes: {
             let notes_app = app.clone();
@@ -333,41 +441,236 @@ fn companion_for(app: &AppHandle) -> Result<Companion, Box<dyn std::error::Error
     })
 }
 
+// The note's picked file, watched for saves so the daemon sends it again at once rather than at its next check.
+#[cfg(desktop)]
+async fn follow_note_file(daemon: Arc<Daemon>) {
+    #[derive(serde::Deserialize, Default, PartialEq)]
+    #[serde(default, rename_all = "camelCase")]
+    struct NoteFileSettings {
+        note_source: String,
+        note_file: Option<Value>,
+    }
+
+    let saved = daemon.clone();
+    let watches = NoteFileWatches::new(
+        Arc::new(move |_| {
+            if let Some(features) = saved.features() {
+                features.notes.file_changed();
+            }
+        }),
+        notes::SETTLE,
+    );
+    let mut changes = daemon.settings().subscribe();
+    let mut watched: Option<(String, u64)> = None;
+    loop {
+        let view: NoteFileSettings = daemon.settings().view();
+        let wanted = (view.note_source == "file")
+            .then(|| {
+                view.note_file
+                    .and_then(|file| file["uri"].as_str().map(str::to_string))
+            })
+            .flatten();
+        if watched.as_ref().map(|(path, _)| path) != wanted.as_ref() {
+            if let Some((_, id)) = watched.take() {
+                watches.stop(id);
+            }
+            if let Some(path) = wanted {
+                watched = watches.start(&path).ok().map(|id| (path, id));
+            }
+        }
+        if changes.changed().await.is_err() {
+            return;
+        }
+    }
+}
+
+// ============================================================================
+// Running in the background on the desktop
+// ============================================================================
+
+// The desktop's own settings, which the window's Settings screen changes.
+#[cfg(desktop)]
+#[derive(serde::Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct DesktopSettings {
+    run_in_background: bool,
+    start_with_computer: bool,
+}
+
+#[cfg(desktop)]
+impl Default for DesktopSettings {
+    fn default() -> Self {
+        DesktopSettings {
+            run_in_background: true,
+            start_with_computer: false,
+        }
+    }
+}
+
+#[cfg(desktop)]
+fn show_window(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+// Keeps the autostart entry matching the setting, for the life of the app.
+#[cfg(desktop)]
+async fn follow_autostart(daemon: Arc<Daemon>) {
+    let mut changes = daemon.settings().subscribe();
+    loop {
+        let wanted = daemon.settings().view::<DesktopSettings>().start_with_computer;
+        if let Some(folder) = autostart::autostart_folder() {
+            if let Err(error) = autostart::set_autostart(&folder, wanted, &autostart::program()) {
+                eprintln!("Could not change the autostart entry: {error}");
+            }
+        }
+        if changes.changed().await.is_err() {
+            return;
+        }
+    }
+}
+
+// The tray icon, with a way back to the window and a way to quit; a desktop without a tray goes without.
+#[cfg(desktop)]
+fn add_tray(app: &tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{Menu, MenuItem};
+    use tauri::tray::TrayIconBuilder;
+
+    let open = MenuItem::with_id(app, "open", "Open BattleTime Companion", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&open, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("main")
+        .tooltip("BattleTime Companion")
+        .menu(&menu)
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => show_window(app),
+            "quit" => app.exit(0),
+            _ => {}
+        });
+    if let Some(icon) = app.default_window_icon() {
+        tray = tray.icon(icon.clone());
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
+#[cfg(desktop)]
+#[tauri::command]
+fn app_quit(app: AppHandle) {
+    app.exit(0);
+}
+
+// Lets the command line tool use this app's link to the watch rather than reaching for it through BlueZ.
+#[cfg(desktop)]
+async fn serve_command_line(daemon: Arc<Daemon>, data_dir: std::path::PathBuf) {
+    use battletime_companion_core::daemon::socket;
+
+    let path = socket::default_socket_path(&data_dir);
+    if let Err(error) = socket::serve_daemon(&daemon, &path).await {
+        eprintln!(
+            "The command line socket at {} could not start: {error}",
+            path.display()
+        );
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // A second launch shows the running companion's window instead of starting another.
+    #[cfg(desktop)]
+    let launches = {
+        let path = single_instance::socket_path(
+            std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from),
+            &std::env::temp_dir(),
+        );
+        match single_instance::claim(&path) {
+            Ok(single_instance::Claim::AlreadyRunning) => return,
+            Ok(single_instance::Claim::First(listener)) => Some(listener),
+            Err(error) => {
+                eprintln!("Could not check for a running companion: {error}");
+                None
+            }
+        }
+    };
+    // Started with the computer, the companion keeps the watch without opening its window.
+    #[cfg(desktop)]
+    let background = std::env::args().any(|argument| argument == "--background");
+
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_phone_bridge::init())
         .register_uri_scheme_protocol("plugin", |context, request| {
             let companion = context.app_handle().state::<Companion>();
-            plugins::serve_ui_file(&companion.plugins, request.uri())
+            plugins::serve_ui_file(companion.daemon.plugins(), request.uri())
         })
-        .setup(|app| {
+        .setup(move |app| {
             let companion = companion_for(app.handle())?;
             #[cfg(desktop)]
             {
                 let desktop = companion.desktop.clone();
                 tauri::async_runtime::spawn(async move { desktop.start().await });
+                tauri::async_runtime::spawn(follow_note_file(companion.daemon.clone()));
+                tauri::async_runtime::spawn(serve_command_line(
+                    companion.daemon.clone(),
+                    app.path().app_data_dir()?,
+                ));
             }
-            let plugin_host = companion.plugins.clone();
-            let syncer = companion.syncer.clone();
             app.manage(companion);
-            tauri::async_runtime::spawn(syncer.run());
-            std::thread::spawn(move || plugin_host.start_all());
 
             // In development BATTLETIME_DEV_URL points at the Vite dev server (`npm run dev`), so the interface reloads.
             let url = match std::env::var("BATTLETIME_DEV_URL") {
                 Ok(dev_url) => WebviewUrl::External(dev_url.parse()?),
                 Err(_) => WebviewUrl::App("index.html".into()),
             };
-            WebviewWindowBuilder::new(app, "main", url)
+            let window = WebviewWindowBuilder::new(app, "main", url)
                 .title("BattleTime Companion")
                 .inner_size(480.0, 860.0)
                 .background_color(tauri::window::Color(0, 0, 0, 255))
-                .initialization_script(bridge_script(cfg!(target_os = "android")))
-                .build()?;
+                .initialization_script(bridge_script(cfg!(target_os = "android")));
+            #[cfg(desktop)]
+            let window = window.visible(!background);
+            window.build()?;
+
+            #[cfg(desktop)]
+            {
+                if let Some(listener) = launches {
+                    let handle = app.handle().clone();
+                    single_instance::follow_launches(listener, move || show_window(&handle));
+                }
+                let daemon = app.state::<Companion>().daemon.clone();
+                tauri::async_runtime::spawn(follow_autostart(daemon));
+                // The tray library may be missing on a desktop with no tray, which it reports by panicking.
+                match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| add_tray(app))) {
+                    Ok(Err(error)) => eprintln!("Could not add the tray icon: {error}"),
+                    Err(_) => {
+                        eprintln!("This desktop has no tray, so the companion runs without an icon there.")
+                    }
+                    Ok(Ok(())) => {}
+                }
+            }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Closing the window leaves the daemon keeping the watch, unless the user turned that off.
+            #[cfg(desktop)]
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let companion = window.app_handle().state::<Companion>();
+                if companion
+                    .daemon
+                    .settings()
+                    .view::<DesktopSettings>()
+                    .run_in_background
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+            #[cfg(mobile)]
+            let _ = (window, event);
         })
         .invoke_handler(tauri::generate_handler![
             ble_start_scan,
@@ -382,6 +685,21 @@ pub fn run() {
             ble_gatt_write,
             ble_gatt_subscribe,
             ble_gatt_unsubscribe,
+            daemon_state,
+            daemon_settings,
+            daemon_update_settings,
+            daemon_import_settings,
+            daemon_connect,
+            daemon_disconnect,
+            daemon_hold,
+            daemon_refresh_status,
+            daemon_stop_finding_phone,
+            daemon_send_weather,
+            daemon_sync_note,
+            daemon_forget_note,
+            daemon_send_remote_layout,
+            daemon_test_remote_button,
+            daemon_clear_remote_log,
             #[cfg(desktop)]
             desktop_notification_access,
             #[cfg(desktop)]
@@ -400,6 +718,8 @@ pub fn run() {
             notes_unwatch,
             #[cfg(desktop)]
             remote_run_command,
+            #[cfg(desktop)]
+            app_quit,
             web_request,
             plugins::plugins_list,
             plugins::plugins_install_pick,
@@ -422,15 +742,17 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("the companion app could not start");
 
+    #[cfg(desktop)]
     app.run(|app, event| {
         if let RunEvent::Exit = event {
             let companion = app.state::<Companion>();
-            #[cfg(desktop)]
             companion.notes.stop_all();
-            companion.plugins.stop_all();
-            tauri::async_runtime::block_on(companion.ble.destroy());
+            tauri::async_runtime::block_on(companion.daemon.shut_down());
         }
     });
+    // On Android the daemon outlives the window, for the keep-alive service, and ends with the process.
+    #[cfg(mobile)]
+    app.run(|_, _| {});
 }
 
 #[cfg(test)]

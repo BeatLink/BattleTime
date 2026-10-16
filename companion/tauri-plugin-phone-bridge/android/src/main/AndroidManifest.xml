@@ -17,10 +17,19 @@
   <uses-permission android:name="android.permission.READ_CONTACTS" />
   <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
-  <!-- The service that keeps the watch link alive in the background. -->
+  <!-- The service that hosts the daemon, so the watch stays linked in the background. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+  <!-- The watch as a companion device, which may start the service from the background and wake it in range. -->
+  <uses-feature android:name="android.software.companion_device_setup" android:required="false" />
+  <uses-permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND" />
+  <uses-permission android:name="android.permission.REQUEST_COMPANION_USE_DATA_IN_BACKGROUND" />
+  <uses-permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND" />
+  <uses-permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE" />
 
   <!-- Lets the notification listener read the name of any app with a launcher icon. -->
   <queries>
@@ -45,5 +54,23 @@
       android:name="com.battletime.companion.phonebridge.KeepAliveService"
       android:exported="false"
       android:foregroundServiceType="connectedDevice" />
+
+    <service
+      android:name="com.battletime.companion.phonebridge.WatchPresenceService"
+      android:exported="true"
+      android:permission="android.permission.BIND_COMPANION_DEVICE_SERVICE">
+      <intent-filter>
+        <action android:name="android.companion.CompanionDeviceService" />
+      </intent-filter>
+    </service>
+
+    <receiver
+      android:name="com.battletime.companion.phonebridge.BootReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>

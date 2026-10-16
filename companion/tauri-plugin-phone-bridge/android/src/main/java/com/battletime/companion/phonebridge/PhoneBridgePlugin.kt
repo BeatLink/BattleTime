@@ -3,18 +3,18 @@ package com.battletime.companion.phonebridge
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
-import android.app.NotificationManager
-import android.content.ActivityNotFoundException
+import android.companion.CompanionDeviceManager
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
-import android.telecom.TelecomManager
 import android.util.Log
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.IntentSenderRequest
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationManagerCompat
-import androidx.core.content.ContextCompat
+import app.tauri.annotation.ActivityCallback
 import app.tauri.annotation.Command
 import app.tauri.annotation.InvokeArg
 import app.tauri.annotation.Permission
@@ -25,8 +25,6 @@ import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
 import org.json.JSONObject
 
-private const val TAG = "PhoneBridge"
-
 // The event the window hears every phone event on.
 private const val EVENT = "phone"
 
@@ -36,8 +34,8 @@ class MediaCommandArgs {
 }
 
 @InvokeArg
-class KeepAliveArgs {
-  lateinit var watchName: String
+class AssociateWatchArgs {
+  lateinit var address: String
 }
 
 @InvokeArg
@@ -61,6 +59,8 @@ class SendBroadcastArgs {
 }
 
 // The phone bridge for the Tauri app: the notification, call and media services beside it, behind Tauri commands.
+//
+// The daemon does the phone's work itself through DaemonHost; these commands are what the window asks for.
 @TauriPlugin(
   permissions = [
     Permission(strings = [Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT], alias = "bluetooth"),
@@ -79,11 +79,15 @@ class SendBroadcastArgs {
   ],
 )
 class PhoneBridgePlugin(private val activity: Activity) : Plugin(activity) {
+  // The watch the companion device question is about, while it is open.
+  private var associating: String? = null
+
   private val forward: PhoneEventListener = { event -> trigger(EVENT, toJs(event)) }
 
   init {
     // The constructor runs on the main thread, whose class loader sees btleplug's classes as its start needs.
-    NativeBluetooth.start()?.let { Log.w(TAG, "Bluetooth could not start: $it") }
+    NativeBluetooth.start()?.let { Log.w("PhoneBridge", "Bluetooth could not start: $it") }
+    DaemonHost.attach(activity)
     PhoneEventBus.addListener(forward)
   }
 
@@ -167,89 +171,102 @@ class PhoneBridgePlugin(private val activity: Activity) : Plugin(activity) {
 
   @Command
   fun isDoNotDisturb(invoke: Invoke) {
-    val manager = activity.getSystemService(NotificationManager::class.java)
-    val filter = manager?.currentInterruptionFilter ?: NotificationManager.INTERRUPTION_FILTER_UNKNOWN
-    invoke.resolveObject(
-      filter != NotificationManager.INTERRUPTION_FILTER_ALL && filter != NotificationManager.INTERRUPTION_FILTER_UNKNOWN,
+    invoke.resolveObject(PhoneActions.isDoNotDisturb(activity))
+  }
+
+  // ==========================================================================
+  // Running in the background
+  // ==========================================================================
+
+  @Command
+  fun isIgnoringBatteryOptimizations(invoke: Invoke) {
+    invoke.resolveObject(PhoneActions.isIgnoringBatteryOptimizations(activity))
+  }
+
+  // Answers whether the app may now run without battery limits, once the user has closed Android's question.
+  @SuppressLint("BatteryLife")
+  @Command
+  fun requestIgnoreBatteryOptimizations(invoke: Invoke) {
+    if (PhoneActions.isIgnoringBatteryOptimizations(activity)) {
+      return invoke.resolveObject(true)
+    }
+    val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${activity.packageName}"))
+    try {
+      startActivityForResult(invoke, intent, "batteryAnswered")
+    } catch (e: Exception) {
+      invoke.reject("Android could not ask about battery limits: ${e.message}")
+    }
+  }
+
+  @Suppress("UNUSED_PARAMETER")
+  @ActivityCallback
+  fun batteryAnswered(invoke: Invoke, result: ActivityResult) {
+    invoke.resolveObject(PhoneActions.isIgnoringBatteryOptimizations(activity))
+  }
+
+  // Makes the watch this app's companion device, asking the user once, and answers whether it is one now.
+  @Command
+  fun associateWatch(invoke: Invoke) {
+    val args = invoke.parseArgs(AssociateWatchArgs::class.java)
+    val manager = WatchCompanion.manager(activity) ?: return invoke.resolveObject(false)
+    if (WatchCompanion.isAssociated(manager, args.address)) {
+      WatchCompanion.observe(manager, args.address)
+      return invoke.resolveObject(true)
+    }
+    val request = try {
+      WatchCompanion.request(args.address)
+    } catch (e: IllegalArgumentException) {
+      return invoke.reject("Android cannot look for that watch: ${e.message}")
+    }
+    associating = args.address
+    manager.associate(
+      request,
+      object : CompanionDeviceManager.Callback() {
+        @Deprecated("Android 13 calls onAssociationPending, which reaches this one")
+        override fun onDeviceFound(chooserLauncher: IntentSender) {
+          startIntentSenderForResult(invoke, IntentSenderRequest.Builder(chooserLauncher).build(), "associationAnswered")
+        }
+
+        override fun onFailure(error: CharSequence?) {
+          invoke.reject(error?.toString() ?: "Android could not make the watch a companion device")
+        }
+      },
+      null,
     )
+  }
+
+  @ActivityCallback
+  fun associationAnswered(invoke: Invoke, result: ActivityResult) {
+    val manager = WatchCompanion.manager(activity)
+    val address = associating
+    val associated = result.resultCode == Activity.RESULT_OK && manager != null && address != null
+    if (associated) {
+      WatchCompanion.observe(manager!!, address!!)
+    }
+    invoke.resolveObject(associated)
   }
 
   // ==========================================================================
   // Calls
   // ==========================================================================
 
-  @SuppressLint("MissingPermission")
   @Command
-  fun answerCall(invoke: Invoke) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
-      return invoke.reject("Answering calls needs Android 8 or later")
-    }
-    val telecom = telecomOrReject(invoke) ?: return
-    @Suppress("DEPRECATION")
-    telecom.acceptRingingCall()
-    invoke.resolve()
-  }
-
-  @SuppressLint("MissingPermission")
-  @Command
-  fun rejectCall(invoke: Invoke) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-      return invoke.reject("Rejecting calls needs Android 9 or later")
-    }
-    val telecom = telecomOrReject(invoke) ?: return
-    @Suppress("DEPRECATION")
-    telecom.endCall()
-    invoke.resolve()
-  }
+  fun answerCall(invoke: Invoke) = act(invoke) { PhoneActions.answerCall(activity) }
 
   @Command
-  fun silenceCall(invoke: Invoke) {
-    CallMonitor.silenceRinger(activity)
-    invoke.resolve()
-  }
+  fun rejectCall(invoke: Invoke) = act(invoke) { PhoneActions.rejectCall(activity) }
 
-  private fun telecomOrReject(invoke: Invoke): TelecomManager? {
-    if (!granted(Manifest.permission.ANSWER_PHONE_CALLS)) {
-      invoke.reject("Allow the app to answer calls first")
-      return null
-    }
-    val telecom = activity.getSystemService(TelecomManager::class.java)
-    if (telecom == null) {
-      invoke.reject("This device has no telecom service")
-    }
-    return telecom
-  }
+  @Command
+  fun silenceCall(invoke: Invoke) = act(invoke) { PhoneActions.silenceCall(activity) }
 
   // ==========================================================================
-  // Media and the keep-alive service
+  // Media
   // ==========================================================================
 
   @Command
   fun mediaCommand(invoke: Invoke) {
     val args = invoke.parseArgs(MediaCommandArgs::class.java)
-    MediaTracker.command(activity, args.command)
-    invoke.resolve()
-  }
-
-  @Command
-  fun startKeepAlive(invoke: Invoke) {
-    val args = invoke.parseArgs(KeepAliveArgs::class.java)
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && !granted(Manifest.permission.BLUETOOTH_CONNECT)) {
-      // Android 14 refuses a connected-device service without it, and the refusal would crash the service.
-      return invoke.reject("Allow the app to connect to nearby devices first")
-    }
-    try {
-      KeepAliveService.start(activity, args.watchName)
-      invoke.resolve()
-    } catch (e: IllegalStateException) {
-      invoke.reject("Android refused the foreground service: ${e.message}")
-    }
-  }
-
-  @Command
-  fun stopKeepAlive(invoke: Invoke) {
-    KeepAliveService.stop(activity)
-    invoke.resolve()
+    act(invoke) { PhoneActions.mediaCommand(activity, args.command) }
   }
 
   // ==========================================================================
@@ -260,7 +277,7 @@ class PhoneBridgePlugin(private val activity: Activity) : Plugin(activity) {
   @Command
   fun locate(invoke: Invoke) {
     if (granted(Manifest.permission.ACCESS_COARSE_LOCATION)) {
-      PhoneLocation.find(activity, invoke)
+      findLocation(invoke)
     } else {
       requestPermissionForAlias("location", invoke, "locationPermissionAnswered")
     }
@@ -268,10 +285,12 @@ class PhoneBridgePlugin(private val activity: Activity) : Plugin(activity) {
 
   @PermissionCallback
   fun locationPermissionAnswered(invoke: Invoke) {
-    if (granted(Manifest.permission.ACCESS_COARSE_LOCATION)) {
-      PhoneLocation.find(activity, invoke)
-    } else {
-      invoke.reject("Allow the app to use this phone's location first")
+    findLocation(invoke)
+  }
+
+  private fun findLocation(invoke: Invoke) {
+    PhoneLocation.find(activity) { place, error ->
+      if (place != null) invoke.resolve(JSObject(place.toString())) else invoke.reject(error ?: "This phone does not know where it is yet")
     }
   }
 
@@ -282,41 +301,32 @@ class PhoneBridgePlugin(private val activity: Activity) : Plugin(activity) {
   @Command
   fun openUri(invoke: Invoke) {
     val args = invoke.parseArgs(OpenUriArgs::class.java)
-    launch(invoke, Intent(Intent.ACTION_VIEW, Uri.parse(args.uri)))
+    act(invoke) { PhoneActions.openUri(activity, args.uri) }
   }
 
   @Command
   fun startActivity(invoke: Invoke) {
     val args = invoke.parseArgs(StartActivityArgs::class.java)
-    val intent = Intent().setClassName(args.packageName, args.className)
-    args.action?.let { intent.action = it }
-    args.extras.forEach { (key, value) -> intent.putExtra(key, value) }
-    launch(invoke, intent)
+    act(invoke) { PhoneActions.startActivity(activity, args.packageName, args.className, args.action, args.extras) }
   }
 
   @Command
   fun sendBroadcast(invoke: Invoke) {
     val args = invoke.parseArgs(SendBroadcastArgs::class.java)
-    val intent = Intent(args.action)
-    args.packageName?.let { intent.setPackage(it) }
-    args.extras.forEach { (key, value) -> intent.putExtra(key, value) }
-    activity.sendBroadcast(intent)
-    invoke.resolve()
+    act(invoke) { PhoneActions.sendBroadcast(activity, args.action, args.packageName, args.extras) }
   }
 
-  private fun launch(invoke: Invoke, intent: Intent) {
+  // Resolves once the action is done, or rejects with the reason it could not be.
+  private fun act(invoke: Invoke, action: () -> Unit) {
     try {
-      activity.startActivity(intent)
+      action()
       invoke.resolve()
-    } catch (e: ActivityNotFoundException) {
-      invoke.reject("No app on this phone handles that: ${e.message}")
-    } catch (e: SecurityException) {
-      invoke.reject("Android refused to start it: ${e.message}")
+    } catch (e: PhoneActionException) {
+      invoke.reject(e.message)
     }
   }
 
-  private fun granted(permission: String): Boolean =
-    ContextCompat.checkSelfPermission(activity, permission) == PackageManager.PERMISSION_GRANTED
+  private fun granted(permission: String): Boolean = PhoneActions.granted(activity, permission)
 }
 
 // Turns a bus event into the JSON the window reads, keeping nulls out.

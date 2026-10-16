@@ -103,6 +103,7 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
     setSent(0);
 
     try {
+      await dfu.hold?.(true);
       await flashFirmware(dfu, firmware, {
         enterDfu: () => sendRaw(ENTER_DFU_COMMAND),
         confirm: (dfu) => setWatchTime(dfu),
@@ -120,6 +121,7 @@ export function useFirmware(link: () => DfuLink | null, sendRaw: (text: string) 
       setError((caught as Error).message);
       setStatus(null);
     } finally {
+      await dfu.hold?.(false);
       setFlashing(false);
     }
   }, [firmware, link, sendRaw]);

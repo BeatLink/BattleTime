@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 
+import { BatteryLimitsRow } from '@/components/battery-limits-row';
 import { Button } from '@/components/button';
 import { Card } from '@/components/card';
 import { ChoiceRow, ErrorNote, SavedTextRow, TextRow } from '@/components/fields';
@@ -29,6 +30,12 @@ export default function SettingsScreen() {
   return settingsLoaded ? <SettingsForm /> : <Screen title="Settings" />;
 }
 
+// The desktop app's own way to quit, since closing its window leaves it running.
+function quitCompanion(): Promise<unknown> {
+  const desktop = (globalThis as { battletime?: { desktop?: { quit?: () => Promise<unknown> } } }).battletime?.desktop;
+  return desktop?.quit?.() ?? Promise.resolve();
+}
+
 function SettingsForm() {
   const { settings, updateSettings, transportKind } = useWatch();
   const task = useTask();
@@ -41,15 +48,33 @@ function SettingsForm() {
       <Card title="Connection">
         <ToggleRow
           label="Reconnect automatically"
-          detail="Reconnect to the last watch when the app opens"
+          detail="Bring the last watch back whenever it drops or comes into range"
           value={settings.autoReconnect}
           onValueChange={(value) => updateSettings({ autoReconnect: value })}
         />
+        {phoneBridge.kind === 'computer' ? (
+          <>
+            <ToggleRow
+              label="Keep running in the background"
+              detail="Stay connected to the watch after the window closes"
+              value={settings.runInBackground}
+              onValueChange={(value) => updateSettings({ runInBackground: value })}
+            />
+            <ToggleRow
+              label="Start with the computer"
+              detail="Connect to the watch at login, without opening the window"
+              value={settings.startWithComputer}
+              onValueChange={(value) => updateSettings({ startWithComputer: value })}
+            />
+            <Row label="Quit" detail="Close the window and stop keeping the watch" onClick={() => void quitCompanion()} />
+          </>
+        ) : null}
         <Row
           label="Forget watch"
           detail={settings.lastWatchName ?? 'No watch remembered'}
           onClick={settings.lastWatchId ? () => updateSettings({ lastWatchId: null, lastWatchName: null }) : undefined}
         />
+        {phoneBridge.kind === 'phone' ? <BatteryLimitsRow bridge={phoneBridge} /> : null}
       </Card>
 
       <Card title="Sync">

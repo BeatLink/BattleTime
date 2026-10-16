@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-associate-watch"
+description = "Enables the associate_watch command without any pre-configured scope."
+commands.allow = ["associate_watch"]
+
+[[permission]]
+identifier = "deny-associate-watch"
+description = "Denies the associate_watch command without any pre-configured scope."
+commands.deny = ["associate_watch"]

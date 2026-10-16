@@ -20,6 +20,7 @@ own page.
 - [Bluetooth controller](bluetooth.md), [Storage](storage.md), [Flash store](flash-store.md) and
   the [Memory map](memory-map.md).
 - [Companion protocol](companion-protocol.md): how a phone talks to the watch.
+- [Companion daemon](companion/daemon.md): the part of the companion that keeps the watch, with or without a window.
 - [Coding guidelines](coding-guidelines.md): how the code is written.
 - The [wearer's guide](guide/index.md): what the watch does, from the wrist.
 

@@ -346,6 +346,12 @@ pub(crate) mod fake {
             client
         }
 
+        // Records one command and gives the watch's answers, for a test that delivers them itself.
+        pub(crate) fn answers(&self, command: &[u8]) -> Vec<Vec<u8>> {
+            self.commands.lock().unwrap().push(command[0]);
+            self.answer(command)
+        }
+
         fn reply(&self, answers: Vec<Vec<u8>>) {
             if let Some(client) = self.client.get().and_then(Weak::upgrade) {
                 for answer in answers {
@@ -461,8 +467,7 @@ pub(crate) mod fake {
 
     impl FileTransport for FakeWatch {
         fn send(&self, command: Vec<u8>) -> BoxFuture<'static, Result<(), String>> {
-            self.commands.lock().unwrap().push(command[0]);
-            self.reply(self.answer(&command));
+            self.reply(self.answers(&command));
             Box::pin(async { Ok(()) })
         }
     }

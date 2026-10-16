@@ -1,72 +1,18 @@
 // Plugins in the app: the host's link to the watch and the window, its commands, and the
 // plugin:// pages that show each plugin's settings.
 
-use std::sync::{Arc, OnceLock};
-
 use crate::picked_file::{self, FileKind};
 use crate::Companion;
-use battletime_companion_core::ble::WatchBle;
-use battletime_companion_core::plugins::host::{HostOutput, PluginHost, PluginStatus};
+use battletime_companion_core::plugins::host::{PluginHost, PluginStatus};
 use battletime_companion_core::protocol::app_image::ImageHeader;
 use battletime_companion_core::protocol::launcher::{place_new_apps, regrouped_apps};
 use battletime_companion_core::protocol::packages::{install_image, PackagesClient};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::Value;
 use tauri::http::{Response, StatusCode};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 type Answer<T> = Result<T, String>;
-
-// ============================================================================
-// The host's output
-// ============================================================================
-
-// Sends plugin messages over the watch link and plugin traffic to the window.
-pub struct DesktopOutput {
-    pub app: AppHandle,
-    // Set once the Bluetooth layer exists, which itself hands text to the host.
-    pub ble: Arc<OnceLock<WatchBle>>,
-}
-
-impl HostOutput for DesktopOutput {
-    fn write_to_watch(&self, line: String) {
-        let Some(ble) = self.ble.get().cloned() else {
-            return;
-        };
-        let app = self.app.clone();
-        tauri::async_runtime::spawn(async move {
-            if let Err(error) = ble.write(&line).await {
-                let _ = app.emit(
-                    "plugins:log",
-                    json!({ "id": "", "line": format!("error: {error}") }),
-                );
-            }
-        });
-    }
-
-    fn send_to_ui(&self, plugin: &str, message: Value) {
-        let _ = self
-            .app
-            .emit("plugins:ui", json!({ "id": plugin, "message": message }));
-    }
-
-    fn log(&self, plugin: &str, line: &str) {
-        eprintln!("plugin {plugin}: {line}");
-        let _ = self
-            .app
-            .emit("plugins:log", json!({ "id": plugin, "line": line }));
-    }
-}
-
-// What the Bluetooth layer reports, as the plugin host needs it.
-pub fn follow_watch(host: &PluginHost, name: &str, payload: &Value) {
-    match (name, payload.as_str()) {
-        ("line", Some(text)) => host.on_watch_text(text),
-        ("state", Some("connected")) => host.on_connection(true),
-        ("state", Some("disconnected")) => host.on_connection(false),
-        _ => {}
-    }
-}
 
 // ============================================================================
 // Commands
@@ -80,7 +26,7 @@ pub struct WatchApp {
 
 #[tauri::command]
 pub fn plugins_list(companion: State<'_, Companion>) -> Vec<PluginStatus> {
-    companion.plugins.list()
+    companion.daemon.plugins().list()
 }
 
 // Asks for a .ntplugin file and installs it; none when the dialog is cancelled.
@@ -97,22 +43,22 @@ pub async fn plugins_install_pick(
         return Ok(None);
     };
     let bytes = picked_file::read_file(&app, &file.to_string())?;
-    companion.plugins.install(&bytes).map(Some)
+    companion.daemon.plugins().install(&bytes).map(Some)
 }
 
 #[tauri::command]
 pub fn plugins_install(companion: State<'_, Companion>, data: Vec<u8>) -> Answer<PluginStatus> {
-    companion.plugins.install(&data)
+    companion.daemon.plugins().install(&data)
 }
 
 #[tauri::command]
 pub fn plugins_remove(companion: State<'_, Companion>, id: String) -> Answer<()> {
-    companion.plugins.remove(&id)
+    companion.daemon.plugins().remove(&id)
 }
 
 #[tauri::command]
 pub fn plugins_set_enabled(companion: State<'_, Companion>, id: String, enabled: bool) -> Answer<()> {
-    companion.plugins.set_enabled(&id, enabled)
+    companion.daemon.plugins().set_enabled(&id, enabled)
 }
 
 // Installs every watch app a plugin carries, over the shared file client, then places them in the launcher.
@@ -121,9 +67,10 @@ pub async fn plugins_install_on_watch(
     companion: State<'_, Companion>,
     id: String,
 ) -> Answer<Vec<ImageHeader>> {
-    let images = companion.plugins.watch_apps(&id)?;
-    let packages = PackagesClient::open(&companion.ble).await?;
-    let files = companion.syncer.files();
+    let images = companion.daemon.plugins().watch_apps(&id)?;
+    let link = companion.daemon.shared_link();
+    let packages = PackagesClient::open(&link).await?;
+    let files = companion.daemon.syncer().files();
     let before = packages.listing().await.map_err(|error| error.to_string())?.apps;
     let mut installed = Vec::new();
     for (_, image) in images {
@@ -142,7 +89,8 @@ pub async fn plugins_install_on_watch(
 #[tauri::command]
 pub fn plugins_watch_apps(companion: State<'_, Companion>, id: String) -> Answer<Vec<WatchApp>> {
     Ok(companion
-        .plugins
+        .daemon
+        .plugins()
         .watch_apps(&id)?
         .into_iter()
         .map(|(name, data)| WatchApp { name, data })
@@ -151,7 +99,7 @@ pub fn plugins_watch_apps(companion: State<'_, Companion>, id: String) -> Answer
 
 #[tauri::command]
 pub fn plugins_ui_message(companion: State<'_, Companion>, id: String, message: Value) -> Answer<()> {
-    companion.plugins.on_ui_message(&id, message)
+    companion.daemon.plugins().on_ui_message(&id, message)
 }
 
 // ============================================================================
@@ -215,9 +163,10 @@ fn content_type(path: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use battletime_companion_core::plugins::host::Fetcher;
+    use battletime_companion_core::plugins::host::{Fetcher, HostOutput};
     use battletime_companion_core::plugins::store::PluginStore;
     use std::io::Write;
+    use std::sync::Arc;
 
     struct Silent;
 
@@ -279,19 +228,6 @@ mod tests {
             serve_ui_file(&host, &"http://plugin.localhost/".parse().unwrap()).status(),
             StatusCode::NOT_FOUND
         );
-    }
-
-    #[test]
-    fn watch_text_and_connection_reach_the_host() {
-        let (host, _folder) = host_with_page();
-        follow_watch(&host, "state", &json!("connected"));
-        follow_watch(
-            &host,
-            "line",
-            &json!("{\"t\":\"app\",\"ch\":\"demo\",\"d\":{}}\n"),
-        );
-        follow_watch(&host, "mode", &json!("application"));
-        follow_watch(&host, "state", &json!("disconnected"));
     }
 
     #[test]

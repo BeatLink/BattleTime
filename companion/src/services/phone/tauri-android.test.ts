@@ -24,9 +24,10 @@ function fakeDevice(answers: Partial<Record<keyof TauriPhoneDevice, Answer>> = {
     rejectCall: answer('rejectCall'),
     silenceCall: answer('silenceCall'),
     mediaCommand: answer('mediaCommand'),
-    startKeepAlive: answer('startKeepAlive'),
-    stopKeepAlive: answer('stopKeepAlive'),
     locate: answer('locate'),
+    associateWatch: answer('associateWatch'),
+    isIgnoringBatteryOptimizations: answer('isIgnoringBatteryOptimizations'),
+    requestIgnoreBatteryOptimizations: answer('requestIgnoreBatteryOptimizations'),
     openUri: answer('openUri'),
     startActivity: answer('startActivity'),
     sendBroadcast: answer('sendBroadcast'),
@@ -96,15 +97,25 @@ describe('createTauriPhoneBridge', () => {
     const { device, calls } = fakeDevice({ answerCall: { ok: false, error: 'Allow the app to answer calls first' } });
     const bridge = createTauriPhoneBridge(device);
     await bridge.mediaCommand('next');
-    await bridge.startKeepAlive('PineTime');
-    await bridge.stopKeepAlive();
     await bridge.rejectCall();
     await bridge.silenceCall();
     await bridge.openNotificationAccessSettings();
     expect(calls.mediaCommand).toHaveBeenCalledWith('next');
-    expect(calls.startKeepAlive).toHaveBeenCalledWith('PineTime');
     expect(calls.rejectCall).toHaveBeenCalled();
     await expect(bridge.answerCall()).rejects.toThrow('answer calls first');
+  });
+
+  it('makes the watch a companion device and asks about battery limits through the plugin', async () => {
+    const { device, calls } = fakeDevice({
+      associateWatch: { ok: true, value: true },
+      isIgnoringBatteryOptimizations: { ok: true, value: false },
+      requestIgnoreBatteryOptimizations: { ok: true, value: true },
+    });
+    const bridge = createTauriPhoneBridge(device);
+    await expect(bridge.associateWatch('FC:9B')).resolves.toBe(true);
+    await expect(bridge.isIgnoringBatteryOptimizations()).resolves.toBe(false);
+    await expect(bridge.requestIgnoreBatteryOptimizations()).resolves.toBe(true);
+    expect(calls.associateWatch).toHaveBeenCalledWith('FC:9B');
   });
 
   it('gives a refusal with no reason a message of its own', async () => {

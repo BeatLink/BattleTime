@@ -11,8 +11,8 @@ use serde_json::{json, Value};
 use tokio::sync::mpsc;
 
 use super::app_image::{read_image_header, ImageHeader, ImageKind};
-use super::link::{GattLink, WriteMode};
 use super::battletime::{BATTLETIME_PACKAGES, BATTLETIME_SERVICE};
+use super::link::{GattLink, WriteMode};
 
 // ============================================================================
 // Limits

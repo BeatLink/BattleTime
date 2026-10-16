@@ -14,13 +14,14 @@ describe('phone bridge stub', () => {
     await expect(phoneBridge.hasNotificationAccess()).resolves.toBe(false);
     await expect(phoneBridge.requestCallPermissions()).resolves.toBe(false);
     await expect(phoneBridge.isDoNotDisturb()).resolves.toBe(false);
+    await expect(phoneBridge.isIgnoringBatteryOptimizations()).resolves.toBe(false);
   });
 
-  it('rejects actions, except stopping a keep-alive that never started', async () => {
+  it('rejects actions, and never makes a companion device or lifts battery limits', async () => {
     await expect(phoneBridge.answerCall()).rejects.toThrow('only available in the app');
     await expect(phoneBridge.mediaCommand('play')).rejects.toThrow();
-    await expect(phoneBridge.startKeepAlive('PineTime')).rejects.toThrow();
-    await expect(phoneBridge.stopKeepAlive()).resolves.toBeUndefined();
+    await expect(phoneBridge.associateWatch('AA')).resolves.toBe(false);
+    await expect(phoneBridge.requestIgnoreBatteryOptimizations()).resolves.toBe(false);
   });
 
   it('subscribes without ever calling the listener', () => {

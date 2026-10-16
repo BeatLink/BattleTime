@@ -104,7 +104,9 @@ async fn within<T, E: Into<BleError>>(
 
 // True for a watch sitting in its bootloader: DFU advertised, no UART, and not BattleTime's own name.
 pub fn is_bootloader(name: &str, advertised: &[Uuid]) -> bool {
-    !advertised.contains(&NUS_SERVICE) && advertised.contains(&DFU_SERVICE) && !name.starts_with(BATTLETIME_NAME)
+    !advertised.contains(&NUS_SERVICE)
+        && advertised.contains(&DFU_SERVICE)
+        && !name.starts_with(BATTLETIME_NAME)
 }
 
 // The `device` event for one watch found while scanning.

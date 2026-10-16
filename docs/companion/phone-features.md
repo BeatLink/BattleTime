@@ -30,8 +30,12 @@ open the phone's setting, and whether Do Not Disturb is on.
 | Location for the weather | the phone's location | GeoClue, when it runs |
 | The clock | the phone's | the computer's |
 
-The Android app skips ongoing, media and call notifications and its own, and keeps itself running in
-the background with a small notification of its own.
+The Android app skips ongoing, media and call notifications and its own. While it keeps a watch it
+runs in the background with a small notification of its own, even with its window closed, and it
+starts again after the phone restarts or when the watch comes back into range. Connecting to a watch
+for the first time asks whether the app may treat it as its companion device, which lets Android
+start the app for it. Some phones stop background apps anyway; **Battery limits** in **Settings**
+asks Android to lift them for the app.
 
 ## Notifications
 

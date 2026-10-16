@@ -1,6 +1,6 @@
 # The command line
 
-`battletime` does from a terminal what the app does, on Linux through BlueZ. It runs the same code as
+`battletime` does from a terminal what the app does, on Linux through BlueZ or the running app. It runs the same code as
 the app's screens. Run it with Nix:
 
 ```bash
@@ -20,6 +20,26 @@ When the scan finds a single watch, `battletime` remembers it in
 `~/.config/battletime-companion/cli.json`, so later commands need no address. `--address <mac>` or the
 `BATTLETIME_ADDRESS` variable picks another. Each command connects, does its job and disconnects;
 `--verbose` prints every line to and from the watch.
+
+## Sharing the watch with the app
+
+When the companion app is running on this computer, `battletime` goes through the app's link to the
+watch instead of opening its own in BlueZ, so the two never compete for it. The app listens on a
+socket at `$XDG_RUNTIME_DIR/battletime-companion.sock` (or `~/.local/share/com.battletime.companion/`
+without a runtime folder), readable by this user alone; `BATTLETIME_SOCKET` names another. The tool
+uses the app when that socket answers within a moment, and BlueZ otherwise. `--direct` or
+`BATTLETIME_DIRECT=1` always uses BlueZ. Through the app, a command leaves the watch connected when it
+ends, and a firmware update holds the app back from reconnecting while it runs.
+
+The socket carries one JSON object per line. A request `{"id": 1, "command": "ble_write", "args":
+{"text": "..."}}` is answered `{"id": 1, "ok": true, "value": ...}` or `{"id": 1, "ok": false,
+"error": "..."}`, and every event the app's window hears arrives as `{"event": "ble:event",
+"payload": ...}`. The commands are the window's own: `daemon_state`, `daemon_connect`,
+`daemon_disconnect`, `daemon_hold`, `ble_start_scan`, `ble_stop_scan`, `ble_write`, `ble_write_bytes`,
+`ble_gatt_has`, `ble_gatt_read`, `ble_gatt_write`, `ble_gatt_subscribe`, `ble_gatt_unsubscribe`,
+`ble_reconnect`, `files_begin` and `files_end`. A file service turn, a hold or a scan that a
+connection still has when it closes is given back. `core/src/daemon/socket.rs` answers it and
+`cli/daemon.ts` speaks it.
 
 ## The watch's state
 

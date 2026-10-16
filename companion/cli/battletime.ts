@@ -2,9 +2,9 @@
 // The BattleTime Companion command line tool.
 //
 // Every command runs the same code the app does; only the Bluetooth layer
-// differs, which is node-ble talking to BlueZ.
+// differs, which is the companion app's link when it runs and node-ble talking to BlueZ otherwise.
 
-import { WatchSession, DEFAULT_SCAN_MS } from './ble';
+import { openSession, DEFAULT_SCAN_MS } from './ble';
 import { ask, ASK_EXIT, ASK_TIMEOUT_MS, askUsage, requirePromptImage } from './commands/ask';
 import { debug, debugUsage } from './commands/debug';
 import { flash, flashUsage } from './commands/flash';
@@ -33,7 +33,7 @@ import {
   weather,
 } from './commands/watch';
 import { say, warn } from './output';
-import { resolveAddress } from './target';
+import { remembered, resolveAddress } from './target';
 
 type Options = {
   address?: string;
@@ -43,6 +43,7 @@ type Options = {
   allow?: string;
   buttons?: string;
   verbose: boolean;
+  direct: boolean;
 };
 
 const USAGE = `battletime <command> [options]
@@ -74,12 +75,14 @@ Options:
                     the only one in range. BATTLETIME_ADDRESS works too.
   --timeout <s>     How long to scan for, or for ask, how long to wait for a tap.
   --verbose         Print every line to and from the watch.
+  --direct          Talk to BlueZ even when the companion app is running.
+                    BATTLETIME_DIRECT=1 works too.
 `;
 
 // Pull the named options out, leaving the positional arguments behind.
 function parse(argv: string[]): { args: string[]; options: Options } {
   const args: string[] = [];
-  const options: Options = { verbose: false };
+  const options: Options = { verbose: false, direct: process.env.BATTLETIME_DIRECT === '1' };
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -101,6 +104,9 @@ function parse(argv: string[]): { args: string[]; options: Options } {
         break;
       case '--buttons':
         options.buttons = argv[++i];
+        break;
+      case '--direct':
+        options.direct = true;
         break;
       case '--verbose':
       case '-v':
@@ -157,7 +163,7 @@ async function main(argv: string[]): Promise<number> {
     return command ? 0 : 1;
   }
 
-  const session = new WatchSession(options.verbose);
+  const session = await openSession(options.verbose, options.direct);
   try {
     if (command === 'scan') {
       await scan(session, options.timeout ?? DEFAULT_SCAN_MS);
@@ -186,8 +192,8 @@ async function main(argv: string[]): Promise<number> {
     const promptImage = command === 'ask' ? requirePromptImage() : null;
 
     const address = await resolveAddress(session, options.address);
-    say(`Connecting to ${address}...`);
-    await session.connect(address);
+    say(session.throughApp ? `Connecting to ${address} through the companion app...` : `Connecting to ${address}...`);
+    await session.connect(address, remembered().address === address ? (remembered().name ?? '') : '');
 
     if (session.bootloader) {
       say('This watch is waiting in its bootloader.');
@@ -203,14 +209,14 @@ async function main(argv: string[]): Promise<number> {
         if (!rest[0]) {
           throw new Error('Give the firmware package to send.');
         }
-        await flash(session, rest[0]);
+        await session.holding(() => flash(session, rest[0]));
         break;
 
       case 'recovery':
         if (!rest[0]) {
           throw new Error('Give the recovery firmware package to send.');
         }
-        await recovery(session, rest[0]);
+        await session.holding(() => recovery(session, rest[0]));
         break;
 
       case 'notify':

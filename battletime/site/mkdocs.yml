@@ -88,6 +88,7 @@ nav:
       - Companion plugins: plugins.md
       - The app store: app-store.md
       - Companion sync: sync.md
+      - Companion daemon: companion/daemon.md
       - Companion protocol: companion-protocol.md
   - How it is built:
       - Architecture: architecture.md

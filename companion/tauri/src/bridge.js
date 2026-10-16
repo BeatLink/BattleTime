@@ -57,6 +57,7 @@
     isDoNotDisturb: () => call('desktop_do_not_disturb'),
     mediaCommand: (player, command) => call('desktop_media_command', { player, command }),
     locate: () => call('desktop_locate'),
+    quit: () => call('app_quit'),
     onEvent: (listener) => {
       const stop = subscribe('desktop:event', listener, (each, payload) => each(payload));
       void call('desktop_players');
@@ -89,9 +90,10 @@
     rejectCall: () => phoneCall('reject_call'),
     silenceCall: () => phoneCall('silence_call'),
     mediaCommand: (command) => phoneCall('media_command', { command }),
-    startKeepAlive: (watchName) => phoneCall('start_keep_alive', { watchName }),
-    stopKeepAlive: () => phoneCall('stop_keep_alive'),
     locate: () => phoneCall('locate'),
+    associateWatch: (address) => phoneCall('associate_watch', { address }),
+    isIgnoringBatteryOptimizations: () => phoneCall('is_ignoring_battery_optimizations'),
+    requestIgnoreBatteryOptimizations: () => phoneCall('request_ignore_battery_optimizations'),
     openUri: (uri) => phoneCall('open_uri', { uri }),
     startActivity: (packageName, className, action, extras) =>
       phoneCall('start_activity', { packageName, className, action, extras }),
@@ -143,8 +145,31 @@
     onReport: (listener) => subscribe('sync:report', listener, (each, payload) => each(payload)),
   };
 
+  // The core's daemon, which keeps the watch and the background work, read by src/services/daemon.ts.
+  const daemon = {
+    state: () => call('daemon_state'),
+    settings: () => call('daemon_settings'),
+    updateSettings: (patch) => call('daemon_update_settings', { patch }),
+    importSettings: (settings) => call('daemon_import_settings', { settings }),
+    connect: (id, name) => call('daemon_connect', { id, name }),
+    disconnect: () => call('daemon_disconnect'),
+    hold: (held) => call('daemon_hold', { held }),
+    refreshStatus: () => call('daemon_refresh_status'),
+    stopFindingPhone: () => call('daemon_stop_finding_phone'),
+    sendWeather: () => call('daemon_send_weather'),
+    syncNote: () => call('daemon_sync_note'),
+    forgetNote: () => call('daemon_forget_note'),
+    sendRemoteLayout: () => call('daemon_send_remote_layout'),
+    testRemoteButton: (index) => call('daemon_test_remote_button', { index }),
+    clearRemoteLog: () => call('daemon_clear_remote_log'),
+    onState: (listener) => subscribe('daemon:state', listener, (each, payload) => each(payload)),
+    onSettings: (listener) => subscribe('daemon:settings', listener, (each, payload) => each(payload)),
+    onSent: (listener) => subscribe('daemon:sent', listener, (each, payload) => each(payload)),
+  };
+
   window.battletime = {
     ...(onAndroid ? { phone } : { desktop, remote }),
+    daemon,
     notes,
     web,
     plugins,

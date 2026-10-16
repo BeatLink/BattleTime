@@ -20,6 +20,8 @@ export interface DfuLink {
   reconnect(deviceId: string): Promise<void>;
   // Runs work while no one else uses the file service, where something else shares it.
   exclusive?<T>(work: () => Promise<T>): Promise<T>;
+  // Holds back whatever else would reconnect the watch, for the length of an update.
+  hold?(held: boolean): Promise<void>;
 }
 
 export class DfuError extends Error {}

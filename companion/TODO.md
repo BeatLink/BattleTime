@@ -128,7 +128,8 @@ Android 13 and later.
   with a two-buzz message and the write went out without error, but whether the watch buzzed twice
   each time was not confirmed.
 - **The watch drops an idle link.** Both the window and the `plugin_host` example lost the
-  connection within about half a minute of connecting with nothing to send, and neither reconnects.
+  connection within about half a minute of connecting with nothing to send. The daemon reconnects
+  now, but why the link drops is still to find.
 - **The command line tool in Rust**, on the core crate, once the protocols move there.
 - **Protocols in the core crate**: the BattleTime service, packages, image header, launcher file and
   Gadgetbridge lines are in `core/src/protocol`, and BLEFS in `core/src/sync/files.rs`. Installing a
@@ -153,24 +154,18 @@ and lets plugins read them and change their own app's state.
 
 ## Background daemon
 
-The watch link should outlive the window: the Rust core owns it and the window is only a client.
-Nothing is built yet.
+The [daemon](../docs/companion/daemon.md) keeps the watch in the Rust core, with or without a window.
 
-- **The core owns the link.** Today the window's JavaScript holds the connection, so closing it
-  drops the watch. Move the link, sync, plugins and notification forwarding fully into `core/`.
-  On Android, Bluetooth runs through `NativeBluetooth.kt`, not btleplug, so the core needs a
-  transport there that runs without the web view.
-- **Desktop daemon.** Run the core headless as a systemd user unit or an autostart entry, perhaps
-  with a tray icon. The window and `cli/` connect to it over a Unix socket or D-Bus, so they stop
-  competing for the watch through BlueZ.
-- **Android service.** Host the core inside `KeepAliveService`, not the activity, and have the
-  window bind to it. Make it `START_STICKY` with a boot receiver, and keep its `connectedDevice`
-  notification.
-- **CompanionDeviceManager on Android.** Pair through it so the app is exempt from most background
-  limits, and use `CompanionDeviceService` (Android 12 and later) to wake the app when the watch
-  comes in range.
-- **Phones that kill services anyway.** Some makers stop foreground services regardless, so offer to
-  turn off battery optimisation from Settings.
+- **Untried with a watch.** The reconnecting, clock, status, forwarding, weather, note, remote and
+  web request jobs have run only against the fake link in `core/src/daemon/tests.rs`. Check each
+  with the desktop app on the real watch, and that the command line tool works through the app.
+- **Closing the window on a desktop with a window manager.** Hiding on close, the tray icon and
+  autostart have run only in Xvfb, which has no window manager or tray.
+- **The Android service on a phone.** `KeepAliveService` hosts the daemon, with the boot receiver,
+  the companion-device pairing and presence service and the battery limits row, but none of it has
+  run on a phone: check that the service starts with no window, after a reboot and when the watch
+  comes back into range, that the companion question finds the watch, and that a note picked in the
+  window can still be read after the process restarts.
 
 ## Linked companions
 

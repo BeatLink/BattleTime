@@ -62,16 +62,30 @@ describe('bridge.js', () => {
     const { bridge, invoke } = loadBridge(true);
     const phone = bridge.phone!;
     await expect(phone.isDoNotDisturb()).resolves.toMatchObject({ ok: true });
-    await phone.startKeepAlive('PineTime');
+    await phone.associateWatch('AA');
     await phone.startActivity('org.example', 'org.example.Main', null, { a: 'b' });
     expect(invoke).toHaveBeenCalledWith('plugin:phone-bridge|is_do_not_disturb', undefined);
-    expect(invoke).toHaveBeenCalledWith('plugin:phone-bridge|start_keep_alive', { watchName: 'PineTime' });
+    expect(invoke).toHaveBeenCalledWith('plugin:phone-bridge|associate_watch', { address: 'AA' });
     expect(invoke).toHaveBeenCalledWith('plugin:phone-bridge|start_activity', {
       packageName: 'org.example',
       className: 'org.example.Main',
       action: null,
       extras: { a: 'b' },
     });
+  });
+
+  it('reaches the daemon by its commands and hears its events', async () => {
+    const { bridge, invoke } = loadBridge(false);
+    const daemon = bridge.daemon as Record<string, (...args: unknown[]) => unknown>;
+    await daemon.connect('AA', 'BattleTime');
+    await daemon.updateSettings({ autoReconnect: false });
+    await daemon.testRemoteButton(2);
+    await daemon.hold(true);
+    expect(invoke).toHaveBeenCalledWith('daemon_connect', { id: 'AA', name: 'BattleTime' });
+    expect(invoke).toHaveBeenCalledWith('daemon_update_settings', { patch: { autoReconnect: false } });
+    expect(invoke).toHaveBeenCalledWith('daemon_test_remote_button', { index: 2 });
+    expect(invoke).toHaveBeenCalledWith('daemon_hold', { held: true });
+    expect(typeof daemon.onState(() => {})).toBe('function');
   });
 
   it('turns a rejected command into an answer with the reason', async () => {

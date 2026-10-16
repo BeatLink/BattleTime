@@ -245,8 +245,9 @@ describe('createDesktopPhoneBridge', () => {
     await expect(bridge.rejectCall()).rejects.toThrow('no calls');
     await expect(bridge.silenceCall()).rejects.toThrow('no calls');
     await expect(bridge.openNotificationAccessSettings()).rejects.toThrow();
-    await expect(bridge.startKeepAlive('BattleTime')).resolves.toBeUndefined();
-    await expect(bridge.stopKeepAlive()).resolves.toBeUndefined();
+    await expect(bridge.associateWatch('AA')).resolves.toBe(false);
+    await expect(bridge.isIgnoringBatteryOptimizations()).resolves.toBe(true);
+    await expect(bridge.requestIgnoreBatteryOptimizations()).resolves.toBe(true);
   });
 
   it('passes on what the core reports, and stops when unsubscribed', () => {

@@ -41,8 +41,11 @@ export interface PhoneBridge {
   /** Silences the ringer for the ringing call, which keeps ringing; the ringer comes back once the call ends. */
   silenceCall(): Promise<void>;
   mediaCommand(command: MediaCommand): Promise<void>;
-  /** Starts a foreground service so the Bluetooth link survives the app going to the background. */
-  startKeepAlive(watchName: string): Promise<void>;
-  stopKeepAlive(): Promise<void>;
   locate(): Promise<DeviceLocation>;
+  /** Makes the watch Android's companion device, asking the user once, so the app may run for it; true once it is one. */
+  associateWatch(id: string): Promise<boolean>;
+  /** Whether the device lets the app run in the background without battery limits. */
+  isIgnoringBatteryOptimizations(): Promise<boolean>;
+  /** Asks the user to lift the battery limits, and resolves whether they are lifted now. */
+  requestIgnoreBatteryOptimizations(): Promise<boolean>;
 }

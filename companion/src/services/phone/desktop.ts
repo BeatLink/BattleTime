@@ -250,12 +250,13 @@ export function createDesktopPhoneBridge(device: DesktopDeviceBridge): PhoneBrid
       }
       await unwrap(device.mediaCommand(tracker.currentPlayer, command));
     },
-    // A desktop app keeps running in the background anyway.
-    startKeepAlive: async () => {},
-    stopKeepAlive: async () => {},
     async locate(): Promise<DeviceLocation> {
       const found = await unwrap<{ latitude: number; longitude: number; description: string }>(device.locate());
       return { latitude: found.latitude, longitude: found.longitude, name: found.description || 'Here' };
     },
+    // A desktop app keeps running in the background anyway.
+    associateWatch: async () => false,
+    isIgnoringBatteryOptimizations: async () => true,
+    requestIgnoreBatteryOptimizations: async () => true,
   };
 }

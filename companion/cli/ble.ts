@@ -1,6 +1,6 @@
 // The command line tool's Bluetooth session: one connection to one watch,
 // offering the same seams the app uses, so every command is the same code
-// the screens run.
+// the screens run. The link is the companion app's when it is running, and BlueZ's otherwise.
 
 import type { WatchMode } from '@/ble/transport';
 import { NUS_SERVICE } from '@/ble/uuids';
@@ -12,12 +12,44 @@ import { PackagesClient } from '@/protocol/packages';
 import { ReplyRouter, type RequestChannel } from '@/protocol/requests';
 
 import { WatchBle, type ScannedDevice, type WatchBleEvent } from '../node/ble';
+import { DaemonClient, DaemonLink, socketPath, type Emit } from './daemon';
 
 // How long a scan runs before reporting what it found.
 export const DEFAULT_SCAN_MS = 6000;
 
+// What a session needs from its link to the watch: node/ble.js over BlueZ, or the app's link through its socket.
+export type WatchLink = {
+  startScan(): Promise<void>;
+  stopScan(): Promise<void>;
+  connect(id: string, uart?: boolean, name?: string): Promise<void>;
+  reconnect(id: string): Promise<void>;
+  write(text: string): Promise<void>;
+  gattHas(service: string, characteristic: string): Promise<boolean>;
+  gattRead(service: string, characteristic: string): Promise<number[]>;
+  gattWrite(service: string, characteristic: string, data: number[], mode: WriteMode): Promise<void>;
+  gattSubscribe(service: string, characteristic: string): Promise<void>;
+  gattUnsubscribe(service: string, characteristic: string): Promise<void>;
+  exclusive?<T>(work: () => Promise<T>): Promise<T>;
+  hold?(held: boolean): Promise<void>;
+  destroy(): Promise<void>;
+};
+
+export type LinkMaker = (emit: Emit) => WatchLink;
+
+const throughBlueZ: LinkMaker = (emit) => new WatchBle(emit);
+
+// The app's link when it answers on its socket, unless `direct` asks for BlueZ.
+export async function openSession(verbose: boolean, direct: boolean): Promise<WatchSession> {
+  const client = direct ? null : await DaemonClient.open(socketPath());
+  if (!client) {
+    return new WatchSession(verbose);
+  }
+  return new WatchSession(verbose, (emit) => new DaemonLink(client, emit), true);
+}
+
 export class WatchSession implements DfuLink {
-  private readonly ble: WatchBle;
+  private readonly ble: WatchLink;
+  readonly exclusive?: <T>(work: () => Promise<T>) => Promise<T>;
   private readonly lines = new LineBuffer();
   private fileService: Promise<FileService> | null = null;
   private packagesClient: Promise<PackagesClient> | null = null;
@@ -29,8 +61,13 @@ export class WatchSession implements DfuLink {
   private mode: WatchMode = 'application';
   private id = '';
 
-  constructor(private readonly verbose = false) {
-    this.ble = new WatchBle(<K extends keyof WatchBleEvent>(name: K, payload: WatchBleEvent[K]) => {
+  constructor(
+    private readonly verbose = false,
+    makeLink: LinkMaker = throughBlueZ,
+    // True when the companion app carries the link.
+    readonly throughApp = false,
+  ) {
+    this.ble = makeLink(<K extends keyof WatchBleEvent>(name: K, payload: WatchBleEvent[K]) => {
       if (name === 'device') {
         const watch = payload as ScannedDevice;
         this.found.set(watch.id, watch);
@@ -66,6 +103,10 @@ export class WatchSession implements DfuLink {
         process.stderr.write(`! ${String(payload)}\n`);
       }
     });
+    const link = this.ble;
+    if (link.exclusive) {
+      this.exclusive = (work) => link.exclusive!(work);
+    }
   }
 
   get deviceId() {
@@ -88,9 +129,19 @@ export class WatchSession implements DfuLink {
     return watches.length > 0 ? watches : all;
   }
 
-  async connect(id: string): Promise<void> {
-    await this.ble.connect(id, true);
+  async connect(id: string, name = ''): Promise<void> {
+    await this.ble.connect(id, true, name);
     this.id = id;
+  }
+
+  // Runs a firmware update with the app held back from reconnecting the watch under it.
+  async holding<T>(work: () => Promise<T>): Promise<T> {
+    await this.ble.hold?.(true);
+    try {
+      return await work();
+    } finally {
+      await this.ble.hold?.(false).catch(() => undefined);
+    }
   }
 
   // Whether the watch answered as a bootloader rather than as firmware.
@@ -161,7 +212,7 @@ export class WatchSession implements DfuLink {
     await this.ble.gattSubscribe(service, characteristic);
     return () => {
       this.notifyListeners.delete(key);
-      void this.ble.gattUnsubscribe(service, characteristic);
+      void this.ble.gattUnsubscribe(service, characteristic).catch(() => undefined);
     };
   }
 
