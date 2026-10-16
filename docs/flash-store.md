@@ -76,8 +76,11 @@ space back for its age, so rarely changed records are not copied on every lap bu
 cleaned in time. Two sectors are always kept free, so cleanup can finish even after a power cut
 spoiled one. `prepare_room`, for an idle moment, erases the sector each ring takes next and, for
 records, cleans a sector early when starting that one would use the reserve, so a later write only
-programs pages. A deletion writes a tombstone, which is dropped during cleanup once no older copy of
-its key is left anywhere.
+programs pages. It also erases the next four free file sectors uploads will take, in the order they
+take them, so a file of up to four sectors (16 KB less its header) is written without an erase. The
+store remembers which free sectors it erased only until it next mounts, and a sector a file gives
+back counts as unerased, since it keeps its bytes. A deletion writes a tombstone, which is dropped
+during cleanup once no older copy of its key is left anywhere.
 
 Writes are refused before the ring gets too full to clean well:
 

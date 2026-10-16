@@ -1118,3 +1118,69 @@ fn there_is_no_file_map_for_a_record_or_a_missing_file() {
 
     assert_eq!((small, missing), (None, None));
 }
+
+// ============================================================================
+// File sectors erased ahead
+// ============================================================================
+
+fn erases(store: &TestStore) -> u32 {
+    store.flash().erases_per_sector.iter().sum()
+}
+
+#[test]
+fn a_file_written_after_preparing_room_erases_nothing() {
+    let mut store = blank_store();
+    for round in 0..40 {
+        block_on(store.prepare_room()).unwrap();
+        let before = erases(&store);
+        let data = filler(12_000, round);
+        block_on(store.write_file(&std::format!("/files/{}", round % 5), &data)).unwrap();
+
+        assert_eq!(erases(&store), before, "write {round} erased");
+        let mut read = vec![0u8; data.len()];
+        block_on(store.read_file(&std::format!("/files/{}", round % 5), 0, &mut read)).unwrap();
+        assert_eq!(read, data, "write {round} read back");
+    }
+}
+
+#[test]
+fn a_file_larger_than_the_sectors_erased_ahead_erases_only_the_rest() {
+    let mut store = blank_store();
+    block_on(store.prepare_room()).unwrap();
+    let before = erases(&store);
+
+    // Six sectors of data and header: four were erased ahead.
+    block_on(store.write_file("/big", &filler(6 * SECTOR_BYTES as usize - 1000, 1))).unwrap();
+
+    assert_eq!(erases(&store) - before, 2);
+}
+
+#[test]
+fn a_freed_sector_is_erased_again_before_a_new_file_takes_it() {
+    let mut store = blank_store();
+    let old = filler(30_000, 2);
+    block_on(store.write_file("/old", &old)).unwrap();
+    block_on(store.delete_file("/old")).unwrap();
+    let new = filler(30_000, 3);
+
+    for _ in 0..3 {
+        block_on(store.prepare_room()).unwrap();
+        block_on(store.write_file("/new", &new)).unwrap();
+    }
+
+    let mut read = vec![0u8; new.len()];
+    block_on(store.read_file("/new", 0, &mut read)).unwrap();
+    assert_eq!(read, new);
+}
+
+#[test]
+fn a_remount_forgets_which_sectors_were_erased_ahead() {
+    let mut store = blank_store();
+    block_on(store.prepare_room()).unwrap();
+    let mut store = remount(store);
+    let before = erases(&store);
+
+    block_on(store.write_file("/after", &filler(5000, 4))).unwrap();
+
+    assert_eq!(erases(&store) - before, 2);
+}

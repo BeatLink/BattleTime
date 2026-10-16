@@ -91,8 +91,8 @@ or copies their days on each [sync](sync.md); the layout of each is in
   reads and writes always find the store free. These calls poll the chip, resting a moment
   between polls, so they block the CPU while an erase runs. The storage task calls the store's
   `prepare_room` after every request and when the screen goes dark, which erases the sector the
-  rings will need next and cleans the records ring ahead of time, so the shell's writes usually
-  only program pages. Closed apps' timers run only once no store write is under way.
+  rings will need next, cleans the records ring ahead of time and keeps four free file sectors
+  erased, so the shell's writes and most app installs only program pages. Closed apps' timers run only once no store write is under way.
 - **Reads by DMA.** The flash shares its SPI bus with the screen. Reads move by EasyDMA, up to
   255 bytes a piece, in the moments the display leaves the bus free, such as while the next strip
   is drawn, and stop after the current piece whenever the display asks for the bus. A read may

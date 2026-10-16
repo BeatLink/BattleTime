@@ -29,6 +29,8 @@ const UNCHECKED_CONTENTS: u32 = 0;
 pub const BLANK_FILE_BYTES: usize = SECTOR_BYTES as usize - FILE_HEADER_BYTES;
 /// The file area may be at most this many sectors, one bit each in RAM, as the watch's layout has.
 pub(crate) const MOST_FILE_SECTORS: usize = 512;
+/// The free sectors `prepare_room` keeps erased ahead of uploads: enough for a typical app or face image.
+const ERASED_AHEAD: usize = 4;
 
 #[derive(Clone)]
 pub(crate) struct FileHeader {
@@ -113,6 +115,8 @@ pub(crate) struct FileArea<const MOST_FILES: usize> {
     sector_count: usize,
     /// One bit per sector, set while a live file or an upload uses it.
     used: [u8; MOST_FILE_SECTORS / 8],
+    /// One bit per free sector known to be erased since mount, so taking it needs no erase.
+    erased: [u8; MOST_FILE_SECTORS / 8],
     files: Vec<FileEntry, MOST_FILES>,
     pub(crate) next_sequence: u32,
     /// Where the search for free sectors starts, so writes spread over the area.
@@ -128,6 +132,7 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
             start_address,
             sector_count,
             used: [0; MOST_FILE_SECTORS / 8],
+            erased: [0; MOST_FILE_SECTORS / 8],
             files: Vec::new(),
             next_sequence: 1,
             cursor: 0,
@@ -144,6 +149,7 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
         }
         // Cleared field by field, since a fresh area built here would put the whole file table on the stack.
         self.used = [0; MOST_FILE_SECTORS / 8];
+        self.erased = [0; MOST_FILE_SECTORS / 8];
         self.files.clear();
         self.next_sequence = 1;
         self.cursor = 0;
@@ -192,12 +198,38 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
         self.used[index / 8] & (1 << (index % 8)) != 0
     }
 
+    /// Marks a sector used or free; either way it no longer counts as erased, since a freed one keeps its bytes.
     fn set_used(&mut self, index: usize, used: bool) {
         if used {
             self.used[index / 8] |= 1 << (index % 8);
         } else {
             self.used[index / 8] &= !(1 << (index % 8));
         }
+        self.erased[index / 8] &= !(1 << (index % 8));
+    }
+
+    fn is_erased(&self, index: usize) -> bool {
+        self.erased[index / 8] & (1 << (index % 8)) != 0
+    }
+
+    /// Erases the next `ERASED_AHEAD` free sectors that uploads will take, so files of up to that many sectors are
+    /// written without waiting for an erase; meant for when nothing waits on the store.
+    pub(crate) async fn prepare_room<Flash: NorFlash>(
+        &mut self,
+        flash: &mut Flash,
+    ) -> Result<(), StoreError<Flash::Error>> {
+        let ahead: heapless::Vec<usize, ERASED_AHEAD> = (0..self.sector_count)
+            .map(|step| (self.cursor + step) % self.sector_count)
+            .filter(|index| !self.is_used(*index))
+            .take(ERASED_AHEAD)
+            .collect();
+        for index in ahead {
+            if !self.is_erased(index) {
+                erase(flash, self.sector_address(index)).await?;
+                self.erased[index / 8] |= 1 << (index % 8);
+            }
+        }
+        Ok(())
     }
 
     fn add(&mut self, first_sector: usize, header: &FileHeader) -> Result<(), ()> {
@@ -268,7 +300,9 @@ impl<const MOST_FILES: usize> FileArea<MOST_FILES> {
             .map(|step| (self.cursor + step) % self.sector_count)
             .find(|index| !self.is_used(*index))
             .ok_or(StoreError::FileAreaFull)?;
-        erase(flash, self.sector_address(index)).await?;
+        if !self.is_erased(index) {
+            erase(flash, self.sector_address(index)).await?;
+        }
         self.set_used(index, true);
         self.cursor = (index + 1) % self.sector_count;
         Ok(index as u16)

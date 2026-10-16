@@ -114,6 +114,11 @@ dozen bytes plus a heap list of the file's runs, until the app closes. Notes rea
 from the launcher peaked at 6,332 B of stack, 3,124 B spare, against master's 6,188 B and 3,268 B.
 Awaiting store reads instead of sleeping in WFE was measured too, at 4,600 B more code, and left out.
 
+Keeping four free file sectors erased ahead, so a file of up to four sectors is written without
+waiting 45 ms an erase, added 704 B of code, measured with `cargo size` against the commit before on
+2026-10-15 (434,020 B to 434,724 B of text and rodata), and 64 B of static RAM for the map of which
+free sectors are erased.
+
 Queuing the shell's store writes for the storage task and writing the update and recovery slots
 through `SlotFlash`, so neither spins on the flash chip, added 4,048 B to the firmware's code image,
 measured with `cargo objcopy` against master on 2026-10-15 (428,660 B to 432,708 B), leaving 9,089 B

@@ -292,14 +292,16 @@ impl<Flash: NorFlash, const MOST_FILES: usize, const MOST_RECORD_KEYS: usize, co
         self.records.next_record_sequence = next;
     }
 
-    /// Erases ahead the sectors the rings' next writes will need, for an idle moment, so a later write only programs.
+    /// Erases ahead the sectors the rings' next writes and the next file uploads will need, for an idle moment, so a
+    /// later write only programs.
     pub async fn prepare_room(&mut self) -> Result<(), StoreError<Flash::Error>> {
         self.records
             .prepare_room(&mut self.flash, self.record_keys.as_mut_view())
             .await?;
         self.logs
             .prepare_room(&mut self.flash, self.no_keys.as_mut_view())
-            .await
+            .await?;
+        self.files.prepare_room(&mut self.flash).await
     }
 
     pub fn record_bytes_in_use(&self) -> usize {

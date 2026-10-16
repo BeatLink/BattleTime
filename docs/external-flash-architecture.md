@@ -179,7 +179,10 @@ Docs and comments the code contradicts, as of e30358e4:
      the watch hangs. Holding the bus across `set_window`'s three commands is safe, being one
      blocking call, but cost 728 B to remove gaps of a piece or two. Both wait for awaited store
      reads, under which a paused read no longer blocks the executor.
-   - A pool of erased sectors, so reads rarely wait behind a 45 ms erase: still to do.
+   - Sectors erased ahead: done. `prepare_room` keeps the next four free file sectors erased, so
+     a file of up to 16 KB, such as an app image, is written without an erase, for 704 B of flash.
+     Reads still wait behind an erase that runs; suspending one (commands 0x75 and 0x7A) remains
+     unconfirmed for the XT25F32B.
 2. **Load before painting**, with icons still internal.
 3. **The resource bundle and safe mode:** icons and accelerometer configurations leave the firmware
    image (about 43 KB), shipped beside it in each DFU package.
