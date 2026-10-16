@@ -58,7 +58,12 @@ pub const DEBUG_REPORT_SAVED: u8 = 1;
 const FIRST_LATER_WORD: usize = COUNTER_COUNT + LAST_RESTART_WORDS;
 const LATER_COUNTER_COUNT: usize = 11;
 const WORD_COUNT: usize = FIRST_LATER_WORD + LATER_COUNTER_COUNT;
-pub const SNAPSHOT_BYTES: usize = WORD_COUNT * 4;
+/// A bench build sends the bench's results after the counters.
+#[cfg(not(all(with_shell, feature = "bench")))]
+const BENCH_WORDS: usize = 0;
+#[cfg(all(with_shell, feature = "bench"))]
+const BENCH_WORDS: usize = crate::bench::RESULT_COUNT;
+pub const SNAPSHOT_BYTES: usize = (WORD_COUNT + BENCH_WORDS) * 4;
 
 static COUNTERS: [AtomicU32; WORD_COUNT] = [const { AtomicU32::new(0) }; WORD_COUNT];
 
@@ -85,11 +90,18 @@ pub fn set_last_restart(words: [u32; LAST_RESTART_WORDS]) {
     }
 }
 
-/// Every counter, little-endian: the first eight of `Counter`, the last restart's words, then the counters added since.
+/// Every counter, little-endian: the first eight of `Counter`, the last restart's words, then the counters added since, then a bench build's results.
 pub fn snapshot() -> [u8; SNAPSHOT_BYTES] {
     let mut bytes = [0; SNAPSHOT_BYTES];
     for (counter, chunk) in COUNTERS.iter().zip(bytes.as_chunks_mut::<4>().0) {
         *chunk = counter.load(Ordering::Relaxed).to_le_bytes();
+    }
+    #[cfg(all(with_shell, feature = "bench"))]
+    for (word, chunk) in crate::bench::result_words()
+        .into_iter()
+        .zip(bytes[WORD_COUNT * 4..].as_chunks_mut::<4>().0)
+    {
+        *chunk = word.to_le_bytes();
     }
     bytes
 }

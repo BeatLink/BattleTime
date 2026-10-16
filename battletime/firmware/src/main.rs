@@ -11,6 +11,8 @@
 
 #![no_std]
 #![no_main]
+// A bench build runs src/bench.rs in place of the shell, so everything only the shell uses goes unused.
+#![cfg_attr(feature = "bench", allow(dead_code, unused_imports))]
 
 extern crate alloc;
 
@@ -67,6 +69,8 @@ mod apps;
 mod backlight;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod battery;
+#[cfg(all(with_shell, feature = "bench"))]
+mod bench;
 mod clock;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod crash_screen;
@@ -308,7 +312,13 @@ async fn main(spawner: Spawner) {
         spawner.spawn(
             vibration::run_vibrator(Output::new(chip.P0_16, Level::High, OutputDrive::Standard)).unwrap(),
         );
+        #[cfg(not(feature = "bench"))]
         spawner.spawn(shell::run_shell(screen.display, backlight, files).unwrap());
+        #[cfg(feature = "bench")]
+        {
+            core::mem::forget(backlight);
+            spawner.spawn(bench::run_bench(screen.display, files).unwrap());
+        }
     }
     // Kept for the whole run without a shell to own it: dropping the backlight releases its pins and the screen goes dark.
     #[cfg(not(with_shell))]

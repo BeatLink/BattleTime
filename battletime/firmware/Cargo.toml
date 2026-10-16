@@ -20,6 +20,8 @@ music-service = ["battletime-companion/single-values"]
 navigation-service = ["battletime-companion/single-values"]
 alert-service = []
 motion-service = []
+# Runs src/bench.rs in place of the shell, to measure flash reads beside drawing; never for a real install.
+bench = []
 
 [dependencies]
 cortex-m = { version = "0.7", features = ["critical-section-single-core", "inline-asm"] }

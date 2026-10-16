@@ -988,6 +988,22 @@ impl Files {
         })?
     }
 
+    /// Reads the flash at `address` straight into `out` by DMA with the store held, for the bench's raw timings.
+    #[cfg(feature = "bench")]
+    pub fn read_flash_now(&self, address: u32, out: &mut [u8]) {
+        let Ok(_store) = self.store.try_lock() else {
+            return;
+        };
+        let prepared = self.external_flash.lock(|flash| {
+            let mut flash = flash.borrow_mut();
+            flash.wake_if_asleep()?;
+            flash.prepare_read(address, out.len())
+        });
+        if prepared.is_ok() {
+            crate::display_dma::read_flash(address, out);
+        }
+    }
+
     /// Lists the folder at `path` into `folder` from every file of the store; false when the store is busy or missing.
     pub fn list_folder_now(
         &self,
