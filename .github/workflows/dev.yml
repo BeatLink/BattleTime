@@ -17,7 +17,7 @@ jobs:
     name: Companion for Android
     runs-on: ubuntu-latest
     steps:
-      # Every tag comes too, so the build can number itself after the newest release.
+      # Every tag comes too, so the build can number itself after the newest release, wherever it was tagged.
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -49,7 +49,7 @@ jobs:
       - name: Build the signed app for every phone processor
         working-directory: companion
         run: |
-          latest=$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*')
+          latest=$(git tag --list 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -n 1)
           IFS=. read -r major minor patch <<< "${latest#v}"
           version="$major.$minor.$((patch + 1))"
           echo "Building $version from ${GITHUB_SHA::7}, after $latest."
