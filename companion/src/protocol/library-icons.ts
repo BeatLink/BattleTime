@@ -1,22 +1,23 @@
-// The shared library's icons as pictures the screens can show, drawn from the library image the setup bundle carries.
+// The shared library's icons as pictures the screens can show, drawn from the icons file the companion puts on
+// the watch at /system/icons, which it carries among its system files.
 //
-// The layout of the image and its resources section is runtime/src/image.rs and runtime/src/resources.rs in
-// the BattleTime tree. Each icon is a mask: runs of (count, coverage), which this file turns into a white PNG
-// whose alpha is the coverage, so a screen can tint it in any colour as the watch does.
+// The file's layout is runtime/src/library_icons.rs in the BattleTime tree: the icon count (2 bytes), 2 reserved
+// bytes, each icon's start and the file's end (4 bytes each), then the icons. Each icon is a mask, laid out as
+// runtime/src/resources.rs says: runs of (count, coverage), which this file turns into a white PNG whose alpha
+// is the coverage, so a screen can tint it in any colour as the watch does.
 
 import { zlibSync } from 'fflate';
 
 import { base64ToBytes, bytesToBase64 } from '@/ble/encoding';
-import { BUNDLED_IMAGES, type BundledImage } from '@/bundles/watch-apps';
+import { SYSTEM_FILES, type BundledSystemFile } from '@/bundles/system-files';
 
 // ============================================================================
-// Reading the library image
+// Reading the icons file
 // ============================================================================
 
-const HEADER_BYTES = 20;
-const SECTION_ENTRY_BYTES = 12;
-const TABLE_ENTRY_BYTES = 4;
-const RESOURCES_SECTION = 7;
+export const ICONS_PATH = '/system/icons';
+const HEADER_BYTES = 4;
+const PLACE_BYTES = 4;
 const RESOURCE_HEADER_BYTES = 6;
 const MASK_FORMAT = 1;
 const MASK_RUN_BYTES = 2;
@@ -44,34 +45,18 @@ function readMask(resource: Uint8Array): IconMask | null {
   return filled === coverage.length ? { width, height, coverage } : null;
 }
 
-// Every image in the library's resources section, in order, with null where one is not a mask.
-export function readLibraryIcons(image: Uint8Array): (IconMask | null)[] {
-  if (image.length < HEADER_BYTES) {
+// Every icon in the icons file, in order, with null where one is not a mask; none when the file is cut short.
+export function readLibraryIcons(file: Uint8Array): (IconMask | null)[] {
+  if (file.length < HEADER_BYTES) {
     return [];
   }
-  const view = new DataView(image.buffer, image.byteOffset, image.byteLength);
-  const sections = view.getUint16(10, true);
-  for (let index = 0; index < sections; index++) {
-    const entry = HEADER_BYTES + index * SECTION_ENTRY_BYTES;
-    if (entry + SECTION_ENTRY_BYTES > image.length) {
-      break;
-    }
-    if (view.getUint16(entry, true) !== RESOURCES_SECTION) {
-      continue;
-    }
-    const count = view.getUint16(entry + 2, true);
-    const offset = view.getUint32(entry + 4, true);
-    const length = view.getUint32(entry + 8, true);
-    const section = image.subarray(offset, offset + length);
-    const table = new DataView(section.buffer, section.byteOffset, section.byteLength);
-    const data = section.subarray(count * TABLE_ENTRY_BYTES);
-    return Array.from({ length: count }, (_unused, which) => {
-      const start = table.getUint16(which * TABLE_ENTRY_BYTES, true);
-      const size = table.getUint16(which * TABLE_ENTRY_BYTES + 2, true);
-      return readMask(data.subarray(start, start + size));
-    });
+  const view = new DataView(file.buffer, file.byteOffset, file.byteLength);
+  const count = view.getUint16(0, true);
+  if (HEADER_BYTES + (count + 1) * PLACE_BYTES > file.length) {
+    return [];
   }
-  return [];
+  const place = (which: number) => view.getUint32(HEADER_BYTES + which * PLACE_BYTES, true);
+  return Array.from({ length: count }, (_unused, which) => readMask(file.subarray(place(which), place(which + 1))));
 }
 
 // ============================================================================
@@ -139,21 +124,21 @@ export function maskToPng(mask: IconMask): Uint8Array {
 }
 
 // ============================================================================
-// The bundled library's icons
+// The bundled icons
 // ============================================================================
 
 let bundledUris: (string | null)[] | null = null;
 
 // Each library icon as a PNG data URI, in library order, or null where the bundle has no picture for it.
-export function libraryIconUris(bundle: BundledImage[] = BUNDLED_IMAGES): (string | null)[] {
-  const cached = bundle === BUNDLED_IMAGES ? bundledUris : null;
+export function libraryIconUris(files: BundledSystemFile[] = SYSTEM_FILES): (string | null)[] {
+  const cached = files === SYSTEM_FILES ? bundledUris : null;
   if (cached) {
     return cached;
   }
-  const library = bundle.find((image) => image.file.endsWith('.ntlib'));
-  const masks = library ? readLibraryIcons(base64ToBytes(library.base64)) : [];
+  const icons = files.find((file) => file.path === ICONS_PATH);
+  const masks = icons ? readLibraryIcons(base64ToBytes(icons.base64)) : [];
   const uris = masks.map((mask) => (mask ? `data:image/png;base64,${bytesToBase64(maskToPng(mask))}` : null));
-  if (bundle === BUNDLED_IMAGES) {
+  if (files === SYSTEM_FILES) {
     bundledUris = uris;
   }
   return uris;

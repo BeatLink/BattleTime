@@ -2,11 +2,11 @@ import { describe, expect, it } from '@jest/globals';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { readLibraryIcons } from '@/protocol/library-icons';
+import { ICONS_PATH, readLibraryIcons } from '@/protocol/library-icons';
 import { base64ToBytes } from '@/ble/encoding';
 
 import { LIBRARY_ICON_NAMES } from './icon-names';
-import { BUNDLED_IMAGES } from './watch-apps';
+import { SYSTEM_FILES } from './system-files';
 
 // BattleTime's list of icon names, from BATTLETIME_DIR or a BattleTime checkout beside this one or any folder above it.
 function findBattleTimeTypes(): string | null {
@@ -38,9 +38,9 @@ describe('the library icon names', () => {
     expect([...LIBRARY_ICON_NAMES]).toEqual(readIconNames(readFileSync(typesPath!, 'utf8')));
   });
 
-  it('name each picture in the bundled shared library once', () => {
-    const library = BUNDLED_IMAGES.find((image) => image.file === 'shared.ntlib')!;
-    expect(readLibraryIcons(base64ToBytes(library.base64))).toHaveLength(LIBRARY_ICON_NAMES.length);
+  it('name each picture in the bundled icons file once', () => {
+    const icons = SYSTEM_FILES.find((file) => file.path === ICONS_PATH)!;
+    expect(readLibraryIcons(base64ToBytes(icons.base64))).toHaveLength(LIBRARY_ICON_NAMES.length);
     expect(new Set(LIBRARY_ICON_NAMES).size).toBe(LIBRARY_ICON_NAMES.length);
   });
 
