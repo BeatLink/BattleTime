@@ -319,6 +319,22 @@ fn a_folder_of_the_storage_folder_is_listed_with_its_sizes() {
 }
 
 #[test]
+fn the_icons_file_is_served_at_its_path_on_the_watch() {
+    use battletime_runtime::{library_icons::LIBRARY_ICONS_PATH, SystemValues};
+
+    let system = crate::app::test_system_with_icons(&[1, 2, 3]);
+    let mut out = [0u8; 4];
+
+    assert_eq!(system.read_file(LIBRARY_ICONS_PATH, 1, &mut out), Some(2));
+    assert_eq!(out[..2], [2, 3]);
+    assert_eq!(system.read_file("/system/other", 0, &mut out), None);
+    assert_eq!(
+        crate::app::test_system().read_file(LIBRARY_ICONS_PATH, 0, &mut out),
+        None
+    );
+}
+
+#[test]
 fn watch_files_are_read_from_the_storage_folder() {
     use crate::app::read_storage_file;
     use battletime_runtime::SystemValues;

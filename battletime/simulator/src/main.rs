@@ -66,6 +66,7 @@ struct Options {
     window_scale: u32,
     app: Option<AppSource>,
     library_path: Option<String>,
+    icons_path: Option<String>,
     installed_paths: Vec<String>,
     storage_folder: Option<String>,
     clicks: Vec<Click>,
@@ -99,6 +100,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             Some(path) => std::fs::read(path).map_err(|error| format!("could not read {path}: {error}"))?,
             None => Vec::new(),
         };
+        let icons = read_icons(&options)?.unwrap_or_default();
         let installed: Vec<Vec<u8>> = options
             .installed_paths
             .iter()
@@ -120,6 +122,7 @@ fn main() -> Result<(), Box<dyn Error>> {
             library: &library,
             installed_apps: &installed_apps,
             installed_app_icons: &installed_app_icons,
+            icons: &icons,
             storage_folder: options.storage_folder.as_deref().map(std::path::Path::new),
         };
         if options.stream {
@@ -184,6 +187,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// The icons file `--icons` names, or the one `battletime-compiler library` wrote beside the library.
+fn read_icons(options: &Options) -> Result<Option<Vec<u8>>, String> {
+    if let Some(path) = &options.icons_path {
+        return std::fs::read(path)
+            .map(Some)
+            .map_err(|error| format!("could not read {path}: {error}"));
+    }
+    let beside_library = options
+        .library_path
+        .as_ref()
+        .map(|path| std::path::Path::new(path).with_extension("icons"));
+    Ok(beside_library.and_then(|path| std::fs::read(path).ok()))
+}
+
 fn read_options() -> Result<Options, String> {
     let mut options = Options {
         screenshot_path: None,
@@ -191,6 +208,7 @@ fn read_options() -> Result<Options, String> {
         window_scale: DEFAULT_WINDOW_SCALE,
         app: None,
         library_path: None,
+        icons_path: None,
         installed_paths: Vec::new(),
         storage_folder: None,
         clicks: Vec::new(),
@@ -208,6 +226,7 @@ fn read_options() -> Result<Options, String> {
             "--app" => options.app = Some(AppSource::File(value()?)),
             "--demo" => options.app = Some(AppSource::Demo),
             "--library" => options.library_path = Some(value()?),
+            "--icons" => options.icons_path = Some(value()?),
             "--installed" => options.installed_paths.push(value()?),
             "--files" => options.storage_folder = Some(value()?),
             "--click" => options.clicks.push(parse_click(&value()?)?),
@@ -216,7 +235,7 @@ fn read_options() -> Result<Options, String> {
             _ => {
                 return Err(format!(
                     "unknown option {argument}; use --screenshot PATH, --page N, --scale N, --app PATH, \
-                     --demo, --library PATH, --installed PATH, --files FOLDER, --click X,Y, --script PATH, --stream"
+                     --demo, --library PATH, --icons PATH, --installed PATH, --files FOLDER, --click X,Y, --script PATH, --stream"
                 ))
             }
         }

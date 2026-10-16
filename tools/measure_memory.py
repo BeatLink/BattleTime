@@ -308,6 +308,7 @@ def file_system_table(values, steps):
     file_sectors = values["file_sectors"]
     record_ring_bytes = values["record_sectors"] * sector_size
     settings = [step for step in steps if step[0].startswith("/settings/")]
+    system = [step for step in steps if step[0].startswith("/system/")]
     images = [step for step in steps if step[0].endswith(".ntapp")]
     smallest = min(images, key=lambda step: step[1])
     largest = max(images, key=lambda step: step[1])
@@ -323,6 +324,8 @@ def file_system_table(values, steps):
         "|---|---:|---:|",
         f"| `/settings/system` and `/settings/theme`, kept as records | {sum(step[1] for step in settings):,} | "
         f"{sum(step[2] for step in settings)} |",
+        f"| `/system/`: the accelerometers' configuration and the shared library's icons, as the companion puts them | "
+        f"{sum(step[1] for step in system):,} | {sum(step[2] for step in system)} |",
         f"| {len(images)} app images, {smallest[1]:,} B ({app_id(smallest)}) to {largest[1]:,} B ({app_id(largest)}); "
         f"those of 1 KB or less are records | {image_bytes:,} | {sum(step[2] for step in images)} |",
         f"| **In use** | | **{in_use} of {file_sectors}: {in_use * sector_size // 1024} KB of "
@@ -351,6 +354,8 @@ def treemap_figures(full, recovery, values, steps, library_size):
             "file_sectors_in_use": values["file_sectors_in_use"],
             "record_bytes_in_use": values["record_bytes_in_use"],
             "settings_bytes": sum(step[1] for step in steps if step[0].startswith("/settings/")),
+            "system_bytes": sum(step[1] for step in steps if step[0].startswith("/system/")),
+            "system_sectors": sum(step[2] for step in steps if step[0].startswith("/system/")),
             "images": [[step[0].split("/")[2], step[1]] for step in steps if step[0].endswith(".ntapp")],
         },
     }

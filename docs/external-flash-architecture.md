@@ -190,9 +190,20 @@ Docs and comments the code contradicts, as of e30358e4:
      a file of up to 16 KB, such as an app image, is written without an erase, for 704 B of flash.
      Reads still wait behind an erase that runs; suspending one (commands 0x75 and 0x7A) remains
      unconfirmed for the XT25F32B.
-2. **Load before painting**, with icons still internal.
-3. **The resource bundle and safe mode:** icons and accelerometer configurations leave the firmware
-   image (about 43 KB), shipped beside it in each DFU package.
+2. **Load before painting.** Done for the shared library's icons, the largest part: after layout,
+   when a list scrolls and when the launcher's icons arrive, the app host reads the library icons
+   the shown widgets draw into the heap, up to 8 KB, and drops the rest, so painting never waits on
+   the flash. Layout sizes an icon not yet read at the 32 by 32 all of them share. The image run
+   indexes, strings and bound-expression code still to come; they wait for paged bytecode.
+3. **The resource bundle:** done without a bundle. The accelerometers' configuration files and the
+   icons left the shared library for `/system` on the external flash (43 KB together: the library
+   went from 49,467 B to 6,731 B, and the firmware region gained 38,652 B after the 4,084 B of code
+   that reads them). Rather than ship them in each DFU package, the companion puts any the watch
+   lacks whenever it connects, and after `battletime flash`; a missing file means no steps or empty
+   boxes for icons, not a watch that will not start, so the status page, Bluetooth, updates and
+   files all keep working without them, which is the safe mode this stage asked for. Each file is
+   checked only by its size, so new artwork of the same size would not be put again; a checksum in
+   the listing would close that.
 4. **The UI arena and the module loader**, proved with a test module that faults on purpose.
 5. **Package install and the verifier as a module**, with the install-time function index.
 6. **P-256 as a module** when pairing starts.

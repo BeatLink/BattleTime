@@ -63,7 +63,11 @@ describe('the flash command', () => {
     expect(session.sent).toEqual([]);
     expect(session.received.image).toEqual(image);
     expect(session.timeWrites).toHaveLength(1);
-    expect([...session.written.keys()]).toEqual(['/system/accelerometer/bma421', '/system/accelerometer/bma425']);
+    expect([...session.written.keys()]).toEqual([
+      '/system/accelerometer/bma421',
+      '/system/accelerometer/bma425',
+      '/system/icons',
+    ]);
   });
 
   it('restarts a watch still on wasp-os into its bootloader first', async () => {

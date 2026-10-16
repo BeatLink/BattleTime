@@ -6,6 +6,7 @@ use std::cell::Cell;
 use battletime_app_host::{folder::FolderListing, AppEffect, AppFailure, System};
 use battletime_notifications::NotificationList;
 use battletime_packages::faces::face_number;
+use battletime_runtime::library_icons::LIBRARY_ICONS_PATH;
 use battletime_runtime::resources::ImageReference;
 use battletime_runtime::{EffectKind, SystemValue, SystemValues, Value, NONE};
 
@@ -556,7 +557,12 @@ impl SystemValues for FakeSystem {
     }
 
     fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
-        let (_, bytes) = self.files.iter().find(|(name, _)| name == path)?;
+        let bytes = match self.files.iter().find(|(name, _)| name == path) {
+            Some((_, bytes)) => bytes.as_slice(),
+            // The icons the companion puts on every watch, unless a test gives its own.
+            None if path == LIBRARY_ICONS_PATH => crate::sources::icons_file(),
+            None => return None,
+        };
         let rest = bytes.get(offset as usize..).unwrap_or(&[]);
         let length = rest.len().min(out.len());
         out[..length].copy_from_slice(&rest[..length]);

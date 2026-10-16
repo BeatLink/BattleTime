@@ -685,7 +685,7 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
 ### Apps and faces
 
 - [ ] **Try the About app on the watch.** It has run only in the harness and the simulator.
-  Flash a firmware whose library carries its `info` icon first, then check the version,
+  Put an icons file that carries its `info` icon on the watch first, then check the version,
   the uptime after the phone sets the clock, the reset reason after a button-hold reset, and the
   free storage before and after an install. On the About pages, check the Bluetooth address
   against the computer's, the flash, touch and accelerometer chips (a BMA425 here), that the

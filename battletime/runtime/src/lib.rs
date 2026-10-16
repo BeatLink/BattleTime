@@ -15,6 +15,7 @@ pub mod events;
 pub mod image;
 pub mod instruction;
 pub mod interpreter;
+pub mod library_icons;
 pub mod memory_need;
 pub mod pattern;
 pub mod resources;

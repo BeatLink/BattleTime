@@ -48,22 +48,22 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 142.6 KB | 48.6 KB |
-| App host (with `battletime-ui`) | 91.1 KB | 0.0 KB |
-| App runtime | 33.9 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 142.8 KB | 49.1 KB |
+| App host (with `battletime-ui`) | 93.2 KB | 0.0 KB |
+| App runtime | 34.3 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 31.7 KB | 41.3 KB |
-| core, alloc and compiler builtins | 28.4 KB | 16.0 KB |
+| core, alloc and compiler builtins | 28.8 KB | 16.5 KB |
 | Settings, companion and notifications (with serde) | 17.7 KB | 2.4 KB |
-| Storage (flash store) | 17.2 KB | 13.6 KB |
+| Storage (flash store) | 17.4 KB | 13.7 KB |
 | BLEFS file service | 9.5 KB | 3.1 KB |
-| Embassy, allocator and Cortex-M | 8.1 KB | 5.0 KB |
+| Display, graphics and drivers | 8.4 KB | 3.3 KB |
+| Embassy, allocator and Cortex-M | 7.9 KB | 5.0 KB |
 | Packages | 7.8 KB | 1.3 KB |
-| Display, graphics and drivers | 5.5 KB | 3.3 KB |
-| Updates (DFU) | 3.4 KB | 2.9 KB |
-| Other constants and padding | 25.8 KB | 14.2 KB |
-| **Code and data** | **422.7 KB** | **151.7 KB** |
-| Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 8.7 KB | 328.1 KB |
+| Updates (DFU) | 3.3 KB | 2.8 KB |
+| Other constants and padding | 26.3 KB | 14.2 KB |
+| **Code and data** | **429.0 KB** | **152.8 KB** |
+| Shared library, after the code | 6.6 KB | none |
+| Free of the 480 KB region, after its header | 44.1 KB | 327.0 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -120,6 +120,15 @@ task added 1,068 B of code and 56 B of constants, measured with `cargo size` aga
 before on 2026-10-15 (434,724 B to 435,848 B of text and rodata), and 32 B of static RAM, so the
 firmware region gained 11,184 B. The file takes 6 KB of heap while it is uploaded, once at start.
 
+Moving the shared library's 72 icons out of it into `/system/icons` on the external flash, read
+for each screen before it paints, shrank the library from 37,159 B to 6,731 B. Reading them added
+2,960 B of code, measured with `cargo size` against the commit before on 2026-10-16 (435,996 B to
+438,956 B of text and rodata), and 16 B of static RAM for the icons file's own open file, so the
+firmware region gained 27,468 B. A screen holds its icons on the heap, 1,040 B for each one an app
+may show counted in its [need](#how-much-heap-an-app-needs), up to 8 KB. Opening the launcher's
+first app with the digital face, the launcher, settings and the alarm installed peaked at 6,284 B
+of stack, 2,916 B spare.
+
 Keeping four free file sectors erased ahead, so a file of up to four sectors is written without
 waiting 45 ms an erase, added 704 B of code, measured with `cargo size` against the commit before on
 2026-10-15 (434,020 B to 434,724 B of text and rodata), and 64 B of static RAM for the map of which
@@ -165,9 +174,9 @@ The same install without the timer started peaks at 5,984 B, as master does. Wit
 the run beside Settings went ahead, leaving 1,304 B free at its lowest and touching the heap to
 30,812 B of 30,976 B, so the margin is 2 KB.
 
-The watch face, the launcher, the apps and the accelerometers' configuration files live on the
-external flash, and the icons and the app host's text font in the shared library after the
-firmware's code; none is inside the code. See
+The watch face, the launcher, the apps, the accelerometers' configuration files and the shared
+library's icons live on the external flash, and the app host's text font in the shared library
+after the firmware's code; none is inside the code. See
 [app-runtime.md](app-runtime.md#property-values).
 
 ## External SPI flash (4 MB)
@@ -203,6 +212,8 @@ records ring, so it costs no sector. There are no folders, so an app costs nothi
 | `/settings/system` | The watch-wide settings, 41 bytes. |
 | `/settings/theme` | The theme's colours, 16 bytes. |
 | `/settings/launcher` | The launcher's style, view and groups with their apps, which the companion writes; a few hundred bytes, kept in the system heap while the watch runs. |
+| `/system/accelerometer/bma421`, `/system/accelerometer/bma425` | Bosch's configuration for each accelerometer chip, 6,144 B and 2 sectors each, which the companion puts on the watch. |
+| `/system/icons` | The shared library's 72 icons, 30,436 B in 8 sectors, which the companion puts on the watch; see [app-runtime.md](app-runtime.md#the-shared-library). |
 | `/resources/` | For resource packages; empty for now. |
 | `/day_blocks/steps/<n>` | 8 days of steps in six-minute slots, a blank file of one sector programmed a slot at a time; 90 to 97 days are kept, 12 or 13 sectors, about 52 KB. |
 | `/steps/trip` | The trip count, 4 bytes. |
@@ -218,8 +229,9 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 117 | 0 |
+| `/system/`: the accelerometers' configuration and the shared library's icons, as the companion puts them | 42,724 | 12 |
 | 12 app images, 739 B (flashlight) to 7,233 B (settings); those of 1 KB or less are records | 26,383 | 12 |
-| **In use** | | **12 of 512: 48 KB of 2 MB, and 968 B of records in the 256 KB records ring** |
+| **In use** | | **24 of 512: 96 KB of 2 MB, and 968 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
 The rest, almost 2 MB of files and most of the records ring, is free for apps, saved state and
@@ -373,13 +385,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,259 B | 11,394 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,387 B | 11,474 B |
 | Bluetooth controller | 2,618 B | 2,618 B |
 | App host (with `battletime-ui`) | 396 B | 0 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | Other | 5 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,696 B** | **24,652 B** |
-| Left for the stack | 9,824 B | 40,868 B |
+| **Static RAM** (`.data` and `.bss`) | **55,824 B** | **24,736 B** |
+| Left for the stack | 9,696 B | 40,784 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
@@ -417,6 +429,7 @@ it opens one. The parts, in bytes:
 | Folder listing | 1,600 when the app calls `open_folder` | The listed folder's path (64), 64 entries of 8 and 1,024 for their names, reserved when a folder is listed |
 | Nodes | 132 per widget of the largest screen | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
+| Library icons | 1,040 for each library icon a screen may show, at most 8,192 | The icons the host reads from `/system/icons` for the screen with the most: an `Image`, `Icon`, `Button` or `Badge` that names one or takes its image from an expression, 3 for a `StatusIcons`, 1 for a `Battery` and the 8 KB cap for an `AppList`; each icon is at most 1,024 B, plus its place in the host's list |
 
 An app's need must fit `APP_HEAP_BUDGET_BYTES`, 27,648 B: the 31,744 B heap less 4 KB for the
 system while an app is open. At rest the system holds the shell's index of app ids, about 12 B an

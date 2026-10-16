@@ -24,8 +24,8 @@ use battletime_app_testing::{
 };
 use battletime_heart_rate::monitor::Status;
 use battletime_runtime::{
-    events::SwipeDirection, resources::ImageReference, AppImage, EffectKind, SystemValue, SystemValues,
-    Theme, Value, DEFAULT_THEME, NONE,
+    events::SwipeDirection, library_icons::LIBRARY_ICONS_PATH, resources::ImageReference, AppImage,
+    EffectKind, SystemValue, SystemValues, Theme, Value, DEFAULT_THEME, NONE,
 };
 use battletime_settings::{Setting, Settings};
 use battletime_vibrator::{Step, TAP};
@@ -104,6 +104,8 @@ pub struct SimulatedSystem {
     started_at: Value,
     /// The folder standing in for the watch's storage, if one was given.
     storage_folder: Option<PathBuf>,
+    /// The shared library's icons file, served at its path on the watch when the storage folder has none.
+    icons: Vec<u8>,
     /// The folder of the storage the app last opened with `open_folder`.
     folder: FolderListing,
     /// Set when the app opened a folder, so it is told once the host call returns.
@@ -147,6 +149,7 @@ impl SimulatedSystem {
             theme_request: None,
             started_at: wall_clock_in_milliseconds(),
             storage_folder: files.storage_folder.map(Path::to_path_buf),
+            icons: files.icons.to_vec(),
             folder: FolderListing::new(),
             folder_changed: false,
             heart_rate_link,
@@ -337,7 +340,17 @@ impl SystemValues for SimulatedSystem {
     }
 
     fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
-        read_storage_file(self.storage_folder.as_deref()?, path, offset, out)
+        let from_folder = self
+            .storage_folder
+            .as_deref()
+            .and_then(|folder| read_storage_file(folder, path, offset, out));
+        if from_folder.is_some() || path != LIBRARY_ICONS_PATH || self.icons.is_empty() {
+            return from_folder;
+        }
+        let rest = self.icons.get(offset as usize..).unwrap_or(&[]);
+        let length = rest.len().min(out.len());
+        out[..length].copy_from_slice(&rest[..length]);
+        Some(length)
     }
 
     fn random_number(&self) -> u32 {
@@ -536,6 +549,15 @@ pub fn test_system_with_storage(folder: &Path) -> SimulatedSystem {
     }
 }
 
+/// A simulated system with no motor that serves this icons file, for tests.
+#[cfg(test)]
+pub fn test_system_with_icons(icons: &[u8]) -> SimulatedSystem {
+    SimulatedSystem {
+        icons: icons.to_vec(),
+        ..test_system()
+    }
+}
+
 /// A simulated system with no motor, for tests.
 #[cfg(test)]
 pub fn test_system() -> SimulatedSystem {
@@ -549,6 +571,7 @@ pub fn test_system() -> SimulatedSystem {
         theme_request: None,
         started_at: 0,
         storage_folder: None,
+        icons: Vec::new(),
         folder: FolderListing::new(),
         folder_changed: false,
         heart_rate_link: None,
@@ -604,6 +627,8 @@ pub struct AppFiles<'image> {
     pub installed_apps: &'image [&'image [u8]],
     /// Each of those apps' icon, or empty for none.
     pub installed_app_icons: &'image [&'image [u8]],
+    /// The shared library's icons file, or nothing.
+    pub icons: &'image [u8],
     /// A folder on the computer standing in for the watch's storage, so `/remote/buttons` is `<folder>/remote/buttons`.
     pub storage_folder: Option<&'image Path>,
 }
@@ -620,7 +645,7 @@ pub fn open<'image>(
         host.set_library(files.library, now, system)
             .map_err(|error| format!("the shared library did not open: {error:?}"))?;
     }
-    host.set_installed_app_icons(files.installed_app_icons);
+    host.set_installed_app_icons(files.installed_app_icons, system);
     Ok(host)
 }
 

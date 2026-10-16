@@ -317,19 +317,40 @@ fn a_woff_table_that_decompresses_to_the_wrong_length_is_refused() {
 // ============================================================================
 
 #[test]
-fn the_library_image_holds_every_icon_and_passes_the_install_checks() {
+fn the_library_image_passes_the_install_checks_and_holds_no_icons() {
     let bytes = build_library().unwrap();
 
     let image = AppImage::parse(&bytes).unwrap();
     assert_eq!(image.kind, AppKind::Library);
     assert_eq!(image.string(image.id_string), Some(LIBRARY_ID));
     assert_eq!(image.string(image.name_string), Some(LIBRARY_NAME));
-    assert_eq!(image.resource_count() as usize, ICON_NAMES.len());
-    let first = image.resource(0).unwrap();
-    assert_eq!(
-        (first.format, first.width, first.height),
-        (ImageFormat::Mask, ICON_SIDE, ICON_SIDE)
-    );
+    assert_eq!(image.resource_count(), 0);
+}
+
+#[test]
+fn the_icons_file_holds_every_icon_by_its_number_as_a_square_mask() {
+    use battletime_runtime::library_icons::{icon_count, read_icon};
+
+    let file = super::build_icons_file().unwrap();
+    let mut read = |offset: u32, out: &mut [u8]| {
+        let rest = file.get(offset as usize..)?;
+        let length = rest.len().min(out.len());
+        out[..length].copy_from_slice(&rest[..length]);
+        Some(length)
+    };
+
+    let count = icon_count(&mut read).unwrap();
+    assert_eq!(count as usize, ICON_NAMES.len());
+    for number in 0..count {
+        let icon = read_icon(&mut read, count, number).unwrap();
+        let image = battletime_runtime::resources::ImageResource::parse(&icon).unwrap();
+        assert_eq!(
+            (image.format, image.width, image.height),
+            (ImageFormat::Mask, ICON_SIDE, ICON_SIDE),
+            "{}",
+            ICON_NAMES[number as usize]
+        );
+    }
 }
 
 #[test]

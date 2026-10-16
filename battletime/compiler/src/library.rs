@@ -1,13 +1,15 @@
-//! The shared library image: every icon in `ICON_NAMES`, in that order, as a mask of one size, and
-//! the text font. The accelerometer's configuration files live on the external flash instead.
+//! The shared library image, which holds the shared functions and the text font, and the icons file:
+//! every icon in `ICON_NAMES`, in that order, as a mask of one size. The icons file and the
+//! accelerometer's configuration files live on the external flash, so the firmware region keeps their room.
 //!
 //! The icons are drawn from free icon fonts and one picture kept in `third_party/`, whose README
 //! says where each came from and under which licence. docs/compiler.md lists the glyph each name
 //! uses.
 
 use ab_glyph::{Font, FontVec, GlyphId, PxScale};
+use battletime_runtime::library_icons::{icons_file, LIBRARY_ICON_MOST_BYTES, LIBRARY_ICON_SIDE};
 use battletime_runtime::resources::ImageFormat;
-use battletime_runtime::writer::ImageWriter;
+use battletime_runtime::writer::{image_resource_bytes, ImageWriter};
 use battletime_runtime::AppKind;
 
 use crate::compiler::SHARED_LIBRARY_VERSION;
@@ -19,7 +21,7 @@ use crate::types::ICON_NAMES;
 // ============================================================================
 
 /// The width and height of every icon in the library, in pixels.
-pub const ICON_SIDE: u16 = 32;
+pub const ICON_SIDE: u16 = LIBRARY_ICON_SIDE;
 
 /// The id and name the library image carries.
 pub const LIBRARY_ID: &str = "battletime.shared";
@@ -309,18 +311,38 @@ pub const LIBRARY_FONTS: [&[u8]; 1] = [include_bytes!("../../app-host/fonts/geom
 pub const DOT_MATRIX_FONT: &[u8] = include_bytes!("../../app-host/fonts/dot-matrix.ntfont");
 
 /// Writes the shared library image, which the runtime's install checks accept.
+///
+/// Its icons are not in it: they go in the icons file `build_icons_file` writes, on the external flash.
 pub fn build_library() -> Result<Vec<u8>, String> {
     let writer = ImageWriter::new(LIBRARY_ID, LIBRARY_NAME, AppKind::Library, SHARED_LIBRARY_VERSION);
     let (mut writer, _) = crate::shared_functions::compile_library_functions(writer)?;
-    for picture in draw_every_icon()? {
-        writer.image_resource(picture.format, picture.width, picture.height, &picture.pixels);
-    }
     for font in LIBRARY_FONTS {
         writer.font(font);
     }
     let image = writer.build();
     crate::check_image(&image)?;
     Ok(image)
+}
+
+/// Writes the icons file, every icon in `ICON_NAMES` by its number, which the companion puts at `LIBRARY_ICONS_PATH`.
+pub fn build_icons_file() -> Result<Vec<u8>, String> {
+    let icons: Vec<Vec<u8>> = draw_every_icon()?
+        .iter()
+        .map(|picture| image_resource_bytes(picture.format, picture.width, picture.height, &picture.pixels))
+        .collect();
+    if let Some((number, icon)) = icons
+        .iter()
+        .enumerate()
+        .find(|(_, icon)| icon.len() > LIBRARY_ICON_MOST_BYTES)
+    {
+        return Err(format!(
+            "the icon `{}` takes {} bytes, more than the {LIBRARY_ICON_MOST_BYTES} the watch reads",
+            ICON_NAMES[number],
+            icon.len()
+        ));
+    }
+    let icons: Vec<&[u8]> = icons.iter().map(Vec::as_slice).collect();
+    Ok(icons_file(&icons))
 }
 
 #[cfg(test)]

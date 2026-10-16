@@ -7,6 +7,7 @@
 use alloc::{string::String, vec::Vec};
 
 use battletime_runtime::{
+    library_icons::LIBRARY_ICON_SIDE,
     resources::{library_image_named_by, ImageFormat, ImageReference, ImageResource},
     AppImage, AppState, ColorValue, Theme, ThemeColor, Value,
 };
@@ -46,9 +47,17 @@ pub struct DrawContext<'context, 'image> {
     pub clip: Rect,
     /// Each BitmapFile's picture, empty when its file is missing or not a picture.
     pub bitmap_files: &'context [ShownBitmap],
+    /// The shared library's icons the screen shows, read from the icons file before painting.
+    pub library_icons: &'context [HeldIcon],
 }
 
-impl<'image> DrawContext<'_, 'image> {
+/// One of the shared library's icons, read from the icons file for the screen that shows it.
+pub struct HeldIcon {
+    pub number: u16,
+    pub bytes: Vec<u8>,
+}
+
+impl<'context, 'image> DrawContext<'context, 'image> {
     /// An array's length and its elements, or nothing if the variable is not an array.
     fn array(&self, variable: Option<u8>) -> Option<(u8, usize)> {
         let variable = variable?;
@@ -68,17 +77,83 @@ impl<'image> DrawContext<'_, 'image> {
             .unwrap_or("")
     }
 
-    /// The image an `image` or `icon` value names, from the app or the shared library.
-    pub fn image_resource(&self, value: i32) -> Option<ImageResource<'image>> {
+    /// The image an `image` or `icon` value names, from the app or the shared library's icons.
+    pub fn image_resource(&self, value: i32) -> Option<ImageResource<'context>> {
         let bytes = match ImageReference::from_value(value)? {
             ImageReference::App(index) => self.image.resource_bytes(index)?,
-            ImageReference::SharedLibrary(index) => return self.library?.resource(index),
+            ImageReference::SharedLibrary(index) => return self.library_icon(index),
             ImageReference::InstalledApp(index) => self.installed_app_icons.get(index as usize)?,
         };
         match library_image_named_by(bytes) {
-            Some(library_image) => self.library?.resource(library_image),
+            Some(library_image) => self.library_icon(library_image),
             None => ImageResource::parse(bytes),
         }
+    }
+
+    /// The library icon an image value names, itself or through an app's image or icon that names one.
+    pub fn library_icon_named(&self, value: i32) -> Option<u16> {
+        let bytes = match ImageReference::from_value(value)? {
+            ImageReference::App(index) => self.image.resource_bytes(index)?,
+            ImageReference::SharedLibrary(index) => return Some(index),
+            ImageReference::InstalledApp(index) => self.installed_app_icons.get(index as usize)?,
+        };
+        library_image_named_by(bytes)
+    }
+
+    /// A library icon held for the screen, or the library's own when it still carries its icons.
+    fn library_icon(&self, number: u16) -> Option<ImageResource<'context>> {
+        match self.library_icons.iter().find(|icon| icon.number == number) {
+            Some(icon) => ImageResource::parse(&icon.bytes),
+            None => self.library?.resource(number),
+        }
+    }
+
+    /// The size of the image a value names, which for a library icon not yet read is the side all of them share.
+    pub fn image_size(&self, value: i32) -> Option<(i32, i32)> {
+        if let Some(image) = self.image_resource(value) {
+            return Some((image.width as i32, image.height as i32));
+        }
+        let side = LIBRARY_ICON_SIDE as i32;
+        self.library_icon_named(value).map(|_| (side, side))
+    }
+}
+
+/// Hands `visit` each shared library icon a node draws, so they can be read before it is painted.
+pub fn for_each_library_icon_drawn(node: &Node, context: &DrawContext, visit: &mut dyn FnMut(u16)) {
+    let mut named = |value: i32| {
+        if let Some(number) = context.library_icon_named(value) {
+            visit(number);
+        }
+    };
+    match *node.extra {
+        Extra::Image {
+            reference: Some(reference),
+            ..
+        }
+        | Extra::Badge {
+            reference: Some(reference),
+            ..
+        } => named(reference),
+        Extra::Battery { .. } => {
+            for piece in status_pieces(node).pieces.iter().flatten() {
+                match *piece {
+                    StatusPiece::Icon { library_icon, .. } => {
+                        named(ImageReference::SharedLibrary(library_icon).to_value())
+                    }
+                    StatusPiece::Bolt => named(
+                        ImageReference::SharedLibrary(battletime_runtime::resources::library_icon::CHARGING)
+                            .to_value(),
+                    ),
+                    StatusPiece::Battery | StatusPiece::Percent => {}
+                }
+            }
+        }
+        Extra::AppList { .. } => {
+            for place in app_list_rows(node).iter().filter_map(|item| item.place) {
+                named(ImageReference::InstalledApp(place as u16).to_value());
+            }
+        }
+        _ => {}
     }
 }
 
@@ -469,10 +544,8 @@ fn draw_button_content(node: &Node, context: &DrawContext, renderer: &mut dyn Re
         return;
     };
     let (icon_width, icon_height) = context
-        .image_resource(reference)
-        .map_or((PLACEHOLDER_SIZE, PLACEHOLDER_SIZE), |image| {
-            (image.width as i32, image.height as i32)
-        });
+        .image_size(reference)
+        .unwrap_or((PLACEHOLDER_SIZE, PLACEHOLDER_SIZE));
     let text_space = text_width(settings.font.metrics(), &node.text);
     let space = if text_space > 0 { TICK_BOX_GAP } else { 0 };
     let total = icon_width + space + text_space;
@@ -2399,10 +2472,8 @@ pub fn measure_node(node: &mut Node, context: &DrawContext) {
                 reference: Some(reference),
                 ..
             } => context
-                .image_resource(reference)
-                .map_or((PLACEHOLDER_SIZE, PLACEHOLDER_SIZE), |image| {
-                    (image.width as i32, image.height as i32)
-                }),
+                .image_size(reference)
+                .unwrap_or((PLACEHOLDER_SIZE, PLACEHOLDER_SIZE)),
             _ if node.kind == Button => (0, 0),
             _ => (PLACEHOLDER_SIZE, PLACEHOLDER_SIZE),
         },

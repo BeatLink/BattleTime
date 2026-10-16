@@ -66,7 +66,7 @@ plugin in `companion/plugins/` with `scripts/build-plugin.mjs` (which needs `npm
 | `store.json` | The list below. |
 | `battletime-store.zip` | `store.json` and every app and plugin file, in one download. |
 | `shared.ntlib` | The shared library, for the companion's bundle only; the firmware carries its own. |
-| `system/` | The files every watch needs that are not apps, at their paths on the watch under `/system`, such as `system/accelerometer/bma425`; `npm run import-system-files` bundles them into the companion, which puts any a watch lacks. |
+| `system/` | The files every watch needs that are not apps, at their paths on the watch under `/system`, such as `system/accelerometer/bma425` and `system/icons`, the shared library's icons; `npm run import-system-files` bundles them into the companion, which puts any a watch lacks. |
 | `SHA256SUMS` | The checksum of each file. |
 
 `store.json` is format 1:

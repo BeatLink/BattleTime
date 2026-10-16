@@ -1,5 +1,5 @@
-// The files every watch needs that are not apps, such as each accelerometer's configuration, which the firmware no
-// longer carries in its shared library. The companion puts any a watch lacks; core/src/sync/system_files.rs does the
+// The files every watch needs that are not apps, such as each accelerometer's configuration and the shared library's
+// icons, which the firmware no longer carries in its shared library. The companion puts any a watch lacks; core/src/sync/system_files.rs does the
 // same for the app, and the two must agree.
 
 import { base64ToBytes } from '@/ble/encoding';

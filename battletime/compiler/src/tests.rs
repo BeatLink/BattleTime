@@ -545,20 +545,12 @@ fn iso_week_and_day_of_year_are_worked_out() {
 }
 
 #[test]
-fn the_shared_library_holds_every_icon() {
+fn the_shared_library_passes_the_install_checks() {
     let image = crate::library::build_library().expect("the library builds");
     let parsed = AppImage::parse(&image).expect("the library parses");
     battletime_runtime::verify(&parsed).expect("the library passes the install checks");
 
     assert_eq!(parsed.kind, battletime_runtime::AppKind::Library);
-    assert_eq!(parsed.resource_count() as usize, crate::types::ICON_NAMES.len());
-    for index in 0..parsed.resource_count() {
-        let icon = parsed.resource(index).unwrap();
-        assert_eq!(
-            (icon.width, icon.height),
-            (crate::library::ICON_SIDE, crate::library::ICON_SIDE)
-        );
-    }
 }
 
 // ============================================================================

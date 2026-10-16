@@ -156,6 +156,12 @@ pub fn compile_source_text(source: &str) -> Result<Vec<u8>, OpenFailure> {
     }
 }
 
+/// The icons file, built once for every test in the process, as the companion puts it on the watch.
+pub fn icons_file() -> &'static [u8] {
+    static ICONS: OnceLock<Vec<u8>> = OnceLock::new();
+    ICONS.get_or_init(|| battletime_compiler::library::build_icons_file().expect("the icons file builds"))
+}
+
 /// The shared library, built once for every test in the process, with its fonts given to the app host as the watch does.
 pub fn shared_library() -> Result<&'static [u8], OpenFailure> {
     static LIBRARY: OnceLock<Result<Vec<u8>, String>> = OnceLock::new();

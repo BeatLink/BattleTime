@@ -187,30 +187,8 @@ impl ImageWriter {
     }
 
     pub fn image_resource(&mut self, format: ImageFormat, width: u16, height: u16, pixels: &[u16]) -> u16 {
-        let mut bytes: Vec<u8> = alloc::vec![
-            match format {
-                ImageFormat::Color => 0,
-                ImageFormat::Mask => 1,
-            },
-            0
-        ];
-        bytes.extend(width.to_le_bytes());
-        bytes.extend(height.to_le_bytes());
-        let mut index = 0;
-        while index < pixels.len() {
-            let value = pixels[index];
-            let mut count = 1;
-            while count < u8::MAX as usize && index + count < pixels.len() && pixels[index + count] == value {
-                count += 1;
-            }
-            bytes.push(count as u8);
-            match format {
-                ImageFormat::Color => bytes.extend(value.to_le_bytes()),
-                ImageFormat::Mask => bytes.push(value.min(u8::MAX as u16) as u8),
-            }
-            index += count;
-        }
-        self.resources.push(bytes);
+        self.resources
+            .push(image_resource_bytes(format, width, height, pixels));
         (self.resources.len() - 1) as u16
     }
 
@@ -450,6 +428,34 @@ fn entry_table(entries: &[Vec<u8>]) -> Vec<u8> {
     }
     table.extend(data);
     table
+}
+
+/// One image's bytes as `ImageResource::parse` reads them: its header, then its pixels in runs.
+pub fn image_resource_bytes(format: ImageFormat, width: u16, height: u16, pixels: &[u16]) -> Vec<u8> {
+    let mut bytes: Vec<u8> = alloc::vec![
+        match format {
+            ImageFormat::Color => 0,
+            ImageFormat::Mask => 1,
+        },
+        0
+    ];
+    bytes.extend(width.to_le_bytes());
+    bytes.extend(height.to_le_bytes());
+    let mut index = 0;
+    while index < pixels.len() {
+        let value = pixels[index];
+        let mut count = 1;
+        while count < u8::MAX as usize && index + count < pixels.len() && pixels[index + count] == value {
+            count += 1;
+        }
+        bytes.push(count as u8);
+        match format {
+            ImageFormat::Color => bytes.extend(value.to_le_bytes()),
+            ImageFormat::Mask => bytes.push(value.min(u8::MAX as u16) as u8),
+        }
+        index += count;
+    }
+    bytes
 }
 
 // ============================================================================

@@ -17,7 +17,7 @@ export const flashUsage = `battletime flash <package.zip> [--address <mac>]
   the BattleTime tree. BattleTime takes it in its running firmware, restarts, and
   keeps it once this tool reconnects and sets the time. The tool then puts the
   files the firmware reads that are not apps, such as the accelerometer's
-  configuration, if the watch lacks them. A watch still on wasp-os, taking
+  configuration and the icons, if the watch lacks them. A watch still on wasp-os, taking
   BattleTime's reloader, is first restarted into its bootloader.`;
 
 export async function flash(session: WatchSession, path: string): Promise<void> {
@@ -76,8 +76,9 @@ export async function flash(session: WatchSession, path: string): Promise<void> 
 export const systemFilesUsage = `battletime system-files
 
   Puts the files the firmware reads that are not apps, such as the
-  accelerometer's configuration, on the watch if it lacks them. Without its
-  configuration the watch counts no steps.`;
+  accelerometer's configuration and the icons, on the watch if it lacks them.
+  Without its configuration the watch counts no steps, and without the icons
+  it draws empty boxes in their place.`;
 
 export async function systemFiles(session: WatchSession): Promise<void> {
   const written = await putMissingSystemFiles(await session.files());

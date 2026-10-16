@@ -23,6 +23,7 @@ battletime-flash-store = { path = "../flash_store", features = ["ram-flash"] }
 battletime-runtime = { path = "../../runtime", features = ["writer"] }
 battletime-settings = { path = "../settings" }
 battletime-accelerometer = { path = "../../drivers/accelerometer", features = ["configuration-files"] }
+battletime-compiler = { path = "../../compiler" }
 
 # Its argument parsing has tests, which `cargo test` runs.
 [[example]]

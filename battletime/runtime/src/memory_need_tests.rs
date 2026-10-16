@@ -1,7 +1,8 @@
 use alloc::vec;
 
+use crate::library_icons::{held_icon_bytes, HELD_ICONS_MOST_BYTES, LIBRARY_ICON_MOST_BYTES};
 use crate::memory_need::*;
-use crate::resources::ImageFormat;
+use crate::resources::{ImageFormat, ImageReference};
 use crate::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
 use crate::widgets::{Property, PropertySource::*, WidgetKind};
 use crate::writer::{CodeWriter, ImageWriter};
@@ -36,6 +37,7 @@ fn an_app_with_one_empty_screen_needs_its_image_and_the_working_memory() {
     assert_eq!(need.working_bytes, WORKING_BYTES + PASSING_BYTES);
     assert_eq!(need.widget_bytes, NODE_BYTES);
     assert_eq!(need.text_bytes, 0);
+    assert_eq!(need.icon_bytes, 0);
     assert_eq!(
         need.total_bytes,
         need.image_bytes + need.working_bytes + need.widget_bytes + need.text_bytes
@@ -71,6 +73,52 @@ fn fixed_text_counts_its_length_and_worked_out_text_a_guess() {
         need_of(&image).text_bytes,
         12 + WORKED_OUT_TEXT_BYTES + TEXT_FILE_BYTES + BITMAP_FILE_BYTES
     );
+}
+
+#[test]
+fn each_library_icon_shown_counts_as_held_and_an_apps_own_picture_does_not() {
+    let mut image = writer();
+    let own = image.image_resource(ImageFormat::Mask, 1, 1, &[255]) as i32;
+    let named = image.library_image_reference(4) as i32;
+    let library = ImageReference::SharedLibrary(7).to_value();
+    let worked_out = image.expression(vec![]);
+    image.widget(WidgetKind::Column, 5, &[]);
+    image.widget(WidgetKind::Image, 0, &[(Property::Image, Constant(own))]);
+    image.widget(WidgetKind::Image, 0, &[(Property::Image, Constant(named))]);
+    image.widget(WidgetKind::Icon, 0, &[(Property::Icon, Constant(library))]);
+    image.widget(WidgetKind::Icon, 0, &[(Property::Icon, Expression(worked_out))]);
+    image.widget(WidgetKind::StatusIcons, 0, &[]);
+
+    let need = need_of(&image);
+    assert_eq!(need.icon_bytes, 6 * held_icon_bytes(LIBRARY_ICON_MOST_BYTES));
+    assert_eq!(
+        need.total_bytes,
+        need.image_bytes + need.working_bytes + need.widget_bytes + need.text_bytes + need.icon_bytes
+    );
+}
+
+#[test]
+fn an_app_list_holds_icons_up_to_the_cap() {
+    let mut image = writer();
+    image.widget(WidgetKind::Column, 1, &[]);
+    image.widget(WidgetKind::AppList, 0, &[]);
+
+    assert_eq!(need_of(&image).icon_bytes, HELD_ICONS_MOST_BYTES);
+}
+
+#[test]
+fn the_screen_with_the_most_icons_decides_them() {
+    let mut image = writer();
+    image.widget(WidgetKind::Column, 3, &[]);
+    for _ in 0..3 {
+        image.widget(WidgetKind::Label, 0, &[]);
+    }
+    image.widget(WidgetKind::Column, 1, &[]);
+    image.widget(WidgetKind::StatusIcons, 0, &[]);
+
+    let need = need_of(&image);
+    assert_eq!(need.widget_bytes, 4 * NODE_BYTES);
+    assert_eq!(need.icon_bytes, 3 * held_icon_bytes(LIBRARY_ICON_MOST_BYTES));
 }
 
 #[test]

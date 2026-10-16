@@ -68,6 +68,7 @@ use battletime_packages::{
     commands::{run_reply, Change},
     AppId, PackageError, Refusal,
 };
+use battletime_runtime::library_icons::LIBRARY_ICONS_PATH;
 use battletime_runtime::memory_need::{estimate_memory_need, PREFETCH_BYTES};
 use battletime_runtime::{
     events::SwipeDirection, resources::ImageReference, AppImage, AppKind, EffectKind, SystemValue,
@@ -270,6 +271,8 @@ struct WatchSystem {
     prefetch: RefCell<Option<Prefetch>>,
     /// The file the open app last read a part of, kept open so its next parts need no look-up.
     open_file: RefCell<Option<Box<storage::OpenFile>>>,
+    /// The shared library's icons file, kept open on its own so reading icons never closes the app's file.
+    icons_file: RefCell<Option<Box<storage::OpenFile>>>,
     /// The closed apps with subscriptions still to run, and when each comes due.
     closed_apps: ClosedApps,
     /// While a closed app runs, what it asked of the screen.
@@ -502,7 +505,11 @@ impl WatchSystem {
 
     /// Reads part of a file through the file kept open, opening `path` in its place first if it is another.
     fn read_through_open_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
-        let mut kept = self.open_file.borrow_mut();
+        let slot = match path {
+            LIBRARY_ICONS_PATH => &self.icons_file,
+            _ => &self.open_file,
+        };
+        let mut kept = slot.borrow_mut();
         if kept.as_ref().is_none_or(|file| file.path() != path) {
             *kept = self.files.open_now(path).ok().map(Box::new);
         }
@@ -852,6 +859,7 @@ impl Shell {
         }
         *self.system.prefetch.get_mut() = None;
         *self.system.open_file.get_mut() = None;
+        *self.system.icons_file.get_mut() = None;
         self.system.folder.clear();
         self.system.folder_wanted = None;
     }
@@ -876,7 +884,7 @@ impl Shell {
             }
         }
         if let Some(icons) = &self.launcher_icons {
-            host.set_installed_app_icons(icons.list());
+            host.set_installed_app_icons(icons.list(), &self.system);
         }
         true
     }
@@ -1922,6 +1930,7 @@ pub async fn run_shell(
             free_storage_wanted: Cell::new(false),
             prefetch: RefCell::new(None),
             open_file: RefCell::new(None),
+            icons_file: RefCell::new(None),
             folder: FolderListing::new(),
             folder_wanted: None,
             call_ringing_until: None,

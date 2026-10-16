@@ -1,5 +1,5 @@
-// The files every watch needs that are not apps, such as each accelerometer's configuration, which the firmware no
-// longer carries in its shared library. The companion puts any a watch lacks; `npm run import-system-files` copies
+// The files every watch needs that are not apps, such as each accelerometer's configuration and the shared library's
+// icons, which the firmware no longer carries in its shared library. The companion puts any a watch lacks; `npm run import-system-files` copies
 // them into `core/system-files/` from the store folder `tools/build_store.py` fills.
 
 use super::files::{FileClient, FileError};
@@ -14,7 +14,7 @@ pub struct SystemFile {
 }
 
 // Each at its path on the watch, as docs/companion-protocol.md lists them.
-pub const SYSTEM_FILES: [SystemFile; 2] = [
+pub const SYSTEM_FILES: [SystemFile; 3] = [
     SystemFile {
         path: "/system/accelerometer/bma421",
         contents: include_bytes!("../../system-files/accelerometer/bma421"),
@@ -22,6 +22,10 @@ pub const SYSTEM_FILES: [SystemFile; 2] = [
     SystemFile {
         path: "/system/accelerometer/bma425",
         contents: include_bytes!("../../system-files/accelerometer/bma425"),
+    },
+    SystemFile {
+        path: "/system/icons",
+        contents: include_bytes!("../../system-files/icons"),
     },
 ];
 
@@ -56,13 +60,24 @@ mod tests {
     use super::super::files::fake::FakeWatch;
     use super::*;
 
+    fn count_files(folder: &std::path::Path) -> usize {
+        std::fs::read_dir(folder)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .map(|path| if path.is_dir() { count_files(&path) } else { 1 })
+            .sum()
+    }
+
     #[test]
     fn every_copied_system_file_is_listed() {
-        let copied = std::fs::read_dir(concat!(env!("CARGO_MANIFEST_DIR"), "/system-files/accelerometer"))
-            .unwrap()
-            .count();
-        assert_eq!(copied, SYSTEM_FILES.len());
-        assert!(SYSTEM_FILES.iter().all(|file| file.contents.len() == 6144));
+        let folder = std::path::Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/system-files"));
+        assert_eq!(count_files(folder), SYSTEM_FILES.len());
+        for file in &SYSTEM_FILES {
+            let copied = std::fs::read(folder.join(file.path.strip_prefix("/system/").unwrap())).unwrap();
+            assert_eq!(copied, file.contents, "{}", file.path);
+        }
+        assert_eq!(SYSTEM_FILES[0].contents.len(), 6144);
+        assert_eq!(&SYSTEM_FILES[2].contents[..2], &(72u16).to_le_bytes());
     }
 
     #[tokio::test]
@@ -72,7 +87,7 @@ mod tests {
 
         assert_eq!(
             written,
-            ["/system/accelerometer/bma421", "/system/accelerometer/bma425"]
+            ["/system/accelerometer/bma421", "/system/accelerometer/bma425", "/system/icons"]
         );
         let files = watch.files.lock().unwrap();
         assert_eq!(files["/system/accelerometer/bma425"], SYSTEM_FILES[1].contents);
@@ -83,6 +98,7 @@ mod tests {
         let watch = FakeWatch::with(&[
             ("/system/accelerometer/bma421", SYSTEM_FILES[0].contents),
             ("/system/accelerometer/bma425", SYSTEM_FILES[1].contents),
+            ("/system/icons", SYSTEM_FILES[2].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 
@@ -95,6 +111,7 @@ mod tests {
         let watch = FakeWatch::with(&[
             ("/system/accelerometer/bma421", SYSTEM_FILES[0].contents),
             ("/system/accelerometer/bma425", b"cut short"),
+            ("/system/icons", SYSTEM_FILES[2].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 

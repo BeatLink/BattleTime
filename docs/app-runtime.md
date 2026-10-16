@@ -238,7 +238,7 @@ shared library image, which is drawn in its place. An app whose launcher icon is
 keeps it this way as image 0, so the icon costs 4 bytes.
 
 An `image` or `icon` property names an image by number: below 32768 it is one of the app's own
-images; 32768 to 65535 is the shared library's image of that number less 32768; and 65536 and up is
+images; 32768 to 65535 is the shared library's icon of that number less 32768; and 65536 and up is
 the launcher icon of the installed app of that number less 65536.
 
 ### Saved state
@@ -259,9 +259,26 @@ It is itself an image of kind 2, checked by the same verifier as an app.
 
 | Part | Holds |
 |---|---|
-| Images | The icons, each a 32 by 32 mask, numbered in the order of `ICON_NAMES` in `compiler/src/types.rs`. |
 | Font | The one font every text size is drawn from; see [Fonts](#fonts). |
 | Functions | Bytecode for common work, compiled from `sdk/battletime/src/lib.ts` and numbered in the order of `LIBRARY_FUNCTIONS` in `compiler/src/shared_functions.rs`. |
+
+The library's icons, each a 32 by 32 mask numbered in the order of `ICON_NAMES` in
+`compiler/src/types.rs`, are not in it. They are in `/system/icons` on the external flash, which
+`battletime-compiler library -o shared.ntlib` writes beside the library as `shared.icons` and the
+companion puts on the watch ([System files](companion-protocol.md#system-files)). The file starts
+with the icon count (2 bytes) and 2 reserved bytes, then each icon's start and the file's end
+(4 bytes each), then the icons as [Images](#images) describes; `runtime/src/library_icons.rs`
+writes and reads it.
+
+The app host never reads an icon while it paints, because a read then would stall the strips'
+double buffer. After layout, and whenever a list scrolls or the installed apps' icons arrive, it
+reads every library icon the shown widgets draw that it does not already hold, and drops the ones no
+longer shown: an `Image`, `Icon`, `Button` or `Badge` that names one, directly or through an app
+image of format 2, the icons a `StatusIcons` or `Battery` shows, and those of an `AppList`'s apps in
+view. Layout sizes an icon not yet read at 32 by 32, the side they all share. It holds at most
+8 KB of icons, about 19 average ones, and draws any past that, or missing from the file, as a
+placeholder; [memory need](memory-map.md#how-much-heap-an-app-needs) counts 1,040 bytes for each library icon a
+screen may show, up to those 8 KB.
 
 An app calls a library function with `call library`, which costs 5 bytes in place of the function's
 body. Library code takes only its arguments and system values; text it gives back is copied into

@@ -172,6 +172,8 @@ struct FakeSystem {
     /// Each launcher group's name and the place of its first app.
     groups: Vec<(String, Value)>,
     files: Vec<(String, Vec<u8>)>,
+    /// How many reads the app host asked of the files.
+    file_reads: core::cell::Cell<u32>,
 }
 
 impl SystemValues for FakeSystem {
@@ -222,6 +224,7 @@ impl SystemValues for FakeSystem {
     }
 
     fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        self.file_reads.set(self.file_reads.get() + 1);
         let (_, bytes) = self.files.iter().find(|(name, _)| name == path)?;
         let rest = bytes.get(offset as usize..).unwrap_or(&[]);
         let length = rest.len().min(out.len());
@@ -1733,6 +1736,7 @@ fn an_image_that_names_a_library_image_draws_that_image() {
         now: 0,
         clip: crate::SCREEN_AREA,
         bitmap_files: &[],
+        library_icons: &[],
     };
     let size_of = |context: &crate::drawing::DrawContext, reference: ImageReference| {
         context
@@ -1750,6 +1754,113 @@ fn an_image_that_names_a_library_image_draws_that_image() {
         Some((2, 3))
     );
     assert_eq!(size_of(&without_library, ImageReference::App(0)), None);
+}
+
+// ============================================================================
+// Library icons read from the icons file
+// ============================================================================
+
+/// A screen of `count` Icons in a column, each a library icon by its number, drawn in white.
+fn library_icons_image(count: u16) -> Vec<u8> {
+    use battletime_runtime::resources::ImageReference;
+
+    let mut writer = ImageWriter::new("icons", "Icons", AppKind::App, 1);
+    let main = writer.string("main");
+    let constant = PropertySource::Constant;
+    writer.widget(
+        WidgetKind::Column,
+        count as u8,
+        &[(Property::ScreenName, constant(main as i32))],
+    );
+    for number in 0..count {
+        writer.widget(
+            WidgetKind::Image,
+            0,
+            &[
+                (
+                    Property::Image,
+                    constant(ImageReference::SharedLibrary(number).to_value()),
+                ),
+                (
+                    Property::Recolor,
+                    constant(ColorValue::Fixed(0xffff).to_value() as i32),
+                ),
+                (Property::Grow, constant(1)),
+            ],
+        );
+    }
+    writer.build()
+}
+
+fn system_with_icons(icons: &[&[u8]]) -> FakeSystem {
+    FakeSystem {
+        files: alloc::vec![(
+            String::from(battletime_runtime::library_icons::LIBRARY_ICONS_PATH),
+            battletime_runtime::library_icons::icons_file(icons),
+        )],
+        ..Default::default()
+    }
+}
+
+/// A solid mask of 2 by 2, as the shared library holds it.
+const SOLID_ICON: [u8; 8] = [1, 0, 2, 0, 2, 0, 4, 255];
+
+#[test]
+fn a_library_icon_is_read_from_the_icons_file_and_drawn() {
+    let image = library_icons_image(1);
+    let mut system = system_with_icons(&[&SOLID_ICON]);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+
+    host.draw(&mut screen).unwrap();
+
+    // The 2 by 2 icon scales to fill the whole screen.
+    assert_eq!(screen.pixel(5, 5), rgb565(0xffff));
+    assert!(system.failures.is_empty());
+}
+
+#[test]
+fn a_missing_icons_file_draws_placeholders_and_nothing_fails() {
+    let image = library_icons_image(1);
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    let mut screen = FakeScreen::new();
+
+    host.draw(&mut screen).unwrap();
+
+    assert_ne!(screen.pixel(5, 5), rgb565(0xffff));
+    assert!(system.failures.is_empty());
+}
+
+#[test]
+fn an_icon_held_for_the_screen_is_not_read_again() {
+    let image = library_icons_image(1);
+    let mut system = system_with_icons(&[&SOLID_ICON]);
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    // The count, the icon's place, then its bytes.
+    assert_eq!(system.file_reads.get(), 3);
+
+    host.tick(START_TIME + 1_000, &mut system);
+    host.draw(&mut FakeScreen::new()).unwrap();
+
+    assert_eq!(system.file_reads.get(), 3);
+}
+
+#[test]
+fn the_icons_held_stop_short_of_the_cap() {
+    // Each icon is 1,002 bytes: 3 by 166 pixels whose coverage changes at every pixel.
+    let mut large = alloc::vec![1, 0, 3, 0, 166, 0];
+    for pixel in 0..3 * 166 {
+        large.extend([1, if pixel % 2 == 0 { 0 } else { 255 }]);
+    }
+    let icons: Vec<&[u8]> = (0..12).map(|_| &large[..]).collect();
+    let image = library_icons_image(12);
+    let mut system = system_with_icons(&icons);
+
+    AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    // Eight icons of 1,020 bytes held leave less than one more could need of the 8 KB.
+    assert_eq!(system.file_reads.get(), 1 + 2 * 8);
 }
 
 // ============================================================================
@@ -1784,6 +1895,24 @@ fn system_with_apps(count: usize) -> FakeSystem {
         app_names: (0..count).map(|place| std::format!("App {place}")).collect(),
         ..Default::default()
     }
+}
+
+#[test]
+fn an_installed_apps_icon_that_names_a_library_icon_is_read_once_the_icons_arrive() {
+    use battletime_runtime::resources::library_image_reference_bytes;
+
+    let names_icon_1 = library_image_reference_bytes(1);
+    let icons: [&[u8]; 2] = [&names_icon_1, &[]];
+    let image = app_list_image();
+    let mut system = system_with_apps(2);
+    system.files = system_with_icons(&[&SOLID_ICON, &SOLID_ICON]).files;
+    let mut host = AppHost::open(&image, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+    assert_eq!(system.file_reads.get(), 0);
+
+    host.set_installed_app_icons(&icons, &system);
+
+    // The count, then the place and bytes of icon 1; the second app has no icon.
+    assert_eq!(system.file_reads.get(), 3);
 }
 
 #[test]
@@ -2377,6 +2506,7 @@ fn a_text_file_draws_only_the_lines_inside_the_part_being_painted() {
         now: 0,
         clip: strip,
         bitmap_files: &[],
+        library_icons: &[],
     };
     let mut tops = Tops::default();
 
@@ -2575,6 +2705,7 @@ fn a_bitmap_file_draws_one_rectangle_per_run_and_only_rows_inside_the_part_being
         now: 0,
         clip: strip,
         bitmap_files: &bitmap_files,
+        library_icons: &[],
     };
     let mut fills = Fills::default();
 

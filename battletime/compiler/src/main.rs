@@ -70,7 +70,8 @@ fn print_disassembly() -> ExitCode {
     }
 }
 
-/// `battletime-compiler library -o shared.ntlib`: writes the shared library image of every icon.
+/// `battletime-compiler library -o shared.ntlib`: writes the shared library image, and the icons file
+/// beside it with the extension `icons`.
 fn write_library() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(2).collect();
     let destination = match arguments.as_slice() {
@@ -90,6 +91,18 @@ fn write_library() -> ExitCode {
     };
     if let Err(error) = std::fs::write(&destination, &image) {
         eprintln!("{}: cannot write the library: {error}", destination.display());
+        return ExitCode::FAILURE;
+    }
+    let icons = match battletime_compiler::library::build_icons_file() {
+        Ok(icons) => icons,
+        Err(problem) => {
+            eprintln!("cannot build the icons file: {problem}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let icons_destination = destination.with_extension("icons");
+    if let Err(error) = std::fs::write(&icons_destination, &icons) {
+        eprintln!("{}: cannot write the icons: {error}", icons_destination.display());
         return ExitCode::FAILURE;
     }
     ExitCode::SUCCESS

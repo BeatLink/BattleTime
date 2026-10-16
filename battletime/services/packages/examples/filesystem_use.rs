@@ -1,12 +1,12 @@
 //! Builds the external flash of a typical install and reports what each file costs in the flash store.
 //!
-//! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] [--no-accelerometer] ID=FILE... /PATH=FILE...`
+//! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] [--no-accelerometer] [--no-icons] ID=FILE... /PATH=FILE...`
 //! or `... -- --read IMAGE /PATH`
 //!
 //! `ID=FILE` installs an app or face image; `/PATH=FILE` copies any other file, such as a saved state.
 //! `--no-theme` leaves out the all-black theme, so the built-in colours show. Both accelerometers'
-//! configuration files go in, as the companion app puts them, unless `--no-accelerometer` leaves
-//! them out to show a watch without them.
+//! configuration files and the shared library's icons go in, as the companion app puts them, unless
+//! `--no-accelerometer` or `--no-icons` leaves them out to show a watch without them.
 //!
 //! The store is mounted with the watch's own layout and sizes, so files up to 1 KB become records and
 //! larger ones take whole sectors, as on the watch. Each step's cost is the file sectors it added.
@@ -84,6 +84,8 @@ struct Options {
     without_theme: bool,
     /// Leaves out the accelerometers' configuration files, so the watch counts no steps.
     without_accelerometer: bool,
+    /// Leaves out the shared library's icons file, so library icons draw as placeholders.
+    without_icons: bool,
     entries: Vec<Entry>,
     /// `--read IMAGE /PATH`: the image to mount and the file to print from it.
     read: Option<(String, String)>,
@@ -97,6 +99,7 @@ fn read_options(arguments: impl IntoIterator<Item = String>) -> Result<Options, 
             "--image" => options.image_path = Some(arguments.next().ok_or("--image wants a path")?),
             "--no-theme" => options.without_theme = true,
             "--no-accelerometer" => options.without_accelerometer = true,
+            "--no-icons" => options.without_icons = true,
             "--read" => {
                 let image = arguments.next().ok_or("--read wants an image")?;
                 let path = arguments.next().ok_or("--read wants a path")?;
@@ -158,6 +161,16 @@ fn main() {
         ] {
             write_measured(&mut store, &mut steps, path, file);
         }
+    }
+    if !options.without_icons {
+        let icons =
+            battletime_compiler::library::build_icons_file().unwrap_or_else(|problem| panic!("{problem}"));
+        write_measured(
+            &mut store,
+            &mut steps,
+            battletime_runtime::library_icons::LIBRARY_ICONS_PATH,
+            &icons,
+        );
     }
 
     for entry in &options.entries {
@@ -221,6 +234,7 @@ mod tests {
         let options = read_options(strings(&[
             "--no-theme",
             "--no-accelerometer",
+            "--no-icons",
             "launcher=out/launcher.ntapp",
             "--image",
             "flash.bin",
@@ -234,6 +248,7 @@ mod tests {
                 image_path: Some("flash.bin".into()),
                 without_theme: true,
                 without_accelerometer: true,
+                without_icons: true,
                 entries: vec![
                     Entry::App {
                         id: "launcher".into(),

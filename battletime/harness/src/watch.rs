@@ -160,7 +160,8 @@ impl TestWatch {
         }
         self.system.installed_apps = installed_apps;
         self.installed_icons = Box::leak(icons.into_boxed_slice());
-        self.host.set_installed_app_icons(self.installed_icons);
+        self.host
+            .set_installed_app_icons(self.installed_icons, &self.system);
         let now = self.now();
         self.host
             .system_values_changed(SystemValue::InstalledAppCount.bit(), now, &mut self.system);

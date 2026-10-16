@@ -39,8 +39,9 @@ runs before the compiler exists. `--click X,Y` taps the screen before a screensh
 given more than once. `--files FOLDER` stands a folder in for the watch's storage, so an app reading
 `/remote/buttons` reads `FOLDER/remote/buttons`, and the Files app lists the folder.
 `--installed path/to/app.ntapp`, given once for each, lists an image as installed, so the launcher
-shows it. `--library path/to/shared.ntlib` gives the app the shared library, for the icons apps take
-from it:
+shows it. `--library path/to/shared.ntlib` gives the app the shared library, for its font and
+functions, and the icons file the compiler wrote beside it, `shared.icons`, which the simulator
+serves at `/system/icons` as the companion puts it on the watch; `--icons PATH` names another:
 
 ```sh
 cargo run -q -p battletime-compiler -- faces/digital/face.tsx -o face.ntapp

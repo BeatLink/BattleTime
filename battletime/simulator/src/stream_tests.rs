@@ -26,6 +26,7 @@ fn run_stopwatch(input: &str) -> Vec<String> {
         library: &[],
         installed_apps: &[],
         installed_app_icons: &[],
+        icons: &[],
         storage_folder: None,
     };
     let panel = SimulatedPanel::new();

@@ -8,6 +8,10 @@ use alloc::{boxed::Box, string::String, vec::Vec};
 
 use battletime_runtime::{
     events::{EventKind, SwipeDirection},
+    library_icons::{
+        held_icon_bytes, icon_count, read_icon, HELD_ICONS_MOST_BYTES, LIBRARY_ICONS_PATH,
+        LIBRARY_ICON_MOST_BYTES,
+    },
     state::SaveBufferFull,
     subscriptions::{Subscription, SubscriptionKind},
     verify_with,
@@ -20,9 +24,9 @@ use battletime_ui::geometry::Rect;
 
 use crate::drawing::pickers::{is_picker, picker_tapped};
 use crate::drawing::{
-    app_list_rows, app_row_at, cell_at, dropdown_option_at, label_scrolls, matrix_buttons, measure_node,
-    option_row_height, roller_rows, text_file_lines_in_view, text_file_rows, text_file_width, DrawContext,
-    APP_HEADING_MARK, LABEL_SCROLL_STEP_IN_MILLISECONDS,
+    app_list_rows, app_row_at, cell_at, dropdown_option_at, for_each_library_icon_drawn, label_scrolls,
+    matrix_buttons, measure_node, option_row_height, roller_rows, text_file_lines_in_view, text_file_rows,
+    text_file_width, DrawContext, HeldIcon, APP_HEADING_MARK, LABEL_SCROLL_STEP_IN_MILLISECONDS,
 };
 use crate::fonts::line_height;
 use crate::layout::{clips_children, farthest_scroll, lay_out, runs_across, visible_length};
@@ -239,6 +243,8 @@ pub struct AppHost<'image> {
     text_files: Vec<(NodeKey, LineIndex)>,
     /// Each BitmapFile's picture on the screen, read when the screen opens or its number changes.
     bitmap_files: Vec<ShownBitmap>,
+    /// The shared library's icons the screen shows, read after layout so painting never waits on the flash.
+    library_icons: Vec<HeldIcon>,
 }
 
 impl Drop for AppHost<'_> {
@@ -414,6 +420,7 @@ impl<'image> AppHost<'image> {
             touch_stopped_glide: false,
             text_files: Vec::new(),
             bitmap_files: Vec::new(),
+            library_icons: Vec::new(),
         };
         // Safety: the image's bytes outlive the host, whose drop lets go of the font.
         unsafe { crate::fonts::install_app_font(&host.image) };
@@ -421,8 +428,9 @@ impl<'image> AppHost<'image> {
     }
 
     /// Gives the host each installed app's icon, as `AppImage::resource_bytes` gives it, for a launcher.
-    pub fn set_installed_app_icons(&mut self, icons: &'image [&'image [u8]]) {
+    pub fn set_installed_app_icons(&mut self, icons: &'image [&'image [u8]], system: &dyn SystemValues) {
         self.installed_app_icons = icons;
+        self.fill_library_icons(system);
         self.redraw_whole_screen();
     }
 
@@ -611,6 +619,7 @@ impl<'image> AppHost<'image> {
         }
         self.fill_text_files(system);
         self.fill_bitmap_files(system);
+        self.fill_library_icons(system);
         self.redraw_whole_screen();
         self.dirty_nodes = 0;
         if let Some(failure) = failure {
@@ -941,6 +950,7 @@ impl<'image> AppHost<'image> {
         }
         self.fill_text_files(system);
         self.fill_bitmap_files(system);
+        self.fill_library_icons(system);
         first_failure
     }
 
@@ -955,6 +965,7 @@ impl<'image> AppHost<'image> {
             now: self.now,
             clip: SCREEN_AREA,
             bitmap_files: &self.bitmap_files,
+            library_icons: &self.library_icons,
         }
     }
 
@@ -1225,6 +1236,7 @@ impl<'image> AppHost<'image> {
         self.refresh(affected, all_variables, now, system);
         if changed_system_values & SystemValue::InstalledAppCount.bit() != 0 && self.fill_app_lists(system) {
             self.update_layout();
+            self.fill_library_icons(system);
         }
     }
 
@@ -1443,6 +1455,53 @@ impl<'image> AppHost<'image> {
                 bitmap,
             });
             self.dirty_nodes |= 1 << node_index;
+        }
+    }
+
+    /// Reads the library icons the shown nodes draw that are not held yet, after dropping those no longer shown.
+    ///
+    /// Painting then reads only RAM, so a frame never waits on the flash. Icons past `HELD_ICONS_MOST_BYTES`,
+    /// or missing from the icons file, are drawn as placeholders.
+    #[inline(never)]
+    fn fill_library_icons(&mut self, system: &dyn SystemValues) {
+        let mut wanted: Vec<u16> = Vec::new();
+        {
+            let context = self.draw_context();
+            for node in self.nodes.iter().filter(|node| node.shown) {
+                for_each_library_icon_drawn(node, &context, &mut |number| {
+                    if !wanted.contains(&number) {
+                        wanted.push(number);
+                    }
+                });
+            }
+        }
+        // An icon the library still carries is drawn from there.
+        if let Some(library) = &self.library {
+            wanted.retain(|&number| library.resource(number).is_none());
+        }
+        self.library_icons.retain(|icon| wanted.contains(&icon.number));
+        let mut held: u32 = self
+            .library_icons
+            .iter()
+            .map(|icon| held_icon_bytes(icon.bytes.len()))
+            .sum();
+        let mut read = |offset: u32, out: &mut [u8]| system.read_file(LIBRARY_ICONS_PATH, offset, out);
+        let mut count = None;
+        for number in wanted {
+            if self.library_icons.iter().any(|icon| icon.number == number) {
+                continue;
+            }
+            if held + held_icon_bytes(LIBRARY_ICON_MOST_BYTES) > HELD_ICONS_MOST_BYTES
+                || self.library_icons.try_reserve(1).is_err()
+            {
+                break;
+            }
+            let count = *count.get_or_insert_with(|| icon_count(&mut read).unwrap_or(0));
+            let Some(bytes) = read_icon(&mut read, count, number) else {
+                continue;
+            };
+            held += held_icon_bytes(bytes.len());
+            self.library_icons.push(HeldIcon { number, bytes });
         }
     }
 
@@ -2004,6 +2063,7 @@ impl<'image> AppHost<'image> {
             node.scroll_offset = offset as i16;
             self.touch_scrolled = true;
             self.fill_text_files(&*system);
+            self.fill_library_icons(&*system);
             self.note_scroll(node_index, moved_rows);
             if self.rows_in_view_moved() {
                 let failure = self.build_nodes(now, system);

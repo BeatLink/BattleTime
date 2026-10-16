@@ -76,7 +76,7 @@ impl TestWatch {
             .map_err(OpenFailure::CannotOpen)?;
         host.set_library(library, now, &mut self.system)
             .map_err(OpenFailure::CannotOpen)?;
-        host.set_installed_app_icons(self.installed_icons);
+        host.set_installed_app_icons(self.installed_icons, &self.system);
         self.system.app_name = parsed.string(parsed.name_string).unwrap_or_default().to_string();
         self.widgets = WidgetTree::new(*host.image());
         self.host = host;
