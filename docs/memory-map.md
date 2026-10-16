@@ -29,9 +29,9 @@ python3 tools/draw_memory_maps.py
 
 The shared library sits right after the code, on a word boundary, where the image header says. It
 holds what apps share: images, the app host's text font (4,945 B, one font of lines and arcs that
-every text size scales, which the full firmware's status page draws with too), Bosch's configuration file for each accelerometer (6,144 B each, which the
-firmware uploads to the chip; the library with all of it is 43,753 B), components, common functions
-and the preset themes. It arrives with each firmware
+every text size scales, which the full firmware's status page draws with too), components, common
+functions and the preset themes; the library is 37,159 B. Bosch's configuration file for each
+accelerometer (6,144 B each) lives on the external flash instead, under `/system/accelerometer`. It arrives with each firmware
 update and is never written on the watch. No apps are kept in internal flash; they live in `/apps`
 on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library).
 
@@ -114,6 +114,12 @@ dozen bytes plus a heap list of the file's runs, until the app closes. Notes rea
 from the launcher peaked at 6,332 B of stack, 3,124 B spare, against master's 6,188 B and 3,268 B.
 Awaiting store reads instead of sleeping in WFE was measured too, at 4,600 B more code, and left out.
 
+Moving the accelerometers' configuration files out of the shared library onto the external flash
+shrank the library from 49,467 B to 37,159 B. Loading the detected chip's file through the storage
+task added 1,068 B of code and 56 B of constants, measured with `cargo size` against the commit
+before on 2026-10-15 (434,724 B to 435,848 B of text and rodata), and 32 B of static RAM, so the
+firmware region gained 11,184 B. The file takes 6 KB of heap while it is uploaded, once at start.
+
 Keeping four free file sectors erased ahead, so a file of up to four sectors is written without
 waiting 45 ms an erase, added 704 B of code, measured with `cargo size` against the commit before on
 2026-10-15 (434,020 B to 434,724 B of text and rodata), and 64 B of static RAM for the map of which
@@ -159,9 +165,9 @@ The same install without the timer started peaks at 5,984 B, as master does. Wit
 the run beside Settings went ahead, leaving 1,304 B free at its lowest and touching the heap to
 30,812 B of 30,976 B, so the margin is 2 KB.
 
-The watch face, the launcher and the apps live in `/apps` on the external flash, and the icons,
-the app host's text font and the accelerometers' configuration files in the shared library after
-the firmware's code; none is inside the code. See
+The watch face, the launcher, the apps and the accelerometers' configuration files live on the
+external flash, and the icons and the app host's text font in the shared library after the
+firmware's code; none is inside the code. See
 [app-runtime.md](app-runtime.md#property-values).
 
 ## External SPI flash (4 MB)

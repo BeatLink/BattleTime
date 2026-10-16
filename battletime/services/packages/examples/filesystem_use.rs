@@ -1,10 +1,12 @@
 //! Builds the external flash of a typical install and reports what each file costs in the flash store.
 //!
-//! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] ID=FILE... /PATH=FILE...`
+//! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] [--no-accelerometer] ID=FILE... /PATH=FILE...`
 //! or `... -- --read IMAGE /PATH`
 //!
 //! `ID=FILE` installs an app or face image; `/PATH=FILE` copies any other file, such as a saved state.
-//! `--no-theme` leaves out the all-black theme, so the built-in colours show.
+//! `--no-theme` leaves out the all-black theme, so the built-in colours show. Both accelerometers'
+//! configuration files go in, as the companion app puts them, unless `--no-accelerometer` leaves
+//! them out to show a watch without them.
 //!
 //! The store is mounted with the watch's own layout and sizes, so files up to 1 KB become records and
 //! larger ones take whole sectors, as on the watch. Each step's cost is the file sectors it added.
@@ -80,6 +82,8 @@ struct Options {
     image_path: Option<String>,
     /// Leaves out the all-black theme, which stands in for the companion app's, so the built-in colours show.
     without_theme: bool,
+    /// Leaves out the accelerometers' configuration files, so the watch counts no steps.
+    without_accelerometer: bool,
     entries: Vec<Entry>,
     /// `--read IMAGE /PATH`: the image to mount and the file to print from it.
     read: Option<(String, String)>,
@@ -92,6 +96,7 @@ fn read_options(arguments: impl IntoIterator<Item = String>) -> Result<Options, 
         match argument.as_str() {
             "--image" => options.image_path = Some(arguments.next().ok_or("--image wants a path")?),
             "--no-theme" => options.without_theme = true,
+            "--no-accelerometer" => options.without_accelerometer = true,
             "--read" => {
                 let image = arguments.next().ok_or("--read wants an image")?;
                 let path = arguments.next().ok_or("--read wants a path")?;
@@ -138,6 +143,21 @@ fn main() {
     );
     if !options.without_theme {
         write_measured(&mut store, &mut steps, "/settings/theme", &[0; THEME_FILE_BYTES]);
+    }
+    // Both chips' files, as the companion app puts them, since a watch has either.
+    if !options.without_accelerometer {
+        for (path, file) in [
+            (
+                battletime_accelerometer::BMA421_CONFIGURATION_PATH,
+                battletime_accelerometer::BMA421_CONFIGURATION_FILE,
+            ),
+            (
+                battletime_accelerometer::BMA425_CONFIGURATION_PATH,
+                battletime_accelerometer::BMA425_CONFIGURATION_FILE,
+            ),
+        ] {
+            write_measured(&mut store, &mut steps, path, file);
+        }
     }
 
     for entry in &options.entries {
@@ -200,6 +220,7 @@ mod tests {
     fn apps_files_and_flags_are_read_in_order() {
         let options = read_options(strings(&[
             "--no-theme",
+            "--no-accelerometer",
             "launcher=out/launcher.ntapp",
             "--image",
             "flash.bin",
@@ -212,6 +233,7 @@ mod tests {
             Options {
                 image_path: Some("flash.bin".into()),
                 without_theme: true,
+                without_accelerometer: true,
                 entries: vec![
                     Entry::App {
                         id: "launcher".into(),

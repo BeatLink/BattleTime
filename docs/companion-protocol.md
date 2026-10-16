@@ -561,7 +561,7 @@ A read gives 33 little-endian `u32` words:
 | 2 | Whether the screen is lit, 1 or 0 |
 | 3 | The touch panel: 1 started, 2 failed to start |
 | 4 to 6 | Reports read from the touch panel, touches sent to the shell, button gestures sent to the shell |
-| 7 | The accelerometer: 1 started, 2 failed to start, 3 failed to read, 4 waiting for a shared library with its configuration |
+| 7 | The accelerometer: 1 started, 2 failed to start, 3 failed to read, 4 waiting for its configuration file on the external flash |
 | 8 | The last restart's `RESETREAS` bits |
 | 9 | The kind of crash that ended the run before: 0 none, 1 panic, 2 HardFault, 3 out of memory |
 | 10 to 17 | The crash's detail words, such as return addresses or the fault registers |

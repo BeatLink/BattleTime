@@ -161,11 +161,14 @@ not set up:
   a shake, and the next second is ignored, so one shake counts once. Readings more than half a
   second apart are not compared.
 
-The configuration files are not in the firmware: the shared library carries both, as its data 0
-and 1 (`LibraryData`), which keeps one image for every watch and saves the firmware 12 KB. The
-`configuration-files` feature gives them to the compiler, which puts them in the library. The
-firmware's `motion.rs` passes the files from the library inside the firmware to `start`; a build
-without a library never starts the step counter and reports diagnostic state 4. The files are
+The configuration files are not in the firmware or its shared library: each lives on the external
+flash at its chip's `ChipModel::configuration_path`, `/system/accelerometer/bma421` or
+`/system/accelerometer/bma425`, which saves internal flash 12 KB. The companion app puts both
+there, and `filesystem_use` does for the emulator; the `configuration-files` feature gives the
+files to those tools. The firmware's `motion.rs` first starts the chip with no file, which finds
+its model, then asks the storage task for that chip's file alone, checked against its checksum, and
+starts again with it, holding the 6 KB on the heap only for the upload. While the file is missing or
+damaged the step counter stays off, reports diagnostic state 4 and looks again every minute. The files are
 Bosch's, under the BSD-3-Clause licence in `src/configuration/LICENSE`, taken from the
 `BMA42X-Sensor-API` that wasp-os uses.
 

@@ -1,5 +1,5 @@
 //! The shared library image: every icon in `ICON_NAMES`, in that order, as a mask of one size, and
-//! the files the firmware reads, such as the accelerometer's configuration, in `LibraryData` order.
+//! the text font. The accelerometer's configuration files live on the external flash instead.
 //!
 //! The icons are drawn from free icon fonts and one picture kept in `third_party/`, whose README
 //! says where each came from and under which licence. docs/compiler.md lists the glyph each name
@@ -318,9 +318,6 @@ pub fn build_library() -> Result<Vec<u8>, String> {
     for font in LIBRARY_FONTS {
         writer.font(font);
     }
-    // In `LibraryData` order, so the firmware finds each chip's file by its number.
-    writer.data(battletime_accelerometer::BMA421_CONFIGURATION_FILE);
-    writer.data(battletime_accelerometer::BMA425_CONFIGURATION_FILE);
     let image = writer.build();
     crate::check_image(&image)?;
     Ok(image)

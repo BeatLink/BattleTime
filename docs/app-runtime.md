@@ -176,7 +176,7 @@ Each kind of section appears at most once:
 | 9 | Fonts | The shared library's text font, or the dot-matrix font of an app that uses it; see [Fonts](#fonts). |
 | 10 | Functions | Optional. Up to 256 functions, the same layout as expressions. Each function's bytes start with its argument count, its result count (0 or 1) and how many locals it uses, then its code. |
 | 11 | Launcher | Optional. 2 bytes: the string naming the launcher group the app declares. |
-| 12 | Data | The shared library only. Files the firmware reads, laid out as resources: number 0 is Bosch's configuration for a BMA421 accelerometer and 1 for a BMA425, in `LibraryData` order. |
+| 12 | Data | Optional. Files laid out as resources, read by number with `AppImage::data`; no image carries any today. |
 | 13 | Facts | Every image, last. 12 bytes: the heap the app needs while open (4), what it adds to a launcher's list (4), a flags byte (bit 0: it shows the list of apps; bit 1: it reads the app list, so the shell keeps its full list while it is open), then 3 spare bytes. `ImageWriter` works them out from the finished image, and the package manager checks them against its own analysis at install. |
 
 A list of apps never reads an image whole. `battletime_packages::image_reader` reads the header and
@@ -262,7 +262,6 @@ It is itself an image of kind 2, checked by the same verifier as an app.
 | Images | The icons, each a 32 by 32 mask, numbered in the order of `ICON_NAMES` in `compiler/src/types.rs`. |
 | Font | The one font every text size is drawn from; see [Fonts](#fonts). |
 | Functions | Bytecode for common work, compiled from `sdk/battletime/src/lib.ts` and numbered in the order of `LIBRARY_FUNCTIONS` in `compiler/src/shared_functions.rs`. |
-| Data | The accelerometers' configuration files, for the firmware alone. |
 
 An app calls a library function with `call library`, which costs 5 bytes in place of the function's
 body. Library code takes only its arguments and system values; text it gives back is copied into

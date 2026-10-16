@@ -1,9 +1,9 @@
 //! Driver for the PineTime's Bosch BMA421 or BMA425 accelerometer, on I2C address 0x18.
 //!
 //! The chip counts steps by itself once Bosch's configuration file for it has been uploaded, so the
-//! watch only reads the count. The files are not built into the firmware: the shared library
-//! carries them, and `start` takes them from the caller. The `configuration-files` feature gives
-//! them to the compiler, which puts them in the library. Acceleration is read on demand, turned to the watch's own axes, and
+//! watch only reads the count. The files are not built into the firmware: each lives on the external
+//! flash at its chip's `configuration_path`, and `start` takes it from the caller. The
+//! `configuration-files` feature gives them to the tools that put them there. Acceleration is read on demand, turned to the watch's own axes, and
 //! `shake::ShakeDetector` finds shakes in those readings, while `wake_gestures::WakeGestureDetector`
 //! finds a raised or lowered wrist and a shake strong enough to wake the screen.
 
@@ -82,6 +82,9 @@ pub const BMA421_CONFIGURATION_FILE: &[u8] = include_bytes!("configuration/bma42
 #[cfg(any(test, feature = "configuration-files"))]
 pub const BMA425_CONFIGURATION_FILE: &[u8] = include_bytes!("configuration/bma425.bin");
 
+pub const BMA421_CONFIGURATION_PATH: &str = "/system/accelerometer/bma421";
+pub const BMA425_CONFIGURATION_PATH: &str = "/system/accelerometer/bma425";
+
 /// The configuration files `start` can upload, each where the caller found it, or none.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Configurations<'files> {
@@ -101,6 +104,14 @@ impl ChipModel {
         match self {
             ChipModel::Bma421 => BMA421_CHIP_ID,
             ChipModel::Bma425 => BMA425_CHIP_ID,
+        }
+    }
+
+    /// Where the chip's configuration file lives on the watch's external flash.
+    pub fn configuration_path(self) -> &'static str {
+        match self {
+            ChipModel::Bma421 => BMA421_CONFIGURATION_PATH,
+            ChipModel::Bma425 => BMA425_CONFIGURATION_PATH,
         }
     }
 

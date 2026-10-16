@@ -16,10 +16,10 @@ use core::{
 use battletime_accelerometer::{
     shake::ShakeDetector,
     wake_gestures::{WakeGestureDetector, Watching},
-    Accelerometer, Configurations, Error, Settings,
+    Accelerometer, ChipModel, Configurations, Error, Settings,
 };
 use battletime_app_host::wake::WakeGestures;
-use battletime_runtime::{AppImage, LibraryData, SystemValue, Value};
+use battletime_runtime::{SystemValue, Value};
 use battletime_steps::{DayChange, StepHistory, HOURS_PER_DAY};
 use embassy_futures::select::{select3, Either3};
 use embassy_sync::{
@@ -32,7 +32,7 @@ use embassy_sync::{
 use embassy_time::{Delay, Duration, Instant, Timer};
 
 use crate::{
-    app_events, apps, clock,
+    app_events, clock,
     diagnostics::{self, Counter},
     foreground,
     storage_requests::{self, StorageRequest},
@@ -133,17 +133,6 @@ pub fn reset_trip() {
 }
 
 /// Starts or stops reading acceleration; `None` stops it, so the chip is read only for steps.
-/// The chips' configuration files from the shared library inside the firmware, or none in a build without one.
-fn configurations() -> Configurations<'static> {
-    let Some(library) = apps::shared_library().and_then(|bytes| AppImage::parse(bytes).ok()) else {
-        return Configurations::default();
-    };
-    Configurations {
-        bma421: library.data(LibraryData::Bma421Configuration as u16),
-        bma425: library.data(LibraryData::Bma425Configuration as u16),
-    }
-}
-
 pub fn read_acceleration_every(period_in_milliseconds: Option<Value>) {
     let period = period_in_milliseconds.map_or(0, |period| period.clamp(1, u32::MAX as Value) as u32);
     if READING_PERIOD_IN_MILLISECONDS.swap(period, Ordering::Relaxed) != period {
@@ -340,27 +329,62 @@ pub fn set_day(days_back: usize, hours: [u16; HOURS_PER_DAY]) {
 // The task
 // ============================================================================
 
+/// How long the step counter waits before looking for its configuration file again.
+const CONFIGURATION_RETRY: Duration = Duration::from_secs(60);
+
+/// Starts the chip with its configuration file from the external flash, waiting while the file is missing, which
+/// only stops step counting; gives false if the chip itself failed.
+// Out of line, so the 6 KB file's box and this loop's state stay off the task's reading loop.
+#[inline(never)]
+async fn start_accelerometer(accelerometer: &mut Accelerometer<I2cDeviceOnBus>) -> bool {
+    loop {
+        // With no files given, starting finds which chip it is, so only that chip's file is read.
+        let chip_model = match accelerometer
+            .start(Settings::DEFAULT, &mut Delay, Configurations::default())
+            .await
+        {
+            Err(Error::NoConfiguration { chip_model }) => chip_model,
+            _ => {
+                diagnostics::set(Counter::AccelerometerState, 2);
+                return false;
+            }
+        };
+        crate::about::note_accelerometer_chip(chip_model.chip_id());
+        if let Some(file) = storage_requests::read_whole_file(chip_model.configuration_path()).await {
+            let configurations = match chip_model {
+                ChipModel::Bma421 => Configurations {
+                    bma421: Some(&file),
+                    bma425: None,
+                },
+                ChipModel::Bma425 => Configurations {
+                    bma421: None,
+                    bma425: Some(&file),
+                },
+            };
+            return match accelerometer
+                .start(Settings::DEFAULT, &mut Delay, configurations)
+                .await
+            {
+                Ok(_) => true,
+                Err(_) => {
+                    diagnostics::set(Counter::AccelerometerState, 2);
+                    false
+                }
+            };
+        }
+        diagnostics::set(Counter::AccelerometerState, 4);
+        Timer::after(CONFIGURATION_RETRY).await;
+    }
+}
+
 #[embassy_executor::task]
 pub async fn run_accelerometer(i2c_device: I2cDeviceOnBus) {
     crate::tasks::name_this_task("motion");
     start_history().await;
     touch::STARTED.wait().await;
     let mut accelerometer = Accelerometer::new(i2c_device);
-    match accelerometer
-        .start(Settings::DEFAULT, &mut Delay, configurations())
-        .await
-    {
-        Ok(chip_model) => crate::about::note_accelerometer_chip(chip_model.chip_id()),
-        // The library comes only with a firmware update, so a build without one never counts steps.
-        Err(Error::NoConfiguration { chip_model }) => {
-            crate::about::note_accelerometer_chip(chip_model.chip_id());
-            diagnostics::set(Counter::AccelerometerState, 4);
-            return;
-        }
-        Err(_) => {
-            diagnostics::set(Counter::AccelerometerState, 2);
-            return;
-        }
+    if !start_accelerometer(&mut accelerometer).await {
+        return;
     }
     diagnostics::set(Counter::AccelerometerState, 1);
     let mut shakes = ShakeDetector::new();

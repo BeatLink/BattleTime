@@ -605,7 +605,7 @@ fn reads_the_launcher_group_an_app_declares() {
 }
 
 #[test]
-fn reads_the_files_the_shared_library_carries_for_the_firmware() {
+fn reads_the_files_an_image_carries_by_number() {
     let mut writer = crate::writer::ImageWriter::new("battletime.shared", "Library", AppKind::Library, 2);
     writer.data(&[1, 2, 3]);
     writer.data(&[4; 6144]);
@@ -613,16 +613,8 @@ fn reads_the_files_the_shared_library_carries_for_the_firmware() {
 
     let image = AppImage::parse(&bytes).unwrap();
 
-    assert_eq!(
-        image.data(LibraryData::Bma421Configuration as u16),
-        Some(&[1, 2, 3][..])
-    );
-    assert_eq!(
-        image
-            .data(LibraryData::Bma425Configuration as u16)
-            .map(<[u8]>::len),
-        Some(6144)
-    );
+    assert_eq!(image.data(0), Some(&[1, 2, 3][..]));
+    assert_eq!(image.data(1).map(<[u8]>::len), Some(6144));
     assert_eq!(image.data(2), None);
 }
 

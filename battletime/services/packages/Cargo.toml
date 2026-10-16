@@ -22,6 +22,7 @@ embassy-futures = "0.1"
 battletime-flash-store = { path = "../flash_store", features = ["ram-flash"] }
 battletime-runtime = { path = "../../runtime", features = ["writer"] }
 battletime-settings = { path = "../settings" }
+battletime-accelerometer = { path = "../../drivers/accelerometer", features = ["configuration-files"] }
 
 # Its argument parsing has tests, which `cargo test` runs.
 [[example]]

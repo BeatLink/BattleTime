@@ -15,15 +15,6 @@ use crate::widgets::WidgetProblem;
 pub const MAGIC: [u8; 4] = *b"NTAP";
 /// Version 2 added the facts section, which every image carries.
 pub const FORMAT_VERSION: u16 = 2;
-/// The files the shared library carries for the firmware, by their number in its data section.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LibraryData {
-    /// Bosch's configuration file for a BMA421 accelerometer.
-    Bma421Configuration = 0,
-    /// Bosch's configuration file for a BMA425 accelerometer.
-    Bma425Configuration = 1,
-}
-
 /// The longest launcher group id an app may declare, such as `games`.
 pub const MOST_GROUP_ID_BYTES: usize = 16;
 
@@ -735,7 +726,7 @@ impl<'image> AppImage<'image> {
         self.fonts.get(index)
     }
 
-    /// One of the shared library's files for the firmware, numbered as `LibraryData` says.
+    /// One of the files an image carries in its data section, by number.
     pub fn data(&self, index: u16) -> Option<&'image [u8]> {
         self.data.get(index)
     }

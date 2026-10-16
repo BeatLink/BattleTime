@@ -40,11 +40,23 @@ pub enum StorageRequest {
         path: &'static str,
         bytes: heapless::Vec<u8, SMALL_WRITE_BYTES>,
     },
+    /// Reads a whole file, checked against its checksum, and answers on `WHOLE_FILE`: none when it is missing,
+    /// damaged or the heap has no room for it.
+    ReadWholeFile(&'static str),
 }
 
 pub static REQUESTS: Channel<CriticalSectionRawMutex, StorageRequest, 2> = Channel::new();
 pub static FILE_ANSWERS: Channel<CriticalSectionRawMutex, Vec<Vec<u8>>, 1> = Channel::new();
 pub static STEPS_LOADED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+pub static WHOLE_FILE: Signal<CriticalSectionRawMutex, Option<Box<[u8]>>> = Signal::new();
+
+/// Asks the storage task for a whole file and waits for it.
+#[cfg_attr(not(with_shell), allow(dead_code))]
+pub async fn read_whole_file(path: &'static str) -> Option<Box<[u8]>> {
+    WHOLE_FILE.reset();
+    REQUESTS.send(StorageRequest::ReadWholeFile(path)).await;
+    WHOLE_FILE.wait().await
+}
 
 /// A file service command on its way to the storage task, on the heap so the request channel stays small.
 pub enum FileRequest {

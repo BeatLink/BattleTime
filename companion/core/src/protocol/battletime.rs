@@ -158,7 +158,7 @@ pub const DIAGNOSTIC_COUNTERS: [(&str, &str); 8] = [
     ("buttonPresses", "Button presses"),
     (
         "accelerometerState",
-        "Accelerometer (1 started, 2 failed, 3 read failed, 4 waiting for the shared library)",
+        "Accelerometer (1 started, 2 failed, 3 read failed, 4 waiting for its configuration file)",
     ),
 ];
 

@@ -1251,6 +1251,9 @@ impl Files {
             StorageRequest::WriteSmallFile { path, bytes } => {
                 let _ = FileAccess::write_file(store, path, &bytes).await;
             }
+            StorageRequest::ReadWholeFile(path) => {
+                storage_requests::WHOLE_FILE.signal(read_whole_file(store, path).await);
+            }
             // Only the step counter and the battery task ask for these, and the recovery firmware runs neither.
             #[cfg(not(with_shell))]
             StorageRequest::LoadSteps
@@ -1305,6 +1308,16 @@ impl Files {
 }
 
 /// The bytes of `length` from `offset` in a whole file, cut short at its end.
+/// A whole file read from the store, so its checksum is checked; none when missing, damaged or too large for the heap.
+async fn read_whole_file(store: &mut WatchStore, path: &str) -> Option<Box<[u8]>> {
+    let length = FileAccess::file_length(store, path).await.ok()??;
+    let mut bytes = alloc::vec::Vec::new();
+    bytes.try_reserve_exact(length).ok()?;
+    bytes.resize(length, 0);
+    let read = FileAccess::read_file(store, path, 0, &mut bytes).await.ok()??;
+    (read == length).then(|| bytes.into_boxed_slice())
+}
+
 fn part_of(bytes: &[u8], offset: usize, length: usize) -> &[u8] {
     let start = offset.min(bytes.len());
     &bytes[start..(start + length).min(bytes.len())]

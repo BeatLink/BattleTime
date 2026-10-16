@@ -138,7 +138,6 @@ name = "battletime-compiler"
 version = "0.1.0"
 dependencies = [
  "ab_glyph",
- "battletime-accelerometer",
  "battletime-runtime",
  "miniz_oxide 0.8.9",
  "oxc_allocator",

@@ -608,7 +608,7 @@ which dismisses it as Restart on the crash screen does.
 
 | Words | What they hold |
 |---|---|
-| 0 to 7 | Shell loops; what last woke the shell (1 touch, 2 button, 3 timer, 4 system values, 5 settings, 6 apps changed, 7 app event, 8 status page, 9 temporary app); whether the screen is lit; the touch panel's state; touch reports; touches sent; button presses; the accelerometer's state (4 while it waits for a shared library with its configuration). |
+| 0 to 7 | Shell loops; what last woke the shell (1 touch, 2 button, 3 timer, 4 system values, 5 settings, 6 apps changed, 7 app event, 8 status page, 9 temporary app); whether the screen is lit; the touch panel's state; touch reports; touches sent; button presses; the accelerometer's state (4 while it waits for its configuration file on the external flash). |
 | 8 to 21 | The last restart: `battletime_crash_record::last_restart_words`, the `RESETREAS` bits, the kind of crash (0 none, 1 panic, 2 HardFault, 3 out of memory), eight detail words and four words of the open app's id. Set once at start. |
 | 22, 23 | Microseconds the shell spent drawing apps, and the CPU spent sending to the display or waiting for a send to end, both counting round. |
 | 24, 25 | Sectors the flash store erased, and store calls the shell made while another task held the store. |

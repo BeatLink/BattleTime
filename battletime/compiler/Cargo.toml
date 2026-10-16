@@ -9,7 +9,6 @@ publish = false
 [dependencies]
 battletime-runtime = { path = "../runtime", features = ["writer"] }
 # Bosch's accelerometer configuration files, which the shared library carries for the firmware.
-battletime-accelerometer = { path = "../drivers/accelerometer", features = ["configuration-files"] }
 oxc_allocator = "=0.151.0"
 oxc_ast = "=0.151.0"
 oxc_parser = "=0.151.0"

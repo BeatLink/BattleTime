@@ -420,10 +420,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
 - [ ] **More phone data as inputs.** Weather, music, navigation and calls already reach apps as
   system values; others, such as the next calendar event, unread count or a game score, could
   join them, so many apps are only a layout bound to phone data.
-- [ ] **Accelerometer configuration out of the firmware.** Bosch's configuration takes 6 KB of
-  internal flash for each chip, 12 KB with both. Store it on external flash and send it to the
-  sensor in small chunks at boot, turning step counting off if the file is missing. Other options:
-  build in only one chip, or keep it in the shared library.
 - [ ] **Internal flash writes while Bluetooth runs.** Erasing an internal flash page stops the CPU
   for tens of milliseconds, so the radio can miss its connection events. Updating the shared
   library or filling the internal-flash cache while the watch runs needs erases timed between
