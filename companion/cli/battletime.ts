@@ -7,7 +7,7 @@
 import { openSession, DEFAULT_SCAN_MS } from './ble';
 import { ask, ASK_EXIT, ASK_TIMEOUT_MS, askUsage, requirePromptImage } from './commands/ask';
 import { debug, debugUsage } from './commands/debug';
-import { flash, flashUsage } from './commands/flash';
+import { flash, flashUsage, systemFiles, systemFilesUsage } from './commands/flash';
 import { launcher, launcherUsage } from './commands/launcher';
 import { qr, qrUsage } from './commands/qr';
 import { recovery, recoveryUsage } from './commands/recovery';
@@ -51,6 +51,8 @@ const USAGE = `battletime <command> [options]
 ${scanUsage}
 
 ${flashUsage}
+
+${systemFilesUsage}
 
 ${recoveryUsage}
 
@@ -123,6 +125,7 @@ function parse(argv: string[]): { args: string[]; options: Options } {
 const NEEDS_WATCH = new Set([
   'debug',
   'flash',
+  'system-files',
   'recovery',
   'notify',
   'find',
@@ -210,6 +213,10 @@ async function main(argv: string[]): Promise<number> {
           throw new Error('Give the firmware package to send.');
         }
         await session.holding(() => flash(session, rest[0]));
+        break;
+
+      case 'system-files':
+        await systemFiles(session);
         break;
 
       case 'recovery':

@@ -64,7 +64,22 @@ export async function flash(session: WatchSession, path: string): Promise<void> 
     },
   });
   if (confirmed) {
-    const written = await putMissingSystemFiles(await session.files());
-    if (written.length > 0) say(`Put ${written.join(', ')} on the watch.`);
+    await systemFiles(session).catch((error: unknown) =>
+      say(
+        `Could not put the system files: ${error instanceof Error ? error.message : String(error)}. ` +
+          'Run `battletime system-files`, or connect the companion app, which puts them.',
+      ),
+    );
   }
+}
+
+export const systemFilesUsage = `battletime system-files
+
+  Puts the files the firmware reads that are not apps, such as the
+  accelerometer's configuration, on the watch if it lacks them. Without its
+  configuration the watch counts no steps.`;
+
+export async function systemFiles(session: WatchSession): Promise<void> {
+  const written = await putMissingSystemFiles(await session.files());
+  say(written.length > 0 ? `Put ${written.join(', ')} on the watch.` : 'The watch has every system file.');
 }
