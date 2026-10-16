@@ -98,6 +98,37 @@ fn each_library_icon_shown_counts_as_held_and_an_apps_own_picture_does_not() {
 }
 
 #[test]
+fn a_paged_app_needs_its_resident_image_and_cache_or_what_opening_holds() {
+    let mut image = writer();
+    image.widget(WidgetKind::Column, 10, &[]);
+    for _ in 0..10 {
+        image.widget(WidgetKind::Label, 0, &[]);
+    }
+    for _ in 0..20 {
+        let mut code = CodeWriter::new();
+        for _ in 0..100 {
+            code.emit(Instruction::PushInt(1));
+        }
+        image.handler(code.finish().unwrap());
+    }
+    let bytes = image.build();
+    let parsed = AppImage::parse(&bytes).unwrap();
+    let need = estimate_memory_need(&parsed);
+
+    let whole = (bytes.len() as u32).div_ceil(4) * 4;
+    let resident = (crate::paging::resident_bytes(&parsed) as u32).div_ceil(4) * 4;
+    let cache = (crate::paging::cache_bytes(&parsed) as u32).div_ceil(4) * 4;
+    assert!(need.pages_code);
+    assert_eq!(need.image_bytes, resident + cache + CODE_CACHE_OVERHEAD_BYTES);
+    assert_eq!(need.opening_bytes, whole + resident);
+    let open = need.image_bytes + need.working_bytes + need.widget_bytes + need.text_bytes + need.icon_bytes;
+    assert_eq!(
+        need.total_bytes,
+        open.max(need.opening_bytes + need.working_bytes)
+    );
+}
+
+#[test]
 fn an_app_list_holds_icons_up_to_the_cap() {
     let mut image = writer();
     image.widget(WidgetKind::Column, 1, &[]);

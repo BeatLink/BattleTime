@@ -41,6 +41,10 @@ pub fn verify(image: &AppImage) -> Result<(), ImageError> {
 /// little stack can put on the heap.
 pub fn verify_with(image: &AppImage, functions: &mut CheckedFunctions) -> Result<(), ImageError> {
     *functions = CheckedFunctions::NONE;
+    // Its code is not here to check; the whole image it came from was checked before it was paged.
+    if image.is_paged() {
+        return Err(ImageError::Paged);
+    }
     for index in 0..image.function_count() {
         let block = CodeBlock::Function(index);
         let bad_header = ImageError::BadCode {

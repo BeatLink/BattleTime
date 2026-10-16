@@ -10,6 +10,7 @@ use battletime_companion::{
     NAVIGATION_VALUES, WEATHER_TEXTS, WEATHER_VALUES,
 };
 use battletime_runtime::events::SwipeDirection;
+use battletime_runtime::paging::{pages_code, resident_image};
 use battletime_runtime::{
     AppImage, EffectKind, Property, PropertySource, SystemValue, Value, WidgetKind, WidgetTree,
     DEFAULT_THEME, NONE,
@@ -76,6 +77,52 @@ pub struct TestWatch {
     face_chooser_returns_to: Option<String>,
 }
 
+/// Opens an app as the watch does: paged, its code read from its image file as it runs, when it has
+/// enough code for that, or whole.
+pub(crate) fn open_host(
+    image: &'static [u8],
+    library: &'static [u8],
+    saved: &[u8],
+    now: Value,
+    system: &mut FakeSystem,
+) -> Result<AppHost<'static>, OpenFailure> {
+    let parsed = AppImage::parse(image).map_err(|error| OpenFailure::CannotOpen(error.into()))?;
+    if !pages_code(&parsed) {
+        let mut host = AppHost::open_with_saved_state(image, DEFAULT_THEME, saved, now, system)
+            .map_err(OpenFailure::CannotOpen)?;
+        host.set_library(library, now, system)
+            .map_err(OpenFailure::CannotOpen)?;
+        return Ok(host);
+    }
+    let resident: &'static [u8] = Box::leak(
+        resident_image(image)
+            .map_err(|error| OpenFailure::CannotOpen(error.into()))?
+            .into_boxed_slice(),
+    );
+    let path = format!(
+        "/apps/{}/app.ntapp",
+        parsed.string(parsed.id_string).unwrap_or_default()
+    );
+    system.image_files.retain(|(held, _)| *held != path);
+    system.image_files.push((path.clone(), image));
+    let mut slot = None;
+    AppHost::open_paged_into(
+        &mut slot,
+        image,
+        resident,
+        &path,
+        Some(library),
+        DEFAULT_THEME,
+        saved,
+        now,
+        system,
+    )
+    .map_err(OpenFailure::CannotOpen)?;
+    let mut host = slot.ok_or(OpenFailure::CannotOpen(battletime_app_host::OpenError::NoScreens))?;
+    host.bring_to_front(now, system);
+    Ok(host)
+}
+
 impl TestWatch {
     /// Compiles `apps/<id>/app.tsx`, or else the shell's own `shell/<id>/app.tsx`, and opens it.
     pub fn open_app(id: &str) -> Result<TestWatch, OpenFailure> {
@@ -115,10 +162,7 @@ impl TestWatch {
         let image: &'static [u8] = Box::leak(image.into_boxed_slice());
         let library = shared_library()?;
         let now = system.now_in_milliseconds;
-        let mut host =
-            AppHost::open(image, DEFAULT_THEME, now, &mut system).map_err(OpenFailure::CannotOpen)?;
-        host.set_library(library, now, &mut system)
-            .map_err(OpenFailure::CannotOpen)?;
+        let host = open_host(image, library, &[], now, &mut system)?;
         system.app_name = host
             .image()
             .string(host.image().name_string)

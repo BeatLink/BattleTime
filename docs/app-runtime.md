@@ -511,6 +511,38 @@ embed it.
 4. It builds the nodes of the first screen, evaluates every expression once, lays the screen out
    and runs the screen's `onShow`.
 
+### Paged code
+
+An app whose [memory need](#memory) is smaller that way keeps its handlers' and functions' code on
+the external flash while it is open. `estimate_memory_need` works the need out both ways and
+`paging::pages_code` takes its choice: paged, the app holds a resident image and a code cache, but
+holds the whole image beside the resident one for a moment as it opens, so an app with little code
+or a small screen stays whole. Seven of the 66 apps and faces in the repository are paged, such as
+`about`, `fancy` and `omega-time`, saving up to 3 KB each.
+
+Opening a paged app takes these steps instead of the first and fourth above:
+
+1. The shell reads the whole image, and `paging::resident_image` copies everything but the code's
+   data into a resident image. Its handler and function tables stay, so every number still names
+   the same code, and a section of kind 14 says where their data lies in the image file.
+2. `AppHost::open_paged_into` verifies the whole image and works the bindings and subscriptions
+   out from it, with the shared library, keeps the resident image, and gives the interpreter a
+   `CodeCache` on the image file's path; then the derive subscriptions run.
+3. The shell frees the whole image, and only then does `bring_to_front` build the first screen, so
+   the whole image and the screen are never held together.
+
+The interpreter asks the cache for each handler or function as it starts running it, by its
+number. The cache holds as much as the longest one, and at least 1 KB, packed in the order it read
+them; when one does not fit it drops the least recently used. A function's caller is found again by
+its number when the call returns, so dropping any code but what is running is always safe, at the
+cost of reading it again. Each read is one DMA read through the image file's own open file,
+about 40 µs plus 1 µs a byte on the watch, and a second of the file's 4-byte CRC: code read from an image put at the same path,
+such as one the companion is uploading, fails the handler with `CodeUnreadable` rather than running.
+Expressions stay in the resident image, since the screen evaluates them all the time; they still
+call paged functions. The verifier refuses a resident image, and a paged app takes no library after
+it opens, since the bindings are worked out from the whole image. Closed apps that run in the
+background and the simulator open images whole.
+
 ### Events
 
 Touches and swipes reach the handlers the widgets name. A handler runs to the end, its changes are
@@ -796,7 +828,8 @@ size, so opening an app needs under 1 KB of stack. Each widget of the open scree
 128 B plus its text, and nodes hold only values, so drawing allocates nothing.
 
 `memory_need::estimate_memory_need` adds up an app's heap need from its image: the image itself,
-the working memory, the nodes of its largest screen, its text, and what a `TextFile`, `BitmapFile`,
+or for a [paged](#paged-code) app its resident image and code cache, or the whole image and the
+resident one together if opening holds more, the working memory, the nodes of its largest screen, its text, and what a `TextFile`, `BitmapFile`,
 `prefetch_file` or `open_folder` holds. An app that would not fit in the budget is refused when it
 is installed rather than failing when it opens; [memory-map.md](memory-map.md#how-much-heap-an-app-needs)
 lists each part.
@@ -820,6 +853,8 @@ any single byte of an image never panics. Its modules:
 | `events` | The fields each event carries, in the order handlers read them. |
 | `resources` | The app's images and the library's icons. |
 | `memory_need` | An app's heap need from its image. |
+| `paging` | The resident image of a paged app, and the code cache its interpreter reads code through. |
+| `library_icons` | The icons file the shared library's icons live in on the external flash. |
 | `text`, `pattern` | The calendar and number formatting, and the format patterns. |
 | `theme` | Theme colours, colour references and the presets. |
 | `writer` | Writes images and assembles bytecode with labels, for the compiler and tests; built only with the `writer` feature. |

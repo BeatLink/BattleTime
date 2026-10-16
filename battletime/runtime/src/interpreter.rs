@@ -12,10 +12,11 @@
 #[path = "array_work.rs"]
 mod array_work;
 
-use crate::image::{AppImage, Function};
+use crate::image::{AppImage, Function, FUNCTION_HEADER_BYTES};
 use crate::instruction::{
     decode, ArrayWork, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS,
 };
+use crate::paging::{CodeCache, CodeUnit};
 use crate::pattern;
 use crate::state::{read_packed, write_packed, AppState, Placement};
 use crate::text::{DateTime, TextReference, TextWriter, MOST_FIXED_PLACES};
@@ -113,6 +114,8 @@ pub enum Failure {
     CallsTooDeep,
     /// The code called the shared library before the host was given one.
     NoLibrary,
+    /// A paged app's code could not be read from its image file.
+    CodeUnreadable,
 }
 
 // ============================================================================
@@ -185,6 +188,52 @@ enum JumpTo {
     },
 }
 
+/// The code a run starts with: an expression's or a handler's that is here, or a paged handler.
+#[derive(Clone, Copy)]
+enum TopCode<'code> {
+    Here(&'code [u8]),
+    Handler(u16),
+}
+
+/// Why a piece of code stopped running: it ended, or it called a function.
+enum Transfer {
+    Return,
+    /// The function, and where the caller carries on.
+    Call(u8, usize),
+    CallLibrary {
+        function: u16,
+        arguments: u8,
+        results: u8,
+        return_offset: usize,
+    },
+}
+
+/// A paged piece of code, through the cache; a paged image run without one has no code to run.
+fn paged_code<'cache>(
+    cache: &'cache mut Option<&mut CodeCache>,
+    image: &AppImage,
+    unit: CodeUnit,
+    system: &impl SystemValues,
+) -> Result<&'cache [u8], Failure> {
+    cache
+        .as_deref_mut()
+        .ok_or(Failure::NoSuchCode)?
+        .code(image, unit, system)
+}
+
+/// A paged function's header, read from its bytes.
+fn function_header(bytes: &[u8]) -> Result<Function<'static>, Failure> {
+    match bytes {
+        [argument_count, result_count, local_count, ..] => Ok(Function {
+            argument_count: *argument_count,
+            result_count: *result_count,
+            local_count: *local_count,
+            code: &[],
+        }),
+        _ => Err(Failure::NoSuchCode),
+    }
+}
+
 /// Which code is running: the expression or handler itself, one of the app's functions, or one of
 /// the shared library's.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -242,6 +291,8 @@ pub struct Interpreter {
     scratch_used: usize,
     copies: [WorkingCopy; MOST_CHANGED_VARIABLES],
     copy_count: usize,
+    /// A paged app's code read from its image file; none for an image that holds its code.
+    code_cache: Option<Box<CodeCache>>,
 }
 
 /// Room for working copies of changed variables, none until `allot_scratch`.
@@ -320,7 +371,18 @@ impl Interpreter {
                 length: 0,
             }; MOST_CHANGED_VARIABLES],
             copy_count: 0,
+            code_cache: None,
         }
+    }
+
+    /// Gives the interpreter the cache a paged image's code is read through.
+    pub fn set_code_cache(&mut self, cache: Option<Box<CodeCache>>) {
+        self.code_cache = cache;
+    }
+
+    /// The code cache, if the image is paged.
+    pub fn code_cache(&self) -> Option<&CodeCache> {
+        self.code_cache.as_deref()
     }
 
     /// Sets the row of a Repeat that the next calls run for; 0 outside one.
@@ -358,7 +420,7 @@ impl Interpreter {
             system,
             outcome: None,
         };
-        self.run(code, call)?;
+        self.run(TopCode::Here(code), call)?;
 
         if self.depth != 1 {
             return Err(Failure::WrongResultCount);
@@ -403,7 +465,11 @@ impl Interpreter {
         event_texts: &[&str],
         system: &impl SystemValues,
     ) -> Result<HandlerOutcome, Failure> {
-        let code = image.handler_code(handler).ok_or(Failure::NoSuchCode)?;
+        let top = match image.handler_code(handler) {
+            Some(code) => TopCode::Here(code),
+            None if image.handler_place(handler).is_some() => TopCode::Handler(handler),
+            None => return Err(Failure::NoSuchCode),
+        };
         let mut outcome = HandlerOutcome::empty();
         let call = Call {
             image,
@@ -414,7 +480,7 @@ impl Interpreter {
             system,
             outcome: Some(&mut outcome),
         };
-        self.run(code, call)?;
+        self.run(top, call)?;
 
         if self.depth != 0 {
             return Err(Failure::WrongResultCount);
@@ -447,7 +513,7 @@ impl Interpreter {
         }
     }
 
-    fn run<System: SystemValues>(&mut self, top_code: &[u8], mut call: Call<System>) -> Result<(), Failure> {
+    fn run<System: SystemValues>(&mut self, top: TopCode, mut call: Call<System>) -> Result<(), Failure> {
         self.depth = 0;
         self.stack_floor = 0;
         self.text_used = 0;
@@ -457,64 +523,120 @@ impl Interpreter {
         self.local_count = MOST_LOCALS;
         self.locals[..MOST_LOCALS].fill(0);
         self.frame_count = 0;
+        // Out of `self` while the code runs, so the code it holds can be read while the interpreter changes.
+        let mut cache = self.code_cache.take();
+        let result = self.run_code(top, &mut call, cache.as_deref_mut());
+        self.code_cache = cache;
+        result
+    }
+
+    /// Runs code until the top ends, finding each piece through the cache when the image is paged.
+    fn run_code<System: SystemValues>(
+        &mut self,
+        top: TopCode,
+        call: &mut Call<System>,
+        mut cache: Option<&mut CodeCache>,
+    ) -> Result<(), Failure> {
         let image = call.image;
         let library = call.library;
-        let mut code = top_code;
         let mut running = Running::Top;
         let mut offset = 0;
         let mut steps: u32 = 0;
 
         loop {
-            if offset >= code.len() {
-                let Some(frame) = self.leave_function()? else {
-                    return Ok(());
-                };
-                running = frame.caller;
-                code = match frame.caller {
-                    Running::Top => top_code,
-                    Running::App(caller) => image.function(caller as u16).ok_or(Failure::NoSuchCode)?.code,
-                    Running::Library(caller) => {
-                        library
-                            .and_then(|library| library.function(caller))
-                            .ok_or(Failure::NoSuchCode)?
-                            .code
+            let code = match running {
+                Running::Top => match top {
+                    TopCode::Here(code) => code,
+                    TopCode::Handler(handler) => {
+                        paged_code(&mut cache, image, CodeUnit::Handler(handler), call.system)?
                     }
-                };
-                offset = frame.return_offset as usize;
-                continue;
-            }
-            steps += 1;
-            if steps > MOST_STEPS {
-                return Err(Failure::TooManySteps);
-            }
-            let (instruction, next_offset) = decode(code, offset).map_err(|_| Failure::BadInstruction)?;
+                },
+                Running::App(function) => match image.function(function as u16) {
+                    Some(function) => function.code,
+                    None => paged_code(&mut cache, image, CodeUnit::Function(function), call.system)?
+                        .get(FUNCTION_HEADER_BYTES..)
+                        .ok_or(Failure::NoSuchCode)?,
+                },
+                Running::Library(function) => {
+                    library
+                        .and_then(|library| library.function(function))
+                        .ok_or(Failure::NoSuchCode)?
+                        .code
+                }
+            };
             let in_library = matches!(running, Running::Library(_));
             let code_image = match in_library {
                 true => library.ok_or(Failure::NoSuchCode)?,
                 false => image,
             };
-            offset = match self.execute(instruction, &mut call, code_image, in_library)? {
-                None => next_offset,
-                Some(JumpTo::Forward(distance)) => next_offset + distance as usize,
-                Some(JumpTo::Back(distance)) => next_offset
-                    .checked_sub(distance as usize)
-                    .ok_or(Failure::BadInstruction)?,
+
+            // Runs this piece of code until it ends or calls another.
+            let transfer = loop {
+                if offset >= code.len() {
+                    break Transfer::Return;
+                }
+                steps += 1;
+                if steps > MOST_STEPS {
+                    return Err(Failure::TooManySteps);
+                }
+                let (instruction, next_offset) = decode(code, offset).map_err(|_| Failure::BadInstruction)?;
+                offset = match self.execute(instruction, call, code_image, in_library)? {
+                    None => next_offset,
+                    Some(JumpTo::Forward(distance)) => next_offset + distance as usize,
+                    Some(JumpTo::Back(distance)) => next_offset
+                        .checked_sub(distance as usize)
+                        .ok_or(Failure::BadInstruction)?,
+                    Some(JumpTo::Call(callee)) => break Transfer::Call(callee, next_offset),
+                    Some(JumpTo::CallLibrary {
+                        function,
+                        arguments,
+                        results,
+                    }) => {
+                        break Transfer::CallLibrary {
+                            function,
+                            arguments,
+                            results,
+                            return_offset: next_offset,
+                        }
+                    }
+                };
+            };
+
+            match transfer {
+                Transfer::Return => {
+                    let Some(frame) = self.leave_function()? else {
+                        return Ok(());
+                    };
+                    running = frame.caller;
+                    offset = frame.return_offset as usize;
+                }
                 // A call from library code is to another of the library's functions.
-                Some(JumpTo::Call(callee)) => {
-                    let function = code_image.function(callee as u16).ok_or(Failure::NoSuchCode)?;
-                    self.enter_function(function, running, next_offset)?;
+                Transfer::Call(callee, return_offset) => {
+                    let function = match in_library {
+                        true => code_image.function(callee as u16).ok_or(Failure::NoSuchCode)?,
+                        false => match image.function(callee as u16) {
+                            Some(function) => function,
+                            None => function_header(paged_code(
+                                &mut cache,
+                                image,
+                                CodeUnit::Function(callee),
+                                call.system,
+                            )?)?,
+                        },
+                    };
+                    self.enter_function(function, running, return_offset)?;
                     running = match in_library {
                         true => Running::Library(callee as u16),
                         false => Running::App(callee),
                     };
-                    code = function.code;
-                    0
+                    offset = 0;
                 }
-                Some(JumpTo::CallLibrary {
+                Transfer::CallLibrary {
                     function: callee,
                     arguments,
                     results,
-                }) => {
+                    return_offset,
+                } => {
                     let function = library
                         .ok_or(Failure::NoLibrary)?
                         .function(callee)
@@ -522,12 +644,11 @@ impl Interpreter {
                             function.argument_count == arguments && function.result_count == results
                         })
                         .ok_or(Failure::NoSuchCode)?;
-                    self.enter_function(function, running, next_offset)?;
+                    self.enter_function(function, running, return_offset)?;
                     running = Running::Library(callee);
-                    code = function.code;
-                    0
+                    offset = 0;
                 }
-            };
+            }
         }
     }
 

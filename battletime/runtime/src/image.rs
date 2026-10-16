@@ -35,6 +35,9 @@ pub mod layout {
     pub const RESOURCES_SECTION: u16 = 7;
     pub const LAUNCHER_SECTION: u16 = 11;
     pub const FACTS_SECTION: u16 = 13;
+    pub const PAGED_SECTION: u16 = 14;
+    /// Each paged section's number (2 bytes), 2 reserved, where its data starts in the whole image (4) and its length (4).
+    pub const PAGED_ENTRY_BYTES: usize = 12;
     /// The facts section's length: two 4-byte numbers, a flags byte and three spare bytes.
     pub const FACTS_BYTES: usize = 12;
 }
@@ -52,7 +55,7 @@ pub const MOST_STATE_VARIABLES: usize = 64;
 pub const MOST_FUNCTIONS: usize = 256;
 
 /// The bytes before a function's code: its argument count, result count and local count.
-const FUNCTION_HEADER_BYTES: usize = 3;
+pub(crate) const FUNCTION_HEADER_BYTES: usize = 3;
 
 // ============================================================================
 // Types
@@ -87,6 +90,9 @@ pub enum SectionKind {
     Data,
     /// What the compiler worked out about the image, so a list of apps never reads it whole.
     Facts,
+    /// Only in an image the watch keeps in RAM while the app is open: which sections' data was left
+    /// in the image file, and where, so their code is read when it runs; see `paging`.
+    Paged,
 }
 
 impl SectionKind {
@@ -106,6 +112,7 @@ impl SectionKind {
             11 => Launcher,
             12 => Data,
             13 => Facts,
+            14 => Paged,
             _ => return None,
         })
     }
@@ -212,6 +219,8 @@ pub enum ImageError {
     },
     /// Every image carries a facts section of `layout::FACTS_BYTES`.
     BadFacts,
+    /// An image whose code was left on the flash, which only the app host's paging reads and nothing installs.
+    Paged,
 }
 
 /// Which piece of code a problem was found in.
@@ -350,15 +359,90 @@ impl<'image> EntryTable<'image> {
         Ok(table)
     }
 
-    fn get(&self, index: u16) -> Option<&'image [u8]> {
+    /// A table whose entries are here and whose data, `paged.length` bytes, was left in the image file.
+    fn parse_paged(count: u16, bytes: &'image [u8], paged: CodePlace) -> Result<Self, ImageError> {
+        let entries = bytes
+            .get(..count as usize * TABLE_ENTRY_BYTES)
+            .ok_or(ImageError::TableOutOfBounds)?;
+        let table = EntryTable {
+            count,
+            entries,
+            data: &[],
+        };
+        for index in 0..count {
+            let (start, length) = table.range(index).ok_or(ImageError::TableOutOfBounds)?;
+            if start + length > paged.length as usize {
+                return Err(ImageError::TableOutOfBounds);
+            }
+        }
+        Ok(table)
+    }
+
+    /// An entry's start and length within the data.
+    fn range(&self, index: u16) -> Option<(usize, usize)> {
         if index >= self.count {
             return None;
         }
         let entry_start = index as usize * TABLE_ENTRY_BYTES;
         let start = read_u16(self.entries, entry_start)? as usize;
         let length = read_u16(self.entries, entry_start + 2)? as usize;
+        Some((start, length))
+    }
+
+    fn get(&self, index: u16) -> Option<&'image [u8]> {
+        let (start, length) = self.range(index)?;
         self.data.get(start..start + length)
     }
+
+    /// Where an entry lies in the whole image, when the table's data was left there starting at `data_at`.
+    fn place(&self, index: u16, data_at: u32) -> Option<CodePlace> {
+        let (start, length) = self.range(index)?;
+        Some(CodePlace {
+            at: data_at + start as u32,
+            length: length as u32,
+        })
+    }
+}
+
+/// Where some bytes lie in the whole image file: their offset from its start, and how many.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CodePlace {
+    pub at: u32,
+    pub length: u32,
+}
+
+/// The sections whose data an image the watch keeps in RAM left in the image file.
+#[derive(Clone, Copy, Default)]
+struct PagedPlaces {
+    handlers: Option<CodePlace>,
+    functions: Option<CodePlace>,
+}
+
+/// Reads the paged section, if the image has one; only handlers and functions may be paged.
+fn paged_places(bytes: &[u8], section_count: u16) -> Result<PagedPlaces, ImageError> {
+    let mut places = PagedPlaces::default();
+    for section_index in 0..section_count as usize {
+        let entry = HEADER_BYTES + section_index * SECTION_ENTRY_BYTES;
+        if read_u16(bytes, entry) != Some(layout::PAGED_SECTION) {
+            continue;
+        }
+        let count = read_u16(bytes, entry + 2).ok_or(ImageError::SectionOutOfBounds)? as usize;
+        let offset = read_u32(bytes, entry + 4).ok_or(ImageError::SectionOutOfBounds)? as usize;
+        for paged in 0..count {
+            let at = offset + paged * layout::PAGED_ENTRY_BYTES;
+            let number = read_u16(bytes, at).ok_or(ImageError::SectionOutOfBounds)?;
+            let place = Some(CodePlace {
+                at: read_u32(bytes, at + 4).ok_or(ImageError::SectionOutOfBounds)?,
+                length: read_u32(bytes, at + 8).ok_or(ImageError::SectionOutOfBounds)?,
+            });
+            match SectionKind::from_number(number) {
+                Some(SectionKind::Handlers) => places.handlers = place,
+                Some(SectionKind::Functions) => places.functions = place,
+                _ => return Err(ImageError::UnknownSection(number)),
+            }
+        }
+    }
+    Ok(places)
 }
 
 // ============================================================================
@@ -390,6 +474,9 @@ pub struct AppImage<'image> {
     fonts: EntryTable<'image>,
     functions: EntryTable<'image>,
     data: EntryTable<'image>,
+    /// Where the handlers' and functions' data starts in the whole image when it was left there; 0 when it is here.
+    paged_handlers_at: u32,
+    paged_functions_at: u32,
     /// What the compiler worked out about the image; `parse` reads them but does not check them.
     pub facts: Facts,
 }
@@ -478,9 +565,14 @@ impl<'image> AppImage<'image> {
             fonts: EntryTable::default(),
             functions: EntryTable::default(),
             data: EntryTable::default(),
+            paged_handlers_at: 0,
+            paged_functions_at: 0,
             facts: Facts::default(),
         };
 
+        let paged = paged_places(bytes, section_count)?;
+        image.paged_handlers_at = paged.handlers.map_or(0, |place| place.at);
+        image.paged_functions_at = paged.functions.map_or(0, |place| place.at);
         let mut seen_sections = 0u32;
         for section_index in 0..section_count as usize {
             let entry = HEADER_BYTES + section_index * SECTION_ENTRY_BYTES;
@@ -503,7 +595,12 @@ impl<'image> AppImage<'image> {
                 SectionKind::Strings => image.strings = EntryTable::parse(count, section_bytes)?,
                 SectionKind::State => image.read_state_section(count, section_bytes)?,
                 SectionKind::Expressions => image.expressions = EntryTable::parse(count, section_bytes)?,
-                SectionKind::Handlers => image.handlers = EntryTable::parse(count, section_bytes)?,
+                SectionKind::Handlers => {
+                    image.handlers = match paged.handlers {
+                        Some(place) => EntryTable::parse_paged(count, section_bytes, place)?,
+                        None => EntryTable::parse(count, section_bytes)?,
+                    }
+                }
                 SectionKind::Widgets => image.widgets = EntryTable::parse(count, section_bytes)?,
                 SectionKind::InitialValues => image.initial_values = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Subscriptions => {
@@ -518,7 +615,10 @@ impl<'image> AppImage<'image> {
                     if count as usize > MOST_FUNCTIONS {
                         return Err(ImageError::TableOutOfBounds);
                     }
-                    image.functions = EntryTable::parse(count, section_bytes)?
+                    image.functions = match paged.functions {
+                        Some(place) => EntryTable::parse_paged(count, section_bytes, place)?,
+                        None => EntryTable::parse(count, section_bytes)?,
+                    }
                 }
                 SectionKind::Data => image.data = EntryTable::parse(count, section_bytes)?,
                 SectionKind::Launcher => {
@@ -527,6 +627,8 @@ impl<'image> AppImage<'image> {
                 SectionKind::Facts => {
                     image.facts = Facts::from_bytes(section_bytes).ok_or(ImageError::BadFacts)?
                 }
+                // Read before the rest, by `paged_places`.
+                SectionKind::Paged => {}
             }
         }
         if seen_sections & (1 << layout::FACTS_SECTION) == 0 {
@@ -670,6 +772,44 @@ impl<'image> AppImage<'image> {
 
     pub fn function_count(&self) -> u16 {
         self.functions.count
+    }
+
+    /// Whether the image's code was left in the image file, so it runs only through a `CodeCache`.
+    pub fn is_paged(&self) -> bool {
+        self.paged_handlers_at != 0 || self.paged_functions_at != 0
+    }
+
+    /// Where a paged handler's code lies in the whole image; none when the handlers are here.
+    pub fn handler_place(&self, index: u16) -> Option<CodePlace> {
+        match self.paged_handlers_at {
+            0 => None,
+            at => self.handlers.place(index, at),
+        }
+    }
+
+    /// Where a paged function's header and code lie in the whole image; none when the functions are here.
+    pub fn function_place(&self, index: u16) -> Option<CodePlace> {
+        match self.paged_functions_at {
+            0 => None,
+            at => self.functions.place(index, at),
+        }
+    }
+
+    /// The bytes of every handler's code and every function's header and code together, in a whole image.
+    pub fn code_bytes(&self) -> usize {
+        self.handlers.data.len() + self.functions.data.len()
+    }
+
+    /// The longest handler, or function with its header, which a `CodeCache` must hold at once.
+    pub fn longest_code_bytes(&self) -> usize {
+        let longest = |table: &EntryTable| {
+            (0..table.count)
+                .filter_map(|index| table.range(index))
+                .map(|(_, length)| length)
+                .max()
+                .unwrap_or(0)
+        };
+        longest(&self.handlers).max(longest(&self.functions))
     }
 
     /// A function's header and code; none when it is missing or shorter than its header.

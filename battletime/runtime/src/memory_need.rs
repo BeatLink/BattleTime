@@ -7,6 +7,7 @@ use crate::image::AppImage;
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue};
 use crate::interpreter::scratch_bytes_for;
 use crate::library_icons::{held_icon_bytes, HELD_ICONS_MOST_BYTES, LIBRARY_ICON_MOST_BYTES};
+use crate::paging::{cache_bytes, resident_bytes};
 use crate::resources::{library_image_named_by, ImageReference};
 use crate::widgets::{Property, PropertySource, WidgetKind, WidgetTree, DEEPEST_NESTING, MOST_WIDGETS};
 
@@ -37,6 +38,9 @@ pub const TEXT_FILE_BYTES: u32 = 2_560;
 
 /// A BitmapFile's picture, held while its screen is open.
 pub const BITMAP_FILE_BYTES: u32 = rounded(crate::widgets::BITMAP_FILE_MOST_BYTES as u32);
+
+/// What a paged app's code cache holds beside its code: the image file's path and the list of what it holds.
+pub const CODE_CACHE_OVERHEAD_BYTES: u32 = 160;
 
 /// The most bytes one `prefetch_file` reads ahead; an app that asks for one holds that much until a `file_bytes` takes it.
 pub const PREFETCH_BYTES: u32 = 4096;
@@ -89,8 +93,10 @@ const ALLOCATION_STEP: u32 = 4;
 /// An app's heap need, part by part, in bytes.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct MemoryNeed {
-    /// The image itself, which is read into the heap while the app is open.
+    /// The image itself while the app is open: the whole image, or for a paged app its resident image and code cache.
     pub image_bytes: u32,
+    /// For a paged app, the whole image and the resident image together, held for a moment while it opens.
+    pub opening_bytes: u32,
     /// The host's working memory, its subscriptions, its saved state, what drawing borrows, a file part read ahead and a folder listing.
     pub working_bytes: u32,
     /// The nodes of its largest screen.
@@ -99,12 +105,14 @@ pub struct MemoryNeed {
     pub text_bytes: u32,
     /// The shared library's icons those nodes show, held while the screen is open.
     pub icon_bytes: u32,
-    /// Everything above together.
+    /// Everything above together while the app is open, or what opening holds if that is more.
     pub total_bytes: u32,
     /// Whether it shows the launcher's list of apps, which costs more for each app turned on.
     pub lists_apps: bool,
     /// Whether it reads the installed apps, packages or launcher groups, so the shell keeps its full list while it is open.
     pub reads_app_list: bool,
+    /// Whether it is opened paged, keeping its code on the flash, because that needs less of the heap.
+    pub pages_code: bool,
 }
 
 /// Works out an app's heap need from its image.
@@ -123,21 +131,47 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
         }
     }
 
-    let image_bytes = rounded(image.byte_count() as u32);
-    let working_bytes = working_bytes_of(image);
-    let widget_bytes = NODE_BYTES * largest.node_count;
-    let text_bytes = largest.text_bytes;
-    let icon_bytes = icons_held_bytes(most_icons);
     let reads = system_values_read(image);
-    MemoryNeed {
-        image_bytes,
-        working_bytes,
-        widget_bytes,
-        text_bytes,
-        icon_bytes,
-        total_bytes: image_bytes + working_bytes + widget_bytes + text_bytes + icon_bytes,
+    let whole_bytes = rounded(image.byte_count() as u32);
+    let whole = MemoryNeed {
+        image_bytes: whole_bytes,
+        opening_bytes: 0,
+        working_bytes: working_bytes_of(image),
+        widget_bytes: NODE_BYTES * largest.node_count,
+        text_bytes: largest.text_bytes,
+        icon_bytes: icons_held_bytes(most_icons),
+        total_bytes: 0,
         lists_apps: largest.has_app_list || reads & bit_of(SystemValue::InstalledAppCount) != 0,
         reads_app_list: reads_app_list_from(image, reads),
+        pages_code: false,
+    }
+    .totalled();
+    if image.is_paged() || image.code_bytes() == 0 {
+        return whole;
+    }
+    // Paged, the app holds its resident image and code cache, but holds both images for a moment as it opens.
+    let resident = rounded(resident_bytes(image) as u32);
+    let paged = MemoryNeed {
+        image_bytes: resident + rounded(cache_bytes(image) as u32) + CODE_CACHE_OVERHEAD_BYTES,
+        opening_bytes: whole_bytes + resident,
+        pages_code: true,
+        ..whole
+    }
+    .totalled();
+    match paged.total_bytes < whole.total_bytes {
+        true => paged,
+        false => whole,
+    }
+}
+
+impl MemoryNeed {
+    fn totalled(self) -> MemoryNeed {
+        let open =
+            self.image_bytes + self.working_bytes + self.widget_bytes + self.text_bytes + self.icon_bytes;
+        MemoryNeed {
+            total_bytes: open.max(self.opening_bytes + self.working_bytes),
+            ..self
+        }
     }
 }
 

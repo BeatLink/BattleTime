@@ -250,6 +250,8 @@ pub struct FakeSystem {
     pub files: Vec<(String, Vec<u8>)>,
     /// Every line the app's effects sent the phone, newline included, as the firmware sends them.
     pub phone_lines: Vec<String>,
+    /// The image files of apps opened paged, by path, which their code is read from as it runs.
+    pub image_files: Vec<(String, &'static [u8])>,
     /// The folder the app last opened with `open_folder`, listed from `files`.
     pub folder: FolderListing,
     /// Set when the app opened a folder, so the watch tells the app once the call returns.
@@ -308,6 +310,7 @@ impl FakeSystem {
                 (STARTING_QR_LIST_PATH.to_string(), STARTING_QR_LIST.to_vec()),
             ],
             phone_lines: Vec::new(),
+            image_files: Vec::new(),
             folder: FolderListing::new(),
             folder_changed: false,
             face_chooser_wanted: false,
@@ -557,8 +560,10 @@ impl SystemValues for FakeSystem {
     }
 
     fn read_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
+        let image_file = self.image_files.iter().find(|(name, _)| name == path);
         let bytes = match self.files.iter().find(|(name, _)| name == path) {
             Some((_, bytes)) => bytes.as_slice(),
+            None if image_file.is_some() => image_file.map_or(&[][..], |(_, bytes)| bytes),
             // The icons the companion puts on every watch, unless a test gives its own.
             None if path == LIBRARY_ICONS_PATH => crate::sources::icons_file(),
             None => return None,

@@ -399,6 +399,116 @@ fn opening_an_image_draws_its_label() {
     assert!(system.failures.is_empty());
 }
 
+// ============================================================================
+// Paged apps
+// ============================================================================
+
+const PAGED_PATH: &str = "/apps/stopwatch/app.ntapp";
+
+/// Opens the stopwatch paged, its whole image served at `PAGED_PATH`, and shows it.
+fn open_paged<'image>(
+    slot: &mut Option<AppHost<'image>>,
+    whole: &[u8],
+    resident: &'image [u8],
+    system: &mut FakeSystem,
+) {
+    AppHost::open_paged_into(
+        slot,
+        whole,
+        resident,
+        PAGED_PATH,
+        None,
+        DEFAULT_THEME,
+        &[],
+        START_TIME,
+        system,
+    )
+    .unwrap();
+    slot.as_mut().unwrap().bring_to_front(START_TIME, system);
+}
+
+#[test]
+fn a_paged_app_draws_and_runs_its_handlers_as_the_whole_one_does() {
+    let whole = stopwatch_image();
+    let resident = battletime_runtime::paging::resident_image(&whole).unwrap();
+    let mut paged_system = FakeSystem {
+        files: alloc::vec![(String::from(PAGED_PATH), whole.clone())],
+        ..Default::default()
+    };
+    let mut slot = None;
+    open_paged(&mut slot, &whole, &resident, &mut paged_system);
+    let paged = slot.as_mut().unwrap();
+    let mut system = FakeSystem::default();
+    let mut host = AppHost::open(&whole, DEFAULT_THEME, START_TIME, &mut system).unwrap();
+
+    assert!(paged.image().is_paged());
+    for (host, system) in [(&mut *paged, &mut paged_system), (&mut host, &mut system)] {
+        click_on(host, stopwatch_widgets::START_BUTTON, START_TIME + 10, system);
+        host.tick(START_TIME + 2_000, system);
+    }
+    let mut paged_screen = FakeScreen::new();
+    let mut screen = FakeScreen::new();
+    paged.draw(&mut paged_screen).unwrap();
+    host.draw(&mut screen).unwrap();
+
+    assert_eq!(paged.state().get(0), host.state().get(0));
+    assert_eq!(
+        paged.widget_text(stopwatch_widgets::ELAPSED_LABEL),
+        host.widget_text(stopwatch_widgets::ELAPSED_LABEL)
+    );
+    assert!(paged_screen.pixels == screen.pixels);
+    assert!(paged_system.failures.is_empty());
+    assert!(paged_system.file_reads.get() > 0);
+}
+
+#[test]
+fn a_paged_app_whose_image_file_is_gone_reports_its_handler_failing() {
+    let whole = stopwatch_image();
+    let resident = battletime_runtime::paging::resident_image(&whole).unwrap();
+    let mut system = FakeSystem::default();
+    let mut slot = None;
+    open_paged(&mut slot, &whole, &resident, &mut system);
+    let host = slot.as_mut().unwrap();
+
+    click_on(
+        host,
+        stopwatch_widgets::START_BUTTON,
+        START_TIME + 10,
+        &mut system,
+    );
+
+    assert!(system.failures.iter().any(|failure| matches!(
+        failure,
+        AppFailure::Handler {
+            failure: battletime_runtime::Failure::CodeUnreadable,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn a_paged_app_takes_no_library_later() {
+    let whole = stopwatch_image();
+    let resident = battletime_runtime::paging::resident_image(&whole).unwrap();
+    let mut system = FakeSystem::default();
+    let mut slot = None;
+    open_paged(&mut slot, &whole, &resident, &mut system);
+
+    let library: &'static [u8] = std::boxed::Box::leak(
+        ImageWriter::new("shared", "Shared", AppKind::Library, 1)
+            .build()
+            .into_boxed_slice(),
+    );
+    let refused = slot
+        .as_mut()
+        .unwrap()
+        .set_library(library, START_TIME, &mut system);
+    assert!(matches!(
+        refused,
+        Err(OpenError::Image(battletime_runtime::ImageError::Paged))
+    ));
+}
+
 #[test]
 fn the_screen_is_laid_out_inside_the_display() {
     let image = stopwatch_image();

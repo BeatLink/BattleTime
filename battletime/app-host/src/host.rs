@@ -12,6 +12,7 @@ use battletime_runtime::{
         held_icon_bytes, icon_count, read_icon, HELD_ICONS_MOST_BYTES, LIBRARY_ICONS_PATH,
         LIBRARY_ICON_MOST_BYTES,
     },
+    paging::{cache_bytes, CodeCache},
     state::SaveBufferFull,
     subscriptions::{Subscription, SubscriptionKind},
     verify_with,
@@ -84,6 +85,8 @@ pub enum OpenError {
         needed: u16,
         installed: u16,
     },
+    /// The heap had no room for a paged app's code cache.
+    NoRoomForCode,
 }
 
 impl From<ImageError> for OpenError {
@@ -275,7 +278,7 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
     ) -> Result<Self, OpenError> {
         verify_image(image_bytes)?;
-        let mut host = Self::load(image_bytes, theme, saved_state, now, system)?;
+        let mut host = Self::load(image_bytes, None, theme, saved_state, now, system)?;
         host.run_derives(Inputs::NOTHING, true, now, system);
         host.bring_to_front(now, system);
         Ok(host)
@@ -294,7 +297,7 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
     ) -> Result<&'slot mut Self, OpenError> {
         verify_image(image_bytes)?;
-        Self::load_into(slot, image_bytes, theme, saved_state, now, system)?;
+        Self::load_into(slot, image_bytes, None, theme, saved_state, now, system)?;
         let host = slot.as_mut().ok_or(OpenError::NoScreens)?;
         // Derives run here, not inside the load, so the interpreter never runs below the load's large frame.
         host.run_derives(Inputs::NOTHING, true, now, system);
@@ -302,16 +305,102 @@ impl<'image> AppHost<'image> {
         Ok(host)
     }
 
+    /// Loads into `slot`, so the large host is built in place; `whole` as for `load`.
     #[inline(never)]
     fn load_into(
         slot: &mut Option<Self>,
         image_bytes: &'image [u8],
+        whole: Option<&AppImage>,
         theme: Theme,
         saved_state: &[u8],
         now: Value,
         system: &mut impl System,
     ) -> Result<(), OpenError> {
-        *slot = Some(Self::load(image_bytes, theme, saved_state, now, system)?);
+        *slot = Some(Self::load(image_bytes, whole, theme, saved_state, now, system)?);
+        Ok(())
+    }
+
+    /// Loads a paged app into `slot` without showing it: `whole` is checked and its bindings worked out,
+    /// then the host keeps only `resident`, which `paging::resident_image` made from it, and reads the
+    /// app's code from its image file at `path` as it runs.
+    ///
+    /// The caller frees `whole` before `bring_to_front`, so the whole image and the screen are never held together.
+    #[allow(clippy::too_many_arguments)]
+    pub fn open_paged_into<'slot>(
+        slot: &'slot mut Option<Self>,
+        whole: &[u8],
+        resident: &'image [u8],
+        path: &str,
+        library: Option<&'image [u8]>,
+        theme: Theme,
+        saved_state: &[u8],
+        now: Value,
+        system: &mut impl System,
+    ) -> Result<&'slot mut Self, OpenError> {
+        verify_image(whole)?;
+        Self::load_paged_into(
+            slot,
+            whole,
+            resident,
+            path,
+            library,
+            theme,
+            saved_state,
+            now,
+            system,
+        )?;
+        let host = slot.as_mut().ok_or(OpenError::NoScreens)?;
+        host.run_derives(Inputs::NOTHING, true, now, system);
+        Ok(host)
+    }
+
+    #[inline(never)]
+    #[allow(clippy::too_many_arguments)]
+    fn load_paged_into(
+        slot: &mut Option<Self>,
+        whole: &[u8],
+        resident: &'image [u8],
+        path: &str,
+        library: Option<&'image [u8]>,
+        theme: Theme,
+        saved_state: &[u8],
+        now: Value,
+        system: &mut impl System,
+    ) -> Result<(), OpenError> {
+        let whole_image = AppImage::parse(whole)?;
+        Self::load_into(
+            slot,
+            resident,
+            Some(&whole_image),
+            theme,
+            saved_state,
+            now,
+            system,
+        )?;
+        let host = slot.as_mut().ok_or(OpenError::NoScreens)?;
+        let opened = host.finish_paged_load(whole, &whole_image, path, library);
+        if opened.is_err() {
+            *slot = None;
+        }
+        opened
+    }
+
+    /// Gives a host loaded on a resident image its library and its code cache.
+    fn finish_paged_load(
+        &mut self,
+        whole: &[u8],
+        whole_image: &AppImage,
+        path: &str,
+        library: Option<&'image [u8]>,
+    ) -> Result<(), OpenError> {
+        if !self.image.is_paged() {
+            return Err(OpenError::Image(ImageError::Paged));
+        }
+        if let Some(library) = library {
+            self.attach_library(library, whole_image)?;
+        }
+        let cache = CodeCache::new(path, whole, cache_bytes(whole_image)).ok_or(OpenError::NoRoomForCode)?;
+        self.interpreter.set_code_cache(Some(Box::new(cache)));
         Ok(())
     }
 
@@ -324,7 +413,7 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
     ) -> Result<Self, OpenError> {
         verify_image(image_bytes)?;
-        let mut host = Self::load(image_bytes, theme, saved_state, now, system)?;
+        let mut host = Self::load(image_bytes, None, theme, saved_state, now, system)?;
         host.run_derives(Inputs::NOTHING, true, now, system);
         Ok(host)
     }
@@ -341,26 +430,30 @@ impl<'image> AppHost<'image> {
         system: &mut impl System,
     ) -> Result<&'slot mut Self, OpenError> {
         verify_image(image_bytes)?;
-        Self::load_into(slot, image_bytes, theme, saved_state, now, system)?;
+        Self::load_into(slot, image_bytes, None, theme, saved_state, now, system)?;
         let host = slot.as_mut().ok_or(OpenError::NoScreens)?;
         host.run_derives(Inputs::NOTHING, true, now, system);
         Ok(host)
     }
 
+    /// Loads an app without showing it; `whole` is the whole image when `image_bytes` is its resident image,
+    /// so the bindings and subscriptions are worked out from code the resident image leaves out.
     fn load(
         image_bytes: &'image [u8],
+        whole: Option<&AppImage>,
         theme: Theme,
         saved_state: &[u8],
         now: Value,
         system: &mut impl System,
     ) -> Result<Self, OpenError> {
         let image = AppImage::parse(image_bytes)?;
+        let analysed = whole.copied().unwrap_or(image);
         // The state and bindings hold the image's variables and expressions on the heap, sized to it.
         let mut state = AppState::new(&image)?;
         if !saved_state.is_empty() {
             state.load_persistent(&image, saved_state);
         }
-        let bindings = Bindings::load(&image)?;
+        let bindings = Bindings::load(&analysed)?;
         // Made a constant, so the box is filled from flash rather than from a 1 KB copy on the stack.
         let mut interpreter = Box::new(const { Interpreter::without_scratch() });
         interpreter.allot_scratch(battletime_runtime::interpreter::scratch_bytes_for(&image));
@@ -410,7 +503,7 @@ impl<'image> AppHost<'image> {
             persistent_variables,
             changed_persistent_variables: 0,
             unsaved_persistent_variables: 0,
-            subscriptions: load_subscriptions(&image),
+            subscriptions: load_subscriptions(&analysed),
             last_timer_check: now,
             latest_heart_rate: [0; 2],
             latest_acceleration: [0; 3],
@@ -446,6 +539,22 @@ impl<'image> AppHost<'image> {
         now: Value,
         system: &mut impl System,
     ) -> Result<(), OpenError> {
+        // A paged app's library is given when it opens, while its whole image is there to work the bindings out from.
+        if self.image.is_paged() {
+            return Err(OpenError::Image(ImageError::Paged));
+        }
+        let image = self.image;
+        self.attach_library(library_bytes, &image)?;
+        self.run_derives(Inputs::NOTHING, true, now, system);
+        if self.is_open {
+            let root = self.screen_root;
+            self.show_screen(root, now, system);
+        }
+        Ok(())
+    }
+
+    /// Checks the library and works out again what reads its functions, from `analysed`, the app's whole image.
+    fn attach_library(&mut self, library_bytes: &'image [u8], analysed: &AppImage) -> Result<(), OpenError> {
         let library = AppImage::parse(library_bytes)?;
         verify_with(&library, &mut Box::new(CheckedFunctions::NONE))?;
         if library.kind != AppKind::Library {
@@ -459,17 +568,12 @@ impl<'image> AppHost<'image> {
         }
         self.library = Some(library);
         self.bindings
-            .load_into_with_library(&self.image, self.library.as_ref())?;
+            .load_into_with_library(analysed, self.library.as_ref())?;
         for memory in self.subscriptions.iter_mut() {
             if memory.subscription.kind == SubscriptionKind::Derive {
                 memory.derive_inputs =
-                    derive_inputs_in(&self.image, self.library.as_ref(), memory.subscription.handler);
+                    derive_inputs_in(analysed, self.library.as_ref(), memory.subscription.handler);
             }
-        }
-        self.run_derives(Inputs::NOTHING, true, now, system);
-        if self.is_open {
-            let root = self.screen_root;
-            self.show_screen(root, now, system);
         }
         Ok(())
     }

@@ -34,7 +34,7 @@ pub struct Lent<T: ?Sized + 'static> {
 }
 
 impl<T: ?Sized> Lent<T> {
-    fn new(boxed: Box<T>) -> Lent<T> {
+    pub fn new(boxed: Box<T>) -> Lent<T> {
         Lent {
             bytes: NonNull::from(Box::leak(boxed)),
         }

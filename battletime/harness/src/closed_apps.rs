@@ -72,10 +72,7 @@ impl TestWatch {
         let saved = self.saved_states.get(&id).cloned().unwrap_or_default();
         let library = shared_library()?;
         let now = self.now();
-        let mut host = AppHost::open_with_saved_state(image, DEFAULT_THEME, &saved, now, &mut self.system)
-            .map_err(OpenFailure::CannotOpen)?;
-        host.set_library(library, now, &mut self.system)
-            .map_err(OpenFailure::CannotOpen)?;
+        let mut host = crate::watch::open_host(image, library, &saved, now, &mut self.system)?;
         host.set_installed_app_icons(self.installed_icons, &self.system);
         self.system.app_name = parsed.string(parsed.name_string).unwrap_or_default().to_string();
         self.widgets = WidgetTree::new(*host.image());

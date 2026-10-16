@@ -70,6 +70,7 @@ use battletime_packages::{
 };
 use battletime_runtime::library_icons::LIBRARY_ICONS_PATH;
 use battletime_runtime::memory_need::{estimate_memory_need, PREFETCH_BYTES};
+use battletime_runtime::paging::{pages_code, resident_image};
 use battletime_runtime::{
     events::SwipeDirection, resources::ImageReference, AppImage, AppKind, EffectKind, SystemValue,
     SystemValues, Theme, Value,
@@ -273,6 +274,8 @@ struct WatchSystem {
     open_file: RefCell<Option<Box<storage::OpenFile>>>,
     /// The shared library's icons file, kept open on its own so reading icons never closes the app's file.
     icons_file: RefCell<Option<Box<storage::OpenFile>>>,
+    /// A paged app's image file, kept open on its own so reading its code never closes the app's other files.
+    image_file: RefCell<Option<Box<storage::OpenFile>>>,
     /// The closed apps with subscriptions still to run, and when each comes due.
     closed_apps: ClosedApps,
     /// While a closed app runs, what it asked of the screen.
@@ -507,6 +510,7 @@ impl WatchSystem {
     fn read_through_open_file(&self, path: &str, offset: u32, out: &mut [u8]) -> Option<usize> {
         let slot = match path {
             LIBRARY_ICONS_PATH => &self.icons_file,
+            _ if path.ends_with(battletime_packages::IMAGE_FILE) => &self.image_file,
             _ => &self.open_file,
         };
         let mut kept = slot.borrow_mut();
@@ -785,6 +789,15 @@ impl Shell {
             Showing::Temporary => battletime_packages::TEMPORARY_DIRECTORY,
             _ => battletime_packages::APPS_DIRECTORY,
         };
+        // Where the image lies on the flash, from which a paged app's code is read as it runs.
+        let image_path = match (&id, built_in) {
+            (Some(id), None) => Some(battletime_packages::file_in(
+                directory,
+                id,
+                battletime_packages::IMAGE_FILE,
+            )),
+            _ => None,
+        };
         let image = match built_in {
             Some(_) => None,
             None => match id.and_then(|id| apps::read_image(self.files, directory, &id)) {
@@ -830,21 +843,34 @@ impl Shell {
             .and_then(|parsed| parsed.string(parsed.id_string))
             .and_then(|id| self.files.read_now(&state_path(id)))
             .unwrap_or_default();
-        if self.start_host(bytes, &saved, now) {
-            if showing == Showing::Temporary {
-                let need =
-                    AppImage::parse(bytes).map_or(0, |parsed| estimate_memory_need(&parsed).total_bytes);
-                self.temporary_outcome = Some(Ok(need));
-            }
-            self.image = image;
-            if let Some(host) = &mut self.host {
-                host.set_next_transition(transition);
-            }
-        } else {
+        let paged_path =
+            image_path.filter(|_| AppImage::parse(bytes).is_ok_and(|parsed| pages_code(&parsed)));
+        let Some(resident) = self.start_host(bytes, paged_path.as_deref(), &saved, now) else {
             if let Some(image) = image {
                 image.release();
             }
             self.open_failed(showing);
+            return;
+        };
+        if showing == Showing::Temporary {
+            let need = AppImage::parse(bytes).map_or(0, |parsed| estimate_memory_need(&parsed).total_bytes);
+            self.temporary_outcome = Some(Ok(need));
+        }
+        match resident {
+            // A paged app keeps only its resident image, so the whole one goes before its screen is built.
+            Some(resident) => {
+                if let Some(image) = image {
+                    image.release();
+                }
+                self.image = Some(resident);
+                if let Some(host) = &mut self.host {
+                    host.bring_to_front(now, &mut self.system);
+                }
+            }
+            None => self.image = image,
+        }
+        if let Some(host) = &mut self.host {
+            host.set_next_transition(transition);
         }
     }
 
@@ -860,33 +886,84 @@ impl Shell {
         *self.system.prefetch.get_mut() = None;
         *self.system.open_file.get_mut() = None;
         *self.system.icons_file.get_mut() = None;
+        *self.system.image_file.get_mut() = None;
         self.system.folder.clear();
         self.system.folder_wanted = None;
     }
 
-    /// Opens a host on the image into `self.host`.
-    fn start_host(&mut self, bytes: &'static [u8], saved: &[u8], now: Value) -> bool {
+    /// Opens a host on the image into `self.host`, giving none when it would not open.
+    ///
+    /// With `paged_path`, the app's code stays in its image file there, and this gives back the
+    /// resident image the host keeps; the caller then frees the whole image and brings the host to the front.
+    fn start_host(
+        &mut self,
+        bytes: &'static [u8],
+        paged_path: Option<&str>,
+        saved: &[u8],
+        now: Value,
+    ) -> Option<Option<Lent<[u8]>>> {
         self.system.open_app_name = app_name_of(bytes);
         self.system.open_app_id = AppImage::parse(bytes)
             .ok()
             .and_then(|image| image.string(image.id_string))
             .and_then(|id| heapless::String::try_from(id).ok())
             .unwrap_or_default();
-        let Ok(host) = AppHost::open_into(&mut self.host, bytes, self.theme, saved, now, &mut self.system)
-        else {
-            return false;
-        };
-        if let Some(library) = self.library {
-            // An app built for a newer library would fail wherever it calls into it, so it is not opened.
-            if let Err(OpenError::LibraryTooOld { .. }) = host.set_library(library, now, &mut self.system) {
-                self.host = None;
-                return false;
+        let resident = match paged_path {
+            Some(path) => Some(self.start_paged_host(bytes, path, saved, now)?),
+            None => {
+                let host =
+                    AppHost::open_into(&mut self.host, bytes, self.theme, saved, now, &mut self.system)
+                        .ok()?;
+                if let Some(library) = self.library {
+                    // An app built for a newer library would fail wherever it calls into it, so it is not opened.
+                    if let Err(OpenError::LibraryTooOld { .. }) =
+                        host.set_library(library, now, &mut self.system)
+                    {
+                        self.host = None;
+                        return None;
+                    }
+                }
+                None
             }
-        }
-        if let Some(icons) = &self.launcher_icons {
+        };
+        if let (Some(host), Some(icons)) = (&mut self.host, &self.launcher_icons) {
             host.set_installed_app_icons(icons.list(), &self.system);
         }
-        true
+        Some(resident)
+    }
+
+    /// Opens a paged host on the image's resident part, giving that part, which the shell then keeps.
+    #[inline(never)]
+    fn start_paged_host(
+        &mut self,
+        bytes: &'static [u8],
+        path: &str,
+        saved: &[u8],
+        now: Value,
+    ) -> Option<Lent<[u8]>> {
+        let resident = Lent::new(resident_image(bytes).ok()?.into_boxed_slice());
+        // Opened here, so its look-up in the store never runs below the interpreter, whose code reads then need only a DMA read.
+        if self.system.read_through_open_file(path, 0, &mut [0; 4]).is_none() {
+            resident.release();
+            return None;
+        }
+        let opened = AppHost::open_paged_into(
+            &mut self.host,
+            bytes,
+            resident.get(),
+            path,
+            self.library,
+            self.theme,
+            saved,
+            now,
+            &mut self.system,
+        );
+        if opened.is_err() {
+            self.host = None;
+            resident.release();
+            return None;
+        }
+        Some(resident)
     }
 
     /// Falls back to the face when anything else will not open, or to the help screen without one.
@@ -1931,6 +2008,7 @@ pub async fn run_shell(
             prefetch: RefCell::new(None),
             open_file: RefCell::new(None),
             icons_file: RefCell::new(None),
+            image_file: RefCell::new(None),
             folder: FolderListing::new(),
             folder_wanted: None,
             call_ringing_until: None,

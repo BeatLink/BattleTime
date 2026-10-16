@@ -129,6 +129,15 @@ may show counted in its [need](#how-much-heap-an-app-needs), up to 8 KB. Opening
 first app with the digital face, the launcher, settings and the alarm installed peaked at 6,284 B
 of stack, 2,916 B spare.
 
+Paging the code of apps that need less of the heap that way (`runtime/src/paging.rs`) added
+3,944 B of code, measured with `cargo size` against the commit before on 2026-10-16 (438,956 B to
+442,900 B of text and rodata), and 32 B of static RAM for the paged app's image file's open file
+and the image's two paged offsets. Seven of the repository's 66 apps and faces are paged: `fancy`
+needs 18,864 B instead of 21,888 B, `omega-time` 11,036 B instead of 14,040 B, and `phrase-clock`,
+`infineat`, `about`, `four-in-a-row` and `twos` from 1,376 B down to 40 B less. Opening `about`
+paged and turning to its second page peaked at about the launcher's 6,252 B of stack, 2,948 B
+spare, against 6,092 B for `about` whole.
+
 Keeping four free file sectors erased ahead, so a file of up to four sectors is written without
 waiting 45 ms an erase, added 704 B of code, measured with `cargo size` against the commit before on
 2026-10-15 (434,020 B to 434,724 B of text and rodata), and 64 B of static RAM for the map of which
@@ -429,6 +438,7 @@ it opens one. The parts, in bytes:
 | Folder listing | 1,600 when the app calls `open_folder` | The listed folder's path (64), 64 entries of 8 and 1,024 for their names, reserved when a folder is listed |
 | Nodes | 132 per widget of the largest screen | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
+| Paged code, instead of the image | its resident image, a code cache as large as its longest handler or function and at least 1,024, and 160 for the cache's path and list; or, if more, the whole image and the resident one together, held while it opens | Chosen only when it makes the total smaller; see [app-runtime.md](app-runtime.md#paged-code) |
 | Library icons | 1,040 for each library icon a screen may show, at most 8,192 | The icons the host reads from `/system/icons` for the screen with the most: an `Image`, `Icon`, `Button` or `Badge` that names one or takes its image from an expression, 3 for a `StatusIcons`, 1 for a `Battery` and the 8 KB cap for an `AppList`; each icon is at most 1,024 B, plus its place in the host's list |
 
 An app's need must fit `APP_HEAP_BUDGET_BYTES`, 27,648 B: the 31,744 B heap less 4 KB for the
