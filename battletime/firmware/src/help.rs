@@ -1,6 +1,6 @@
 //! The screen the shell shows when no watch face is installed: the time and how to install one.
 //!
-//! It is drawn in the status page's font, so it needs nothing from the shared library.
+//! It is drawn in the status page's font, the shared library's small text, so it needs no app.
 
 use battletime_runtime::{Theme, ThemeColor, Value};
 use battletime_status_screen::page::{self, TextColours};

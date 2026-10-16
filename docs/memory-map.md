@@ -29,7 +29,7 @@ python3 tools/draw_memory_maps.py
 
 The shared library sits right after the code, on a word boundary, where the image header says. It
 holds what apps share: images, the app host's text font (4,945 B, one font of lines and arcs that
-every text size scales), Bosch's configuration file for each accelerometer (6,144 B each, which the
+every text size scales, which the full firmware's status page draws with too), Bosch's configuration file for each accelerometer (6,144 B each, which the
 firmware uploads to the chip; the library with all of it is 43,753 B), components, common functions
 and the preset themes. It arrives with each firmware
 update and is never written on the watch. No apps are kept in internal flash; they live in `/apps`
@@ -96,6 +96,15 @@ static RAM. Its 5 by 7 dot table and the code that drew it are gone: the font is
 in the text font's format, made of rows of dots that the text font's own drawing code draws, and
 each app that uses it carries it in its image on the external flash. It takes RAM only while that
 app is loaded, as part of its image; only the hidden `casio` face uses it.
+
+Drawing the full firmware's status page, help screen and crash pages in the shared library's text
+font, in place of the 10x20 bitmap font (2,400 B), saved 1,956 B of code and constants, measured
+with `cargo size` against the commit before on 2026-10-15 (432,136 B to 430,180 B of text and rodata),
+for 8 B more static RAM. The library's font was already in the image, read in place, so the page
+costs no RAM beyond the glyph it places on the stack while drawing. The recovery firmware has no
+library and keeps the bitmap font, as do the bootloader and its updater. Starting with the shared
+library and erased external flash, which shows the status page and then the help screen in that
+font, peaked at 5,316 B of stack, 4,140 B spare.
 
 Running closed apps (`firmware/src/closed_apps.rs` and `battletime_app_host::closed_apps`) added
 5,008 B of code to the full build, measured with `cargo size` against master on 2026-10-14

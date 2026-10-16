@@ -6,6 +6,12 @@ description = "A small ST7789 driver for status screens that must fit in a few k
 license.workspace = true
 publish = false
 
+[features]
+default = ["bitmap-font"]
+# The 10x20 bitmap font in fonts/, for the bootloader, its updater and the recovery firmware; without
+# it the page draws with the font the firmware gives `page::use_font`.
+bitmap-font = []
+
 [dependencies]
 embedded-graphics = "0.8"
 embedded-hal = "1.0"

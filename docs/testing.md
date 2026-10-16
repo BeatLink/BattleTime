@@ -171,7 +171,9 @@ cargo run -p battletime-simulator -- --script tests/scripts/timer_rings_and_dism
   checks that moving rows in the panel, for scrolled lists and slides, shows what drawing afresh
   would.
 - `harness/tests/firmware_pages.rs` draws the pages the firmware shows itself, after a crash and
-  when an app needs more memory than is free, against their reference pictures.
+  when an app needs more memory than is free, against their reference pictures. It draws them in
+  the status page's bitmap font, the same whichever crates a test run builds; the full firmware
+  draws the same layout in the shared library's text font, so check its look in the emulator.
 
 ## Snapshots
 

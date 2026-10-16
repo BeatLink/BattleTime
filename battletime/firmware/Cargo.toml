@@ -9,8 +9,9 @@ publish = false
 [workspace]
 
 [features]
-# The image for the recovery slot: its status page always says it is the recovery firmware.
-recovery = []
+# The image for the recovery slot: its status page always says it is the recovery firmware. It has no
+# shared library, so its status page keeps the bitmap font; the full firmware draws with the library's.
+recovery = ["battletime-status-screen/bitmap-font"]
 # InfiniTime's own GATT services (src/infinitime_services.rs), one feature each since flash is short;
 # docs/bluetooth.md lists what each costs.
 default = ["weather-service", "alert-service"]
@@ -67,7 +68,7 @@ battletime-runtime = { path = "../runtime" }
 battletime-settings = { path = "../services/settings" }
 battletime-steps = { path = "../services/steps" }
 battletime-slot-log = { path = "../services/slot_log" }
-battletime-status-screen = { path = "../drivers/status_screen" }
+battletime-status-screen = { path = "../drivers/status_screen", default-features = false }
 battletime-touch = { path = "../drivers/touch" }
 battletime-vibrator = { path = "../drivers/vibrator" }
 battletime-updates = { path = "../services/updates" }

@@ -97,6 +97,8 @@ mod phone;
 #[cfg(with_shell)]
 mod phone_services;
 mod status;
+#[cfg(with_shell)]
+mod status_font;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod system_values;
 mod tasks;
@@ -225,6 +227,9 @@ async fn main(spawner: Spawner) {
         },
     ))));
 
+    // The status page draws with the shared library's text font, so the font comes first.
+    #[cfg(with_shell)]
+    status_font::start(apps::shared_library());
     let mut screen = start_screen(
         spi_bus,
         Output::new(chip.P0_18, Level::Low, OutputDrive::Standard),

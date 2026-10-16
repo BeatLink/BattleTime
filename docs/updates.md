@@ -165,7 +165,13 @@ sequenceDiagram
 
 At start, and again while an update arrives, the firmware shows a status page. The firmware, the
 recovery firmware, the bootloader and the bootloader updater all lay it out through
-`battletime_status_screen::page`, so it looks the same whichever is running:
+`battletime_status_screen::page`, so it looks the same whichever is running. Each character sits in
+a 10 by 20 cell. The bootloader, its updater and the recovery firmware draw it in the page's own
+10x20 bitmap font (the `bitmap-font` feature); the full firmware leaves that font out and draws the
+shared library's text font in its `small` size instead (`firmware/src/status_font.rs`), installed
+before the first line shows. A full firmware whose library is missing or damaged shows the page's
+colours with no text, while Bluetooth, updates and the bootloader's recovery hold still work.
+The help screen and the crash and not-enough-memory pages use the same font:
 
 ```
 BattleTime

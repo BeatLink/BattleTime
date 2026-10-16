@@ -650,6 +650,25 @@ fn coverage_ramps_over_one_pixel() {
 }
 
 #[test]
+fn a_character_row_matches_the_character_drawn() {
+    let mut drawn = RowRecorder::default();
+    FontName::Small.draw_character(&mut drawn, 'A', (0, 15), white());
+    let mut found_ink = false;
+    for y in 0..20 {
+        let mut row = [0u8; 10];
+        assert!(FontName::Small.character_row('A', y - 15, 0, &mut row));
+        for (x, &ink) in row.iter().enumerate() {
+            assert_eq!(ink, drawn.ink_at(x as i32, y), "{x}, {y}");
+            found_ink |= ink > 0;
+        }
+    }
+    assert!(found_ink);
+    let mut row = [9u8; 10];
+    assert!(!FontName::Small.character_row('\u{7F}', 0, 0, &mut row));
+    assert_eq!(row, [0; 10]);
+}
+
+#[test]
 fn the_unused_font_number_draws_as_huge() {
     assert_eq!(FontName::from_value(6), FontName::Huge);
 }

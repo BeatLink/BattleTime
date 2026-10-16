@@ -1865,15 +1865,6 @@ fn app_name_of(bytes: &[u8]) -> heapless::String<NOTIFICATION_SOURCE_BYTES> {
         .unwrap_or_default()
 }
 
-/// Gives the app host its text fonts from the shared library inside the firmware, which holds them.
-// Kept out of the shell task, so the library's parse never adds to the task's stack frame.
-#[inline(never)]
-fn install_fonts(library: Option<&'static [u8]>) {
-    if let Some(Ok(library)) = library.map(AppImage::parse) {
-        battletime_app_host::fonts::install_from_library(&library);
-    }
-}
-
 #[embassy_executor::task]
 pub async fn run_shell(
     display: &'static SharedDisplay,
@@ -1892,7 +1883,6 @@ pub async fn run_shell(
     heart_rate::interval_changed();
     clock::load_time_zone(files);
     files.wait_until_free().await;
-    install_fonts(apps::shared_library());
 
     let theme = settings::load_theme(files);
     let mut shell = Shell {

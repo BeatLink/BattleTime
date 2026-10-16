@@ -10,7 +10,10 @@ struct FrameBuffer {
 }
 
 impl FrameBuffer {
+    /// A screen of one colour; without the bitmap font, the page is given the block font first.
     fn filled(colour: Rgb565) -> FrameBuffer {
+        #[cfg(not(feature = "bitmap-font"))]
+        use_font(block_font);
         FrameBuffer {
             pixels: vec![colour; (SCREEN_SIZE * SCREEN_SIZE) as usize],
         }
@@ -153,6 +156,7 @@ fn text_that_is_not_ascii_is_cut_at_a_character() {
     draw_line(&mut FrameBuffer::filled(BLUE), FIRMWARE, value, BLUE).unwrap();
 }
 
+#[cfg(feature = "bitmap-font")]
 #[test]
 fn text_matches_embedded_graphics_drawing_the_same_font() {
     use embedded_graphics::{
@@ -181,6 +185,7 @@ fn text_matches_embedded_graphics_drawing_the_same_font() {
     }
 }
 
+#[cfg(feature = "bitmap-font")]
 #[test]
 fn a_character_the_font_lacks_is_drawn_as_a_question_mark() {
     assert!(glyph_pixels('€').eq(glyph_pixels('?')));
@@ -215,4 +220,37 @@ fn centred_text_wider_than_its_columns_is_cut() {
     assert!(screen.count(0..40, 0..CHARACTER_HEIGHT, VALUE_COLOUR) > 20);
     assert_eq!(screen.count(40..240, 0..240, VALUE_COLOUR), 0);
     assert_eq!(SCREEN_CHARACTERS, 24);
+}
+
+// ============================================================================
+// A font given from outside
+// ============================================================================
+
+/// A font for the tests: every character but the space a solid block, with a half-inked left column.
+#[cfg(not(feature = "bitmap-font"))]
+fn block_font(character: char, row: i32, ink: &mut [u8; CELL_WIDTH]) {
+    if character != ' ' && (3..CELL_BASELINE + 2).contains(&row) {
+        ink.fill(255);
+        ink[0] = 128;
+    }
+}
+
+#[cfg(not(feature = "bitmap-font"))]
+#[test]
+fn a_given_font_is_blended_into_the_background() {
+    let mut screen = FrameBuffer::filled(BLUE);
+    draw_text(&mut screen, Point::new(0, 0), "A ", VALUE_COLOUR, BLUE).unwrap();
+
+    assert_eq!(screen.count(1..10, 3..17, VALUE_COLOUR), 9 * 14);
+    assert_eq!(screen.count(0..1, 3..17, blend(BLUE, VALUE_COLOUR, 128)), 14);
+    assert_eq!(screen.count(0..20, 0..20, VALUE_COLOUR), 9 * 14);
+    assert_eq!(screen.count(10..20, 0..20, BLUE), 200);
+}
+
+#[cfg(not(feature = "bitmap-font"))]
+#[test]
+fn blending_keeps_both_ends_exact() {
+    assert_eq!(blend(BLUE, VALUE_COLOUR, 0), BLUE);
+    assert_eq!(blend(BLUE, VALUE_COLOUR, 255), VALUE_COLOUR);
+    assert_eq!(blend(Rgb565::BLACK, Rgb565::WHITE, 128), Rgb565::new(16, 32, 16));
 }

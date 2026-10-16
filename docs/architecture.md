@@ -124,7 +124,7 @@ BattleTime/
     │   ├── display/          battletime-display: the ST7789 screen and the backlight
     │   ├── external_flash/   battletime-external-flash: the 4 MB SPI NOR flash
     │   ├── heart_rate/       battletime-heart-rate: the HRS3300 and its pulse processing
-    │   ├── status_screen/    battletime-status-screen: the status page's layout, and the bootloader's small ST7789 driver
+    │   ├── status_screen/    battletime-status-screen: the status page's layout and bitmap font, and the bootloader's small ST7789 driver
     │   ├── touch/            battletime-touch: the CST816S touch panel and its gestures
     │   └── vibrator/         battletime-vibrator: the vibration motor
     ├── faces/          the watch faces in the app language, one folder each; see faces.md

@@ -99,6 +99,7 @@ dependencies = [
  "battletime-notifications",
  "battletime-packages",
  "battletime-runtime",
+ "battletime-status-screen",
  "battletime-ui",
  "embedded-graphics",
  "embedded-hal 1.0.0",

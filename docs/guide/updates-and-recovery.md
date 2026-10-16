@@ -58,7 +58,8 @@ then lines for the bootloader, the firmware, the storage and Bluetooth, the batt
 bootloader works, and what the watch is doing. Its colour gives the mode: black when the firmware
 is confirmed, amber on trial, red after a rollback, purple for the recovery firmware and blue while
 the bootloader works. The last line says why the watch last started, such as "Reset: watchdog", or
-what stopped it when it crashed.
+what stopped it when it crashed. The firmware writes it in the same soft-edged letters as the
+apps; the recovery firmware and the bootloader use a plainer, blockier font of their own.
 
 ## After a crash
 

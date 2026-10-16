@@ -2,8 +2,9 @@
 //!
 //! After a crash the wearer sees what stopped BattleTime and picks Restart or Send debug info; while
 //! the debug info waits for the companion app a second page says so. When an app needs more memory
-//! than is free, a page says so instead of opening it. These pages need nothing from the shared
-//! library or the apps, so they work whatever broke.
+//! than is free, a page says so instead of opening it. These pages need no app, so they work
+//! whatever app broke; their words are in the status page's font, which in the full firmware is the
+//! shared library's text font.
 
 use core::fmt::Write;
 

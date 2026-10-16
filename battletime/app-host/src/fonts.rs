@@ -1454,6 +1454,27 @@ impl FontName {
         self.styled()
     }
 
+    /// Works out one row of a character whose pen sits at the origin on the baseline, `y` rows below
+    /// the baseline (above it when negative), from column `left`; returns whether the font has it.
+    pub fn character_row(self, character: char, y: i32, left: i32, coverage: &mut [u8]) -> bool {
+        coverage.fill(0);
+        let font = self.styled();
+        let Some(data) = font.file.data() else {
+            return false;
+        };
+        let Some(placed) = font.placed_glyph(&data, character, (0, 0)) else {
+            return false;
+        };
+        cover_row(
+            &placed.shapes[..placed.count],
+            font.stroke / 2.0,
+            y as f32 + 0.5,
+            left,
+            coverage,
+        );
+        true
+    }
+
     /// Draws one character with its pen at `origin` on the baseline; returns how far the pen moves.
     pub fn draw_character(
         self,

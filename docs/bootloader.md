@@ -213,7 +213,8 @@ the battery from one fresh reading each time the page changes, such as "Battery 
 the menu's last option covers it while the menu is open. The screen code is its own
 small ST7789 driver in `drivers/status_screen`, since the firmware's display driver does not
 fit. It draws the 10x20 font straight from its bitmap rather than through embedded-graphics' text
-code, which would not fit either. The simulator's tests run it against the simulator's ST7789
+code, which would not fit either; the `bitmap-font` feature, on by default, carries that font, and
+only the full firmware turns it off ([updates.md](updates.md#the-status-page)). The simulator's tests run it against the simulator's ST7789
 model, through the panel's SPI wires.
 
 | When | Firmware / Action / Progress |

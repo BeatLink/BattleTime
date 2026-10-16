@@ -21,5 +21,8 @@ png = "0.18"
 [dev-dependencies]
 embedded-hal = "1.0"
 battletime-crash-record = { path = "../services/crash_record" }
+# The firmware pages are drawn in the status page's bitmap font, the same in every build of the
+# workspace; the full firmware draws them in the library's text font, checked in the emulator.
+battletime-status-screen = { path = "../drivers/status_screen", features = ["bitmap-font"] }
 battletime-display = { path = "../drivers/display" }
 battletime-ui = { path = "../ui" }

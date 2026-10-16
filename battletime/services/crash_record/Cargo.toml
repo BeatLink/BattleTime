@@ -10,4 +10,8 @@ publish = false
 embedded-graphics = "0.8"
 heapless = "0.9"
 battletime-boot = { path = "../../boot" }
-battletime-status-screen = { path = "../../drivers/status_screen" }
+# Whoever draws the pages picks the status page's font, so this crate asks for none.
+battletime-status-screen = { path = "../../drivers/status_screen", default-features = false }
+
+[dev-dependencies]
+battletime-status-screen = { path = "../../drivers/status_screen", features = ["bitmap-font"] }

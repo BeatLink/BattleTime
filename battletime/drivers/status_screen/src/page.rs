@@ -1,5 +1,12 @@
 //! The status page's layout: a title, four labelled lines for each part of the watch, what it is
-//! doing, and how far along it is, in white 10x20 text on the background colour of the mode.
+//! doing, and how far along it is, in white text in 10 by 20 cells on the background colour of the mode.
+//!
+//! With the `bitmap-font` feature the text is a 10x20 bitmap font carried here, for the bootloader,
+//! its updater and the recovery firmware. Without it the page draws with whatever font
+//! `use_font` was given, such as the full firmware's soft-edged text font from the shared library,
+//! and draws no text until then.
+
+use core::sync::atomic::{AtomicPtr, Ordering};
 
 use embedded_graphics::{pixelcolor::Rgb565, prelude::*, primitives::Rectangle};
 
@@ -168,19 +175,26 @@ fn clear<Target: DrawTarget<Color = Rgb565>>(
 }
 
 // ============================================================================
-// The font
+// The bitmap font
 // ============================================================================
 
 /// The printable ASCII characters, 16 to a row of the image, one bit a pixel; see fonts/README.md.
+#[cfg(feature = "bitmap-font")]
 const FONT_IMAGE: &[u8] = include_bytes!("../fonts/font_10x20.raw");
+#[cfg(feature = "bitmap-font")]
 const IMAGE_ROW_BYTES: usize = 20;
+#[cfg(feature = "bitmap-font")]
 const CHARACTERS_PER_IMAGE_ROW: usize = 16;
+#[cfg(feature = "bitmap-font")]
 const FIRST_CHARACTER: char = ' ';
+#[cfg(feature = "bitmap-font")]
 const LAST_CHARACTER: char = '~';
 /// Shown for any character the font does not have.
+#[cfg(feature = "bitmap-font")]
 const MISSING_CHARACTER: char = '?';
 
 /// Draws each character as one block of pixels with its top left at `top_left`, and gives the column after the last.
+#[cfg(feature = "bitmap-font")]
 fn draw_text<Target: DrawTarget<Color = Rgb565>>(
     target: &mut Target,
     top_left: Point,
@@ -202,6 +216,7 @@ fn draw_text<Target: DrawTarget<Color = Rgb565>>(
 }
 
 /// Whether each pixel of a character's cell is lit, row by row.
+#[cfg(feature = "bitmap-font")]
 fn glyph_pixels(character: char) -> impl Iterator<Item = bool> {
     let character = if (FIRST_CHARACTER..=LAST_CHARACTER).contains(&character) {
         character
@@ -218,6 +233,76 @@ fn glyph_pixels(character: char) -> impl Iterator<Item = bool> {
             byte & (0x80 >> (image_column % 8)) != 0
         })
     })
+}
+
+// ============================================================================
+// A font given from outside
+// ============================================================================
+
+/// Pixels across one character's cell.
+pub const CELL_WIDTH: usize = CHARACTER_WIDTH as usize;
+/// Rows of a cell above its baseline, so a font knows where to sit its glyphs.
+pub const CELL_BASELINE: i32 = FONT_BASELINE;
+
+/// Fills one row of a character's cell, counted from the cell's top, with ink from 0 to 255.
+pub type CellRow = fn(character: char, row: i32, ink: &mut [u8; CELL_WIDTH]);
+
+/// The font `use_font` was given, as a `CellRow`, or null while there is none.
+static FONT: AtomicPtr<()> = AtomicPtr::new(core::ptr::null_mut());
+
+/// Draws the page's text with `cell_row` from now on; the `bitmap-font` feature keeps its bitmap instead.
+pub fn use_font(cell_row: CellRow) {
+    FONT.store(cell_row as *mut (), Ordering::Release);
+}
+
+/// The font `use_font` was given.
+#[cfg(not(feature = "bitmap-font"))]
+fn given_font() -> Option<CellRow> {
+    let pointer = FONT.load(Ordering::Acquire);
+    // Safety: only `use_font` stores here, and it stores a `CellRow`.
+    (!pointer.is_null()).then(|| unsafe { core::mem::transmute::<*mut (), CellRow>(pointer) })
+}
+
+/// Draws each character's cell from the given font, blending its ink into the background, and
+/// gives the column after the last; with no font yet, the cells are only cleared.
+#[cfg(not(feature = "bitmap-font"))]
+fn draw_text<Target: DrawTarget<Color = Rgb565>>(
+    target: &mut Target,
+    top_left: Point,
+    text: &str,
+    colour: Rgb565,
+    background: Rgb565,
+) -> Result<i32, Target::Error> {
+    let font = given_font();
+    let mut left = top_left.x;
+    for character in text.chars() {
+        let cell = Rectangle::new(
+            Point::new(left, top_left.y),
+            Size::new(CHARACTER_WIDTH as u32, CHARACTER_HEIGHT as u32),
+        );
+        let pixels = (0..CHARACTER_HEIGHT).flat_map(move |row| {
+            let mut ink = [0u8; CELL_WIDTH];
+            if let Some(cell_row) = font {
+                cell_row(character, row, &mut ink);
+            }
+            ink.map(|ink| blend(background, colour, ink))
+        });
+        target.fill_contiguous(&cell, pixels)?;
+        left += CHARACTER_WIDTH;
+    }
+    Ok(left)
+}
+
+/// The colour `ink` of the way from the background to the text's colour.
+#[cfg(not(feature = "bitmap-font"))]
+fn blend(background: Rgb565, colour: Rgb565, ink: u8) -> Rgb565 {
+    let mix =
+        |from: u8, to: u8| ((from as u32 * (255 - ink as u32) + to as u32 * ink as u32 + 127) / 255) as u8;
+    Rgb565::new(
+        mix(background.r(), colour.r()),
+        mix(background.g(), colour.g()),
+        mix(background.b(), colour.b()),
+    )
 }
 
 #[cfg(test)]
