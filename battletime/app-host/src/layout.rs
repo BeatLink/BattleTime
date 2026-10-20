@@ -293,7 +293,9 @@ fn natural_size(nodes: &[Box<Node>], index: usize, available_width: Option<i32>)
         let length = slots.count * slots.extent + gaps(slots.count, gap);
         if runs_across(nodes, index) {
             let tallest = flowing(nodes, index)
-                .map(|row| natural_size(nodes, row, None).height + 2 * i32::from(nodes[row].settings.margin))
+                .map(|row| {
+                    natural_size(nodes, row, None).height + 2 * i32::from(nodes[row].settings.rare().margin)
+                })
                 .max()
                 .unwrap_or(0);
             return Size {
@@ -313,7 +315,7 @@ fn natural_size(nodes: &[Box<Node>], index: usize, available_width: Option<i32>)
     };
     let inner_width = own_width.map(|width| (width - padding).max(0));
     let with_margin = |child: usize, width: Option<i32>| {
-        let margin = 2 * i32::from(nodes[child].settings.margin);
+        let margin = 2 * i32::from(nodes[child].settings.rare().margin);
         let size = natural_size(nodes, child, width.map(|width| width - margin));
         Size {
             width: size.width + margin,
@@ -394,7 +396,7 @@ fn natural_size(nodes: &[Box<Node>], index: usize, available_width: Option<i32>)
 }
 
 fn grid_columns(node: &Node) -> i32 {
-    (node.settings.columns as i32).max(1)
+    (node.settings.rare().columns as i32).max(1)
 }
 
 // ============================================================================
@@ -518,7 +520,7 @@ fn place_flow(
     // Across the flow: the child's size, and where it starts, inside its margin.
     let cross_place = |nodes: &[Box<Node>], child: usize| {
         let settings = &nodes[child].settings;
-        let cross_room = cross_space - 2 * i32::from(settings.margin);
+        let cross_room = cross_space - 2 * i32::from(settings.rare().margin);
         let wanted_cross = if is_down { settings.width } else { settings.height };
         let placement = match (settings.align, align_items) {
             (Some(align), _) => Some(align),
@@ -534,7 +536,7 @@ fn place_flow(
             (None, None) => cross_room,
         };
         let offset =
-            i32::from(settings.margin) + placement.unwrap_or(Align::Center).offset(cross_room, cross);
+            i32::from(settings.rare().margin) + placement.unwrap_or(Align::Center).offset(cross_room, cross);
         (cross, offset)
     };
     let main_length = |nodes: &[Box<Node>], child: usize, cross: i32| {
@@ -558,7 +560,7 @@ fn place_flow(
     let mut count = 0;
     for child in flowing(nodes, index) {
         let (cross, _) = cross_place(nodes, child);
-        used += main_length(nodes, child, cross) + 2 * i32::from(nodes[child].settings.margin);
+        used += main_length(nodes, child, cross) + 2 * i32::from(nodes[child].settings.rare().margin);
         total_grow += i32::from(nodes[child].settings.grow);
         count += 1;
     }
@@ -596,14 +598,15 @@ fn place_flow(
             place(nodes, child, here, shown, clip);
             continue;
         }
-        let settings = nodes[child].settings;
+        let settings = &nodes[child].settings;
         let grown = match total_grow {
             0 => 0,
             total => spare * i32::from(settings.grow) / total,
         };
+        let margin = i32::from(settings.rare().margin);
         let (cross, cross_offset) = cross_place(nodes, child);
         let main = main_length(nodes, child, cross) + grown;
-        let main_offset = cursor + i32::from(settings.margin);
+        let main_offset = cursor + margin;
 
         let child_bounds = if is_down {
             Rect {
@@ -621,14 +624,14 @@ fn place_flow(
             }
         };
         place(nodes, child, child_bounds, shown, clip);
-        cursor += main + 2 * i32::from(settings.margin) + gap + extra_gap;
+        cursor += main + 2 * margin + gap + extra_gap;
     }
 }
 
 /// Places a child inside `room`, filling it unless it has a size or an `align`.
 fn place_in_room(nodes: &mut [Box<Node>], child: usize, room: Rect, shown: bool, clip: Rect) {
-    let settings = nodes[child].settings;
-    let room = inset(room, i32::from(settings.margin));
+    let settings = &nodes[child].settings;
+    let room = inset(room, i32::from(settings.rare().margin));
     let natural = natural_size(nodes, child, Some(room.width));
     // An icon keeps the 32 pixels the sdk promises, so a button's icon leaves room around it.
     let keeps_natural = settings.align.is_some() || nodes[child].kind == WidgetKind::Icon;
@@ -677,7 +680,7 @@ fn place_grid(nodes: &mut [Box<Node>], index: usize, inner: Rect, shown: bool, c
             .skip((row * columns) as usize)
             .take(columns as usize)
             .map(|&child| {
-                let margin = 2 * i32::from(nodes[child].settings.margin);
+                let margin = 2 * i32::from(nodes[child].settings.rare().margin);
                 natural_size(nodes, child, Some(cell_width - margin)).height + margin
             })
             .max()
@@ -718,14 +721,16 @@ pub fn content_length(nodes: &[Box<Node>], index: usize) -> i32 {
     let gap = gaps(count, i32::from(settings.gap));
     if nodes[index].runs_across() {
         let children: i32 = flowing(nodes, index)
-            .map(|child| natural_size(nodes, child, None).width + 2 * i32::from(nodes[child].settings.margin))
+            .map(|child| {
+                natural_size(nodes, child, None).width + 2 * i32::from(nodes[child].settings.rare().margin)
+            })
             .sum();
         return children + gap + padding;
     }
     let inner_width = (nodes[index].bounds().width - padding).max(0);
     let children: i32 = flowing(nodes, index)
         .map(|child| {
-            let margin = 2 * i32::from(nodes[child].settings.margin);
+            let margin = 2 * i32::from(nodes[child].settings.rare().margin);
             natural_size(nodes, child, Some(inner_width - margin)).height + margin
         })
         .sum();

@@ -198,7 +198,7 @@ fn a_row_inside_a_column_is_as_wide_as_its_children_and_gaps() {
 fn a_column_child_fills_the_width_inside_padding_and_margin() {
     let mut nodes = tree(&[(WidgetKind::Column, None), (WidgetKind::Bar, Some(0))]);
     nodes[0].settings.padding = 10;
-    nodes[1].settings.margin = 5;
+    nodes[1].settings.rare_mut().margin = 5;
 
     let nodes = laid_out(nodes);
 
@@ -369,7 +369,7 @@ fn a_grid_puts_children_in_rows_that_share_the_spare_height() {
         (WidgetKind::Led, Some(0)),
         (WidgetKind::Led, Some(0)),
     ]);
-    nodes[0].settings.columns = 2;
+    nodes[0].settings.rare_mut().columns = 2;
     nodes[0].settings.gap = 10;
 
     let nodes = laid_out(nodes);
@@ -399,7 +399,7 @@ fn a_grid_inside_a_column_is_as_big_as_its_cells_and_gaps() {
         (WidgetKind::Led, Some(1)),
     ]);
     nodes[0].settings.align_items = Some(Placement::Start);
-    nodes[1].settings.columns = 2;
+    nodes[1].settings.rare_mut().columns = 2;
     nodes[1].settings.gap = 10;
 
     let nodes = laid_out(nodes);
@@ -500,7 +500,7 @@ fn the_content_height_of_a_scroll_adds_children_gaps_margins_and_padding() {
     ]);
     nodes[0].settings.gap = 10;
     nodes[0].settings.padding = 5;
-    nodes[1].settings.margin = 3;
+    nodes[1].settings.rare_mut().margin = 3;
     let mut nodes = laid_out(nodes);
     nodes[3].settings.visible = false;
 

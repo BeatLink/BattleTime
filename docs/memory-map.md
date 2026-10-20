@@ -167,6 +167,14 @@ some kinds, such as an `Icon`, `Button` or `Repeat`; it now counts it, from
 That added 104 B of code (446,632 B to 446,736 B) and raised the nodes counted across the 66 apps
 and faces from 158 KB to 169 KB; the stopwatch needs 20,284 B, still the most.
 
+Nine settings that fewer than 2% of the repository's 1,186 widgets set (margin, border colour,
+disabled, opacity, minimum, maximum, start and end angle and columns) moved out of every node into
+a box the node keeps only once its widget sets one, which shrank a node from 128 B to 108 B on the
+watch and cost 1,400 B of code (446,736 B to 448,136 B). The nodes counted across the 66 apps and
+faces fell from 169 KB to 146 KB, and the stopwatch's need, the largest, from 20,284 B to 18,468 B.
+Measured with `tools/measure_heap.py`, `settings` open paged held 14,728 B instead of 15,768 B and
+the face 6,308 B instead of 6,552 B; opening `settings` still peaked at 6,332 B of stack.
+
 Keeping four free file sectors erased ahead, so a file of up to four sectors is written without
 waiting 45 ms an erase, added 704 B of code, measured with `cargo size` against the commit before on
 2026-10-15 (434,020 B to 434,724 B of text and rodata), and 64 B of static RAM for the map of which
@@ -465,7 +473,7 @@ it opens one. The parts, in bytes:
 | Passing use | 1,536 | Drawing, the image checks at open, and the allocator's gaps |
 | Read ahead | 4,096 when the app calls `prefetch_file` | The one file part it holds until a `file_bytes` takes it |
 | Folder listing | 1,600 when the app calls `open_folder` | The listed folder's path (64), 64 entries of 8 and 1,024 for their names, reserved when a folder is listed |
-| Nodes | 132 per widget of the largest screen, and 40 more for each of a kind that keeps an extra part (`memory_need::holds_extra`: images, icons, buttons, badges, battery and status icons, pickers, app lists, repeats and a few others) | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
+| Nodes | 112 per widget of the largest screen, 40 more for each of a kind that keeps an extra part (`memory_need::holds_extra`: images, icons, buttons, badges, battery and status icons, pickers, app lists, repeats and a few others), and 24 more for each that sets a rare setting (`memory_need::is_rare_setting`: margin, border colour, disabled, opacity, minimum, maximum, start and end angle, columns) | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
 | Paged code, instead of the image | its resident image, a code cache as large as its longest handler or function and at least 1,024, 160 for the cache's path and list, the widget records of its largest screen with 24 for their window, and 6 for each screen in the screen table; or, if more, the whole image and the resident one together, held while it opens | Chosen only when it makes the total smaller; see [app-runtime.md](app-runtime.md#paged-code) |
 | Library icons | each library icon a screen may show at its size, rounded to 4 bytes, plus 16; one a value picks at 1,040; at most 8,192 | The icons the host reads from `/system/icons` for the screen with the most, their sizes from `LIBRARY_ICON_BYTES`, which a compiler test keeps equal to the icons file: an `Image`, `Icon`, `Button` or `Badge` that names one, or takes its image from an expression in an app that can name a library icon at all (a constant from the library's range in its code, a starting value, an image other than its launcher icon that names one, an icon system value or a call to `weather_icon_at`), the notification, Bluetooth and alarm icons for a `StatusIcons`, the charging bolt for a `Battery` and the 8 KB cap for an `AppList`; each icon is at most 1,024 B |

@@ -238,6 +238,16 @@ fn a_node_that_keeps_an_extra_part_costs_that_too() {
 }
 
 #[test]
+fn a_node_whose_widget_sets_a_rare_setting_keeps_them_too() {
+    let mut image = writer();
+    image.widget(WidgetKind::Column, 2, &[]);
+    image.widget(WidgetKind::Label, 0, &[(Property::Margin, Constant(4))]);
+    image.widget(WidgetKind::Label, 0, &[(Property::Width, Constant(4))]);
+
+    assert_eq!(need_of(&image).widget_bytes, 3 * NODE_BYTES + RARE_SETTINGS_BYTES);
+}
+
+#[test]
 fn a_repeat_builds_its_row_once_for_each_row() {
     let mut image = writer();
     image.widget(WidgetKind::Column, 1, &[]);

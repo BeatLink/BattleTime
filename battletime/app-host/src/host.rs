@@ -2040,7 +2040,7 @@ impl<'image> AppHost<'image> {
     fn is_disabled(&self, node_index: usize) -> bool {
         let mut next = Some(node_index);
         while let Some(index) = next {
-            if self.nodes[index].settings.disabled {
+            if self.nodes[index].settings.rare().disabled {
                 return true;
             }
             next = self.nodes[index].parent.map(|parent| parent as usize);
@@ -2106,8 +2106,8 @@ impl<'image> AppHost<'image> {
             _ => {
                 let width = node.bounds().width.max(1) as Value;
                 let along = (x - node.bounds().x).clamp(0, node.bounds().width) as Value;
-                let span = settings.maximum as Value - settings.minimum as Value;
-                settings.minimum as Value + span * along / width
+                let span = settings.rare().maximum as Value - settings.rare().minimum as Value;
+                settings.rare().minimum as Value + span * along / width
             }
         })
     }

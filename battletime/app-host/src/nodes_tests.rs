@@ -156,7 +156,7 @@ fn a_cell_grid_passes_common_properties_on_to_its_settings() {
     let changed = grid.apply(Property::Columns, number(5));
 
     assert!(changed);
-    assert_eq!(grid.settings.columns, 5);
+    assert_eq!(grid.settings.rare().columns, 5);
 }
 
 #[test]
@@ -277,7 +277,7 @@ fn a_border_colour_must_be_a_colour() {
 
     assert!(!bad && good);
     assert_eq!(
-        column.settings.border_color,
+        column.settings.rare().border_color,
         Some(ColorValue::Theme(ThemeColor::Muted))
     );
 }
@@ -310,10 +310,10 @@ fn value_range_disabled_and_opacity_land_in_the_settings() {
     slider.apply(Property::Opacity, number(1_000));
 
     let settings = slider.settings;
-    assert_eq!((settings.minimum, settings.maximum), (-10, 10));
+    assert_eq!((settings.rare().minimum, settings.rare().maximum), (-10, 10));
     assert_eq!(settings.value, i32::MAX);
-    assert!(settings.disabled);
-    assert_eq!(settings.opacity, OPAQUE);
+    assert!(settings.rare().disabled);
+    assert_eq!(settings.rare().opacity, OPAQUE);
 }
 
 #[test]
@@ -558,5 +558,33 @@ fn memory_need_knows_which_kinds_keep_an_extra_part() {
             holds_extra(kind),
             "{kind:?}"
         );
+    }
+}
+
+#[test]
+fn memory_need_knows_which_properties_put_rare_settings_on_the_heap() {
+    use battletime_runtime::memory_need::is_rare_setting;
+
+    for byte in 0..=u8::MAX {
+        let Some(property) = Property::from_byte(byte) else {
+            continue;
+        };
+        for kind in [
+            WidgetKind::Label,
+            WidgetKind::Slider,
+            WidgetKind::Grid,
+            WidgetKind::Arc,
+        ] {
+            let mut node = Node::new(0, kind, 0, None, crate::SCREEN_AREA);
+            node.apply(property, PropertyValue::Number(1));
+            if node.settings.rare.is_some() {
+                assert!(is_rare_setting(property), "{property:?} on {kind:?}");
+            }
+        }
+        if is_rare_setting(property) {
+            let mut node = Node::new(0, WidgetKind::Label, 0, None, crate::SCREEN_AREA);
+            node.apply(property, PropertyValue::Number(1));
+            assert!(node.settings.rare.is_some(), "{property:?}");
+        }
     }
 }

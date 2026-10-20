@@ -205,7 +205,7 @@ fn to_u8(value: i32) -> u8 {
 fn frame_style(settings: &Settings, background: Color, default_radius: i32, theme: &Theme) -> Style {
     Style {
         bg_color: background,
-        border_color: resolve(settings.border_color, ThemeColor::Muted, theme),
+        border_color: resolve(settings.rare().border_color, ThemeColor::Muted, theme),
         border_width: to_u8(settings.border_width.get().map(i32::from).unwrap_or(BORDER_WIDTH)),
         alpha: OPAQUE,
         radius: to_u8(settings.radius.get().map(i32::from).unwrap_or(default_radius)),
@@ -296,15 +296,15 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         }
         Arc => {
             let (start_angle, end_angle) = match (
-                settings.start_angle.get().map(i32::from),
-                settings.end_angle.get().map(i32::from),
+                settings.rare().start_angle.get().map(i32::from),
+                settings.rare().end_angle.get().map(i32::from),
             ) {
                 (Some(start), Some(end)) => (start, end),
                 _ => (ARC_DEFAULT_START_ANGLE, ARC_DEFAULT_END_ANGLE),
             };
             let look = ArcLook {
-                minimum: settings.minimum,
-                maximum: settings.maximum,
+                minimum: settings.rare().minimum,
+                maximum: settings.rare().maximum,
                 value: settings.value,
                 start_angle,
                 end_angle,
@@ -323,7 +323,7 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         }
         Bar => {
             let style = frame_style(settings, track(settings.background), BAR_RADIUS, theme);
-            let range = (settings.minimum, settings.maximum, settings.value);
+            let range = (settings.rare().minimum, settings.rare().maximum, settings.value);
             draw_bar(renderer, bounds, &style, range, accent(settings.color));
         }
         Led => {
@@ -342,7 +342,7 @@ pub fn draw_node(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
         }
         Slider => {
             let style = frame_style(settings, track(settings.background), bounds.height / 2, theme);
-            let range = (settings.minimum, settings.maximum, settings.value);
+            let range = (settings.rare().minimum, settings.rare().maximum, settings.value);
             draw_slider(renderer, bounds, &style, range, accent(settings.color));
         }
         ClickArea => {}
@@ -583,7 +583,7 @@ fn draw_tick_box(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
     let area = inset(node.bounds(), i32::from(settings.padding));
     let is_on = settings.value != 0;
     let accent = resolve(settings.background, ThemeColor::Accent, theme);
-    let border = resolve(settings.border_color, ThemeColor::Muted, theme);
+    let border = resolve(settings.rare().border_color, ThemeColor::Muted, theme);
     let text_color = resolve(settings.color, ThemeColor::Text, theme);
     let square = Rect {
         x: area.x,
@@ -820,7 +820,7 @@ fn draw_status(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) 
     let is_status = node.kind == battletime_runtime::WidgetKind::StatusIcons;
     let icon_color = resolve(node.settings.color, ThemeColor::Text, theme);
     let battery_value = if is_status {
-        node.settings.border_color
+        node.settings.rare().border_color
     } else {
         node.settings.color
     };
@@ -1035,7 +1035,7 @@ pub struct AppListItem<'text> {
 fn walk_app_list<'node>(node: &'node Node, bar_room: i32, visit: &mut dyn FnMut(AppListItem<'node>) -> bool) {
     let padding = i32::from(node.settings.padding);
     let gap = i32::from(node.settings.gap);
-    let columns = i32::from(node.settings.columns).max(1);
+    let columns = i32::from(node.settings.rare().columns).max(1);
     let inner_width = (node.bounds().width - 2 * padding - bar_room).max(0);
     let cell_width = ((inner_width - (columns - 1) * gap) / columns).max(0);
     let cell_height = if columns == 1 { APP_ROW_HEIGHT } else { cell_width };
@@ -1155,7 +1155,7 @@ fn draw_app_list(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer
     let theme = context.theme;
     let color = resolve(node.settings.color, ThemeColor::Text, theme);
     let surface = resolve(None, ThemeColor::Surface, theme);
-    let in_grid = node.settings.columns > 1;
+    let in_grid = node.settings.rare().columns > 1;
     for item in app_list_rows(node) {
         let Some(place) = item.place else {
             let heading_color = resolve(None, ThemeColor::Accent, theme);
@@ -1289,7 +1289,7 @@ pub fn cell_layout(node: &Node) -> Option<CellLayout> {
     else {
         return None;
     };
-    let columns = (node.settings.columns as i32).max(1);
+    let columns = (node.settings.rare().columns as i32).max(1);
     let rows = (rows as i32).max(1);
     let gap = cell_gap as i32;
     let area = inset(node.bounds(), i32::from(node.settings.padding));
@@ -1818,18 +1818,18 @@ fn draw_chart(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     let settings = &node.settings;
     let area = inset(node.bounds(), i32::from(settings.padding).max(1));
     let color = resolve(settings.color, ThemeColor::Accent, context.theme);
-    let span = (settings.maximum as f32 - settings.minimum as f32).max(1.0);
+    let span = (settings.rare().maximum as f32 - settings.rare().minimum as f32).max(1.0);
     let height = (area.height - 1) as f32;
     let point = |index: usize| {
-        let value =
-            (context.element(values, index) as f32).clamp(settings.minimum as f32, settings.maximum as f32);
+        let value = (context.element(values, index) as f32)
+            .clamp(settings.rare().minimum as f32, settings.rare().maximum as f32);
         let across = match length {
             1 => 0.0,
             _ => index as f32 * (area.width - 1) as f32 / (length - 1) as f32,
         };
         PointF::new(
             area.x as f32 + across,
-            area.y as f32 + height - (value - settings.minimum as f32) * height / span,
+            area.y as f32 + height - (value - settings.rare().minimum as f32) * height / span,
         )
     };
     for index in 1..length {
@@ -1852,8 +1852,8 @@ fn tick_angle(start: f32, span: f32, tick: u16, ticks: u16) -> f32 {
 }
 
 fn dial_angles(settings: &Settings) -> (f32, f32) {
-    let start = settings.start_angle.get().map(i32::from).unwrap_or(0) as f32;
-    let end = settings.end_angle.get().map(i32::from).unwrap_or(360) as f32;
+    let start = settings.rare().start_angle.get().map(i32::from).unwrap_or(0) as f32;
+    let end = settings.rare().end_angle.get().map(i32::from).unwrap_or(360) as f32;
     let mut span = end - start;
     if span <= 0.0 {
         span += 360.0;
@@ -1922,8 +1922,8 @@ fn draw_scale(node: &Node, context: &DrawContext, renderer: &mut dyn Renderer) {
     }
 
     if needle_color.is_some() || settings.value != 0 {
-        let fraction =
-            (settings.value - settings.minimum) as f32 / (settings.maximum - settings.minimum).max(1) as f32;
+        let fraction = (settings.value - settings.rare().minimum) as f32
+            / (settings.rare().maximum - settings.rare().minimum).max(1) as f32;
         let angle = start + span * fraction.clamp(0.0, 1.0);
         let color = resolve(needle_color, ThemeColor::Accent, theme);
         let tip = point_on_circle(centre, radius - SCALE_MAJOR_TICK_LENGTH - 2.0, angle);

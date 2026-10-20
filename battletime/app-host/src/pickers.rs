@@ -63,8 +63,8 @@ fn roller_columns(node: &Node) -> (Vec<NumberColumn>, Option<&'static str>) {
     };
     if node.kind == WidgetKind::NumberRoller {
         let (minimum, maximum) = (
-            node.settings.minimum,
-            node.settings.maximum.max(node.settings.minimum),
+            node.settings.rare().minimum,
+            node.settings.rare().maximum.max(node.settings.rare().minimum),
         );
         let count = maximum - minimum + 1;
         let only = NumberColumn {
@@ -110,7 +110,7 @@ fn roller_columns(node: &Node) -> (Vec<NumberColumn>, Option<&'static str>) {
 fn roller_value(node: &Node, columns: &[NumberColumn], flip_toggle: bool) -> Value {
     let chosen = |place: usize| columns.get(place).map_or(0, |column| column.chosen) as Value;
     match (node.kind, columns.len()) {
-        (WidgetKind::NumberRoller, _) => node.settings.minimum as Value + chosen(0),
+        (WidgetKind::NumberRoller, _) => node.settings.rare().minimum as Value + chosen(0),
         (WidgetKind::TimeRollers, _) => {
             let is_twelve_hour = matches!(
                 *node.extra,
@@ -147,7 +147,12 @@ struct RollerPlaces {
 fn column_width(node: &Node) -> i32 {
     let widest = match (node.kind, *node.extra) {
         (WidgetKind::NumberRoller, Extra::Picker { digits, .. }) => {
-            let largest = node.settings.maximum.abs().max(node.settings.minimum.abs());
+            let largest = node
+                .settings
+                .rare()
+                .maximum
+                .abs()
+                .max(node.settings.rare().minimum.abs());
             format!("{:0width$}", largest, width = digits as usize)
         }
         _ => String::from("00"),
@@ -279,7 +284,7 @@ fn rollers_tapped(node: &Node, x: i32, y: i32) -> Option<Value> {
 
 /// How many columns a WeekdayPicker's buttons are in: its `columns`, or all seven in one row.
 fn day_columns(node: &Node) -> i32 {
-    match node.settings.columns {
+    match node.settings.rare().columns {
         0 => 7,
         columns => (columns as i32).min(7),
     }
@@ -384,7 +389,8 @@ fn stepper_text(node: &Node) -> String {
 fn widest_stepper_text(node: &Node) -> i32 {
     let font = node.settings.font.metrics();
     let settings = &node.settings;
-    let limits = [settings.minimum, settings.maximum].map(|limit| text_width(font, &format!("{limit}")));
+    let limits =
+        [settings.rare().minimum, settings.rare().maximum].map(|limit| text_width(font, &format!("{limit}")));
     let shown = text_width(font, &stepper_text(node));
     match node.text.is_empty() {
         true => shown.max(limits[0]).max(limits[1]),
@@ -431,7 +437,7 @@ fn stepper_tapped(node: &Node, x: i32, y: i32) -> Option<Value> {
         _ => return None,
     };
     let settings = &node.settings;
-    Some((settings.value + change).clamp(settings.minimum, settings.maximum) as Value)
+    Some((settings.value + change).clamp(settings.rare().minimum, settings.rare().maximum) as Value)
 }
 
 // ============================================================================

@@ -138,7 +138,7 @@ impl OptionalPixels {
 }
 
 /// What the common properties of a widget hold.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Settings {
     pub x: OptionalPixels,
     pub y: OptionalPixels,
@@ -146,11 +146,9 @@ pub struct Settings {
     pub height: Option<Length>,
     pub grow: i16,
     pub padding: i16,
-    pub margin: i16,
     pub gap: i16,
     pub background: Option<ColorValue>,
     pub color: Option<ColorValue>,
-    pub border_color: Option<ColorValue>,
     pub border_width: OptionalPixels,
     pub radius: OptionalPixels,
     pub font: FontName,
@@ -159,19 +157,54 @@ pub struct Settings {
     pub align_items: Option<Placement>,
     pub long_mode: LongMode,
     pub visible: bool,
+    pub value: i32,
+    /// The state array the widget's main array property names: cells, options, points, series or labels.
+    pub array: Option<u8>,
+    /// How a Scroll, List, AppList or TextFile scrolls, as the runtime's `SCROLLS_*` flags.
+    pub scrolling: u8,
+    /// The settings few widgets use, on the heap only for a node that sets one; see `rare`.
+    pub(crate) rare: Option<Box<RareSettings>>,
+}
+
+/// The settings few widgets use, kept on the heap only for a node that sets one, so every other node stays small.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RareSettings {
+    pub margin: i16,
+    pub border_color: Option<ColorValue>,
     pub disabled: bool,
     pub opacity: u8,
-    pub value: i32,
     pub minimum: i32,
     pub maximum: i32,
     pub start_angle: OptionalPixels,
     pub end_angle: OptionalPixels,
     /// A Grid's or ButtonMatrix's columns, or a CellGrid's.
     pub columns: u16,
-    /// The state array the widget's main array property names: cells, options, points, series or labels.
-    pub array: Option<u8>,
-    /// How a Scroll, List, AppList or TextFile scrolls, as the runtime's `SCROLLS_*` flags.
-    pub scrolling: u8,
+}
+
+impl RareSettings {
+    pub const DEFAULT: RareSettings = RareSettings {
+        margin: 0,
+        border_color: None,
+        disabled: false,
+        opacity: OPAQUE,
+        minimum: 0,
+        maximum: DEFAULT_MAXIMUM,
+        start_angle: OptionalPixels::NONE,
+        end_angle: OptionalPixels::NONE,
+        columns: 0,
+    };
+}
+
+impl Settings {
+    /// The rare settings, as the widget set them or as they start.
+    pub fn rare(&self) -> &RareSettings {
+        self.rare.as_deref().unwrap_or(&RareSettings::DEFAULT)
+    }
+
+    /// The rare settings to change, put on the heap the first time.
+    pub fn rare_mut(&mut self) -> &mut RareSettings {
+        self.rare.get_or_insert_with(|| Box::new(RareSettings::DEFAULT))
+    }
 }
 
 const DEFAULT_MAXIMUM: i32 = 100;
@@ -186,11 +219,9 @@ impl Default for Settings {
             height: None,
             grow: 0,
             padding: 0,
-            margin: 0,
             gap: 0,
             background: None,
             color: None,
-            border_color: None,
             border_width: OptionalPixels::NONE,
             radius: OptionalPixels::NONE,
             font: FontName::Normal,
@@ -199,16 +230,10 @@ impl Default for Settings {
             align_items: None,
             long_mode: LongMode::Wrap,
             visible: true,
-            disabled: false,
-            opacity: OPAQUE,
             value: 0,
-            minimum: 0,
-            maximum: DEFAULT_MAXIMUM,
-            start_angle: OptionalPixels::NONE,
-            end_angle: OptionalPixels::NONE,
-            columns: 0,
             array: None,
             scrolling: 0,
+            rare: None,
         }
     }
 }
@@ -654,11 +679,11 @@ impl Node {
             Property::Height => replace(&mut settings.height, Some(Length::from_value(small))),
             Property::Grow => replace(&mut settings.grow, pixels.max(0)),
             Property::Padding => replace(&mut settings.padding, pixels.max(0)),
-            Property::Margin => replace(&mut settings.margin, pixels.max(0)),
+            Property::Margin => replace(&mut settings.rare_mut().margin, pixels.max(0)),
             Property::Gap => replace(&mut settings.gap, pixels.max(0)),
             Property::Background => color.is_some() && replace(&mut settings.background, color),
             Property::Color => color.is_some() && replace(&mut settings.color, color),
-            Property::BorderColor => color.is_some() && replace(&mut settings.border_color, color),
+            Property::BorderColor => color.is_some() && replace(&mut settings.rare_mut().border_color, color),
             Property::BorderWidth => replace(&mut settings.border_width, OptionalPixels::some(pixels.max(0))),
             Property::Radius => replace(&mut settings.radius, OptionalPixels::some(pixels.max(0))),
             Property::Font => replace(&mut settings.font, FontName::from_value(small)),
@@ -670,14 +695,19 @@ impl Node {
             Property::AlignItems => replace(&mut settings.align_items, Placement::from_value(small)),
             Property::LongMode => replace(&mut settings.long_mode, LongMode::from_value(small)),
             Property::Visible => replace(&mut settings.visible, number != 0),
-            Property::Disabled => replace(&mut settings.disabled, number != 0),
-            Property::Opacity => replace(&mut settings.opacity, number.clamp(0, OPAQUE as i64) as u8),
+            Property::Disabled => replace(&mut settings.rare_mut().disabled, number != 0),
+            Property::Opacity => replace(
+                &mut settings.rare_mut().opacity,
+                number.clamp(0, OPAQUE as i64) as u8,
+            ),
             Property::Value | Property::RowCount | Property::CodeCount => replace(&mut settings.value, small),
-            Property::Minimum => replace(&mut settings.minimum, small),
-            Property::Maximum => replace(&mut settings.maximum, small),
-            Property::StartAngle => replace(&mut settings.start_angle, OptionalPixels::some(pixels)),
-            Property::EndAngle => replace(&mut settings.end_angle, OptionalPixels::some(pixels)),
-            Property::Columns => replace(&mut settings.columns, to_u16(number)),
+            Property::Minimum => replace(&mut settings.rare_mut().minimum, small),
+            Property::Maximum => replace(&mut settings.rare_mut().maximum, small),
+            Property::StartAngle => {
+                replace(&mut settings.rare_mut().start_angle, OptionalPixels::some(pixels))
+            }
+            Property::EndAngle => replace(&mut settings.rare_mut().end_angle, OptionalPixels::some(pixels)),
+            Property::Columns => replace(&mut settings.rare_mut().columns, to_u16(number)),
             Property::Scrolling => replace(&mut settings.scrolling, number.clamp(0, u8::MAX as i64) as u8),
             Property::Cells | Property::Options | Property::Points | Property::Series | Property::Codes => {
                 replace(&mut settings.array, to_variable(number))

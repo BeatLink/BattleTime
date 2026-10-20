@@ -374,7 +374,7 @@ impl<'image> AppHost<'image> {
         let mut opacity = OPAQUE as u32;
         let mut next = Some(node_index);
         while let Some(index) = next {
-            opacity = opacity * self.nodes[index].settings.opacity as u32 / OPAQUE as u32;
+            opacity = opacity * self.nodes[index].settings.rare().opacity as u32 / OPAQUE as u32;
             next = self.nodes[index].parent.map(|parent| parent as usize);
         }
         if self.is_disabled(node_index) {

@@ -28,7 +28,20 @@ pub const EXPRESSION_BINDING_BYTES: u32 = 16;
 pub const PLACEMENT_BYTES: u32 = 6;
 
 /// One node of the open screen, as `size_of` gives it on the watch, plus its place in the list.
-pub const NODE_BYTES: u32 = 132;
+pub const NODE_BYTES: u32 = 112;
+
+/// The rare settings a node keeps on the heap once its widget sets one, as `size_of` gives them on the watch.
+pub const RARE_SETTINGS_BYTES: u32 = 24;
+
+/// Whether setting this property puts a node's rare settings on the heap; the app host's tests
+/// check this against the settings it keeps there.
+pub fn is_rare_setting(property: Property) -> bool {
+    use Property::*;
+    matches!(
+        property,
+        Margin | BorderColor | Disabled | Opacity | Minimum | Maximum | StartAngle | EndAngle | Columns
+    )
+}
 
 /// What a node of a kind that `holds_extra` keeps on the heap beside it, as `size_of` gives it on the watch.
 pub const EXTRA_BYTES: u32 = 40;
@@ -178,7 +191,9 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
         image_bytes: whole_bytes,
         opening_bytes: 0,
         working_bytes: working_bytes_of(image),
-        widget_bytes: NODE_BYTES * largest.node_count + EXTRA_BYTES * largest.extra_count,
+        widget_bytes: NODE_BYTES * largest.node_count
+            + EXTRA_BYTES * largest.extra_count
+            + RARE_SETTINGS_BYTES * largest.rare_count,
         text_bytes: largest.text_bytes,
         icon_bytes: icons_held_bytes(most_icons),
         total_bytes: 0,
@@ -346,6 +361,8 @@ struct ScreenCost {
     node_count: u32,
     /// How many of those nodes keep an extra part on the heap.
     extra_count: u32,
+    /// How many of those nodes keep rare settings on the heap.
+    rare_count: u32,
     text_bytes: u32,
     /// What the library icons its widgets may show at once take while held.
     icon_bytes: u32,
@@ -385,6 +402,13 @@ fn screen_cost(tree: &WidgetTree, root: u16, may_name_library_icons: bool) -> Sc
         if holds_extra(widget.kind) {
             cost.extra_count += copies;
         }
+        if widget
+            .properties()
+            .flatten()
+            .any(|entry| is_rare_setting(entry.property))
+        {
+            cost.rare_count += copies;
+        }
         cost.text_bytes += copies * widget_text_bytes(tree, &widget);
         cost.icon_bytes = cost
             .icon_bytes
@@ -417,6 +441,7 @@ fn screen_cost(tree: &WidgetTree, root: u16, may_name_library_icons: bool) -> Sc
     // The host builds no more nodes than this for one screen.
     cost.node_count = cost.node_count.min(MOST_WIDGETS as u32);
     cost.extra_count = cost.extra_count.min(cost.node_count);
+    cost.rare_count = cost.rare_count.min(cost.node_count);
     cost
 }
 
