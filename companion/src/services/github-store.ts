@@ -1,6 +1,7 @@
 // Finds apps, faces and plugins on GitHub for the store: on releases, as battletime-store.zip or loose
 // .ntapp and .ntplugin files, and in the battletime-store artifact each Actions run uploads. An artifact
-// can only be downloaded with a GitHub token, even from a public repository.
+// can only be downloaded with a GitHub token, even from a public repository. The repository's own
+// plugins are also listed online from the newest store.json, as the bundle lists its apps.
 //
 // GitHub's API answers a window's fetch, but the host it redirects downloads to does not, so files
 // come down through the desktop or Android app's native requests where there are some.
@@ -9,7 +10,15 @@ import { unzipSync } from 'fflate';
 
 import { utf8Decode } from '@/ble/encoding';
 
-import { AppStoreError, offerFromFile, type StoreOffer, type StoreSource } from './app-store';
+import {
+  AppStoreError,
+  offerFromFile,
+  sortEntries,
+  storeKey,
+  type StoreEntry,
+  type StoreOffer,
+  type StoreSource,
+} from './app-store';
 import { checkRepo } from './github-firmware';
 import { fetchRequester, webRequester, type WebRequester } from './web-request';
 
@@ -51,7 +60,7 @@ type ReleaseJson = {
   name: string | null;
   published_at: string;
   prerelease: boolean;
-  assets: { id: number; name: string; size: number; url: string }[];
+  assets: { id: number; name: string; size: number; url: string; updated_at?: string }[];
 };
 
 type ArtifactJson = {
@@ -146,10 +155,21 @@ export async function listStoreReleases(repo: string, options: Options = {}): Pr
 // Reading what was downloaded
 // ============================================================================
 
+type StoreIndexPlugin = {
+  id: string;
+  name: string;
+  version?: string;
+  description?: string;
+  watch?: string[];
+  file: string;
+  bytes?: number;
+  sha256?: string;
+};
+
 type StoreIndex = {
   format: number;
   apps?: { file: string; description?: string }[];
-  plugins?: { file: string }[];
+  plugins?: StoreIndexPlugin[];
 };
 
 // A store zip, or an artifact holding the same files: store.json lists what is inside and describes
@@ -218,4 +238,111 @@ export async function fetchStoreRelease(
     offers.push(offerFromFile(await download(file, options.token, requester), source));
   }
   return offers;
+}
+
+// ============================================================================
+// The repository's plugins, read online
+// ============================================================================
+
+// A plugin the repository's newest store offers, with the file to download when it is installed.
+export type OnlinePlugin = { entry: StoreEntry; file: StoreFile; sha256: string };
+
+type StoreIndexAsset = { release: ReleaseJson; index: ReleaseJson['assets'][number] };
+
+function changedAt(found: StoreIndexAsset): string {
+  return found.index.updated_at ?? found.release.published_at;
+}
+
+// The release whose store.json changed last: apps-latest, which CI refreshes from master, or a newer tagged release.
+function newestStoreIndex(releases: ReleaseJson[]): StoreIndexAsset | null {
+  let newest: StoreIndexAsset | null = null;
+  for (const release of releases) {
+    const index = release.assets.find((asset) => asset.name === STORE_INDEX);
+    if (index && (!newest || changedAt({ release, index }) > changedAt(newest))) {
+      newest = { release, index };
+    }
+  }
+  return newest;
+}
+
+// Every plugin in the repository's newest store, read from its store.json alone, so a plugin's file
+// comes down only when it is installed.
+export async function listOnlinePlugins(repo: string, options: Options = {}): Promise<OnlinePlugin[]> {
+  const fetcher = options.fetcher ?? fetch;
+  const requester = options.requester ?? (options.fetcher ? fetchRequester(options.fetcher) : webRequester());
+  const name = checkRepo(repo);
+  const releases = await getJson<ReleaseJson[]>(`${API}/repos/${name}/releases?per_page=20`, options.token, fetcher);
+  const newest = newestStoreIndex(releases);
+  if (!newest) {
+    return [];
+  }
+  const indexFile = { name: STORE_INDEX, url: newest.index.url, sizeBytes: newest.index.size };
+  const index = JSON.parse(utf8Decode(await download(indexFile, options.token, requester))) as StoreIndex;
+  if (index.format !== STORE_FORMAT) {
+    throw new AppStoreError("The repository's store was made for another version of the companion.");
+  }
+  const source: StoreSource = { type: 'github', repo: name, release: newest.release.name || newest.release.tag_name };
+  return (index.plugins ?? []).flatMap((plugin) => {
+    const asset = newest.release.assets.find((candidate) => candidate.name === plugin.file);
+    if (!asset || typeof plugin.id !== 'string' || typeof plugin.name !== 'string') {
+      return [];
+    }
+    const entry: StoreEntry = {
+      key: storeKey('plugin', plugin.id),
+      kind: 'plugin',
+      id: plugin.id,
+      name: plugin.name,
+      description: plugin.description ?? '',
+      group: '',
+      version: plugin.version ?? '',
+      watch: plugin.watch ?? [],
+      bytes: plugin.bytes ?? asset.size,
+      source,
+    };
+    return [{ entry, file: { name: asset.name, url: asset.url, sizeBytes: asset.size }, sha256: plugin.sha256 ?? '' }];
+  });
+}
+
+// The file's SHA-256 in hex, or null where the window has no Web Crypto.
+async function sha256Hex(data: Uint8Array): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) {
+    return null;
+  }
+  const digest = new Uint8Array(await subtle.digest('SHA-256', new Uint8Array(data)));
+  return Array.from(digest, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// Downloads one online plugin and checks it against the checksum and id store.json gives for it.
+export async function fetchOnlinePlugin(plugin: OnlinePlugin, options: Options = {}): Promise<StoreOffer> {
+  const requester = options.requester ?? (options.fetcher ? fetchRequester(options.fetcher) : webRequester());
+  const data = await download(plugin.file, options.token, requester);
+  const sum = plugin.sha256 ? await sha256Hex(data) : null;
+  if (sum !== null && sum !== plugin.sha256.toLowerCase()) {
+    throw new AppStoreError(`${plugin.file.name} did not match its checksum, so it was not installed.`);
+  }
+  const offer = offerFromFile(data, plugin.entry.source);
+  if (offer.entry.key !== plugin.entry.key) {
+    throw new AppStoreError(`${plugin.file.name} holds another plugin than the store says.`);
+  }
+  return offer;
+}
+
+// The store's entries with the online plugins added: an online plugin stands in for a kept one unless
+// that came from a file or is already the same version. `online` holds the keys still to download.
+export function withOnlinePlugins(
+  entries: StoreEntry[],
+  plugins: OnlinePlugin[],
+): { entries: StoreEntry[]; online: Map<string, OnlinePlugin> } {
+  const byKey = new Map(entries.map((entry) => [entry.key, entry]));
+  const online = new Map<string, OnlinePlugin>();
+  for (const plugin of plugins) {
+    const kept = byKey.get(plugin.entry.key);
+    if (kept && (kept.source.type === 'file' || kept.version === plugin.entry.version)) {
+      continue;
+    }
+    byKey.set(plugin.entry.key, plugin.entry);
+    online.set(plugin.entry.key, plugin);
+  }
+  return { entries: sortEntries([...byKey.values()]), online };
 }

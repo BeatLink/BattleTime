@@ -56,12 +56,15 @@ fn btleplug_dir() -> PathBuf {
             "metadata",
             "--format-version",
             "1",
-            "--offline",
+            "--locked",
             "--manifest-path",
         ])
         .arg(&manifest)
         .output()
         .expect("cargo metadata could not run");
+    if !output.status.success() {
+        panic!("cargo metadata failed: {}", String::from_utf8_lossy(&output.stderr));
+    }
     let metadata: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("cargo metadata gave no JSON");
     let packages = metadata["packages"]

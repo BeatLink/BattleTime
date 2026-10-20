@@ -129,7 +129,9 @@ document for its part instead.
   - `battletime apps remove` takes it, and dice if it was not there before, out of `apps list` and the
     launcher;
   - in the Tauri desktop app, Watch tab, Store, Look on GitHub, v0.1.0, adding and installing Buzz
-    back puts the plugin under Plugins and a Buzz back app on the watch, and Uninstall removes both.
+    back puts the plugin under Plugins and a Buzz back app on the watch, and Uninstall removes both;
+  - in the same app, opening the Store with no GitHub step lists Buzz back under Plugins, from the
+    newest release, and Install downloads it and puts it and its watch app in place.
 
 - [ ] **Pomodoro on the PineTime.** The pomodoro rebuilt around three intervals (4d27f48a) has run
   only in the harness and the browser preview. Check on the watch that it opens on the countdown,
