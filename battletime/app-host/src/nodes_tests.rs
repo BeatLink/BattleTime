@@ -544,3 +544,19 @@ fn a_node_remembers_where_it_was_drawn() {
     label.set_drawn_bounds(None);
     assert_eq!(label.drawn_bounds(), None);
 }
+
+#[test]
+fn memory_need_knows_which_kinds_keep_an_extra_part() {
+    use battletime_runtime::memory_need::holds_extra;
+
+    for byte in 0..=u8::MAX {
+        let Some(kind) = WidgetKind::from_byte(byte) else {
+            continue;
+        };
+        assert_eq!(
+            ExtraSlot::for_kind(kind).0.is_some(),
+            holds_extra(kind),
+            "{kind:?}"
+        );
+    }
+}

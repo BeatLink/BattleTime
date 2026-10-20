@@ -228,6 +228,16 @@ fn status_icons_bytes() -> u32 {
 }
 
 #[test]
+fn a_node_that_keeps_an_extra_part_costs_that_too() {
+    let mut image = writer();
+    image.widget(WidgetKind::Column, 2, &[]);
+    image.widget(WidgetKind::Label, 0, &[]);
+    image.widget(WidgetKind::Button, 0, &[]);
+
+    assert_eq!(need_of(&image).widget_bytes, 3 * NODE_BYTES + EXTRA_BYTES);
+}
+
+#[test]
 fn a_repeat_builds_its_row_once_for_each_row() {
     let mut image = writer();
     image.widget(WidgetKind::Column, 1, &[]);
@@ -236,7 +246,11 @@ fn a_repeat_builds_its_row_once_for_each_row() {
     image.widget(WidgetKind::Label, 0, &[]);
     image.widget(WidgetKind::Label, 0, &[]);
 
-    assert_eq!(need_of(&image).widget_bytes, (2 + 5 * 3) * NODE_BYTES);
+    // The Repeat keeps an extra part.
+    assert_eq!(
+        need_of(&image).widget_bytes,
+        (2 + 5 * 3) * NODE_BYTES + EXTRA_BYTES
+    );
 }
 
 #[test]
@@ -247,7 +261,10 @@ fn a_worked_out_row_count_is_taken_as_a_few_rows() {
     image.widget(WidgetKind::Repeat, 1, &[(Property::RowCount, Expression(count))]);
     image.widget(WidgetKind::Label, 0, &[]);
 
-    assert_eq!(need_of(&image).widget_bytes, (2 + ASSUMED_ROWS) * NODE_BYTES);
+    assert_eq!(
+        need_of(&image).widget_bytes,
+        (2 + ASSUMED_ROWS) * NODE_BYTES + EXTRA_BYTES
+    );
 }
 
 #[test]
@@ -258,7 +275,7 @@ fn down_a_list_only_the_rows_in_view_are_built() {
     image.widget(WidgetKind::Label, 0, &[(Property::Height, Constant(40))]);
 
     // Six rows fill the screen, and one more can peek in at each end.
-    assert_eq!(need_of(&image).widget_bytes, (2 + 8) * NODE_BYTES);
+    assert_eq!(need_of(&image).widget_bytes, (2 + 8) * NODE_BYTES + EXTRA_BYTES);
 }
 
 #[test]
@@ -270,7 +287,7 @@ fn no_screen_counts_more_nodes_than_the_host_builds() {
 
     assert_eq!(
         need_of(&image).widget_bytes,
-        crate::widgets::MOST_WIDGETS as u32 * NODE_BYTES
+        crate::widgets::MOST_WIDGETS as u32 * NODE_BYTES + EXTRA_BYTES
     );
 }
 
