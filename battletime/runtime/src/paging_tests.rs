@@ -133,13 +133,13 @@ fn the_resident_image_keeps_all_but_the_code_and_says_where_the_code_lies() {
     assert!(resident_bytes.len() <= super::resident_bytes(&whole));
     assert_eq!(
         resident_bytes.len(),
-        sample.bytes.len() - whole.code_bytes() - whole.widget_record_bytes() + 12 + 3 * 12
+        sample.bytes.len() - whole.code_bytes() - whole.widget_record_bytes() + 12 + 4 * 12
     );
     assert_eq!(resident.string_count(), whole.string_count());
-    assert_eq!(
-        resident.expression_code(sample.expression),
-        whole.expression_code(sample.expression)
-    );
+    assert_eq!(resident.expression_code(sample.expression), None);
+    let place = resident.expression_place(sample.expression).unwrap();
+    let in_file = &sample.bytes[place.at as usize..(place.at + place.length) as usize];
+    assert_eq!(Some(in_file), whole.expression_code(sample.expression));
     assert_eq!(resident.handler_code(sample.handler), None);
     let place = resident.handler_place(sample.handler).unwrap();
     let in_file = &sample.bytes[place.at as usize..(place.at + place.length) as usize];
@@ -222,7 +222,7 @@ fn a_paged_handler_and_the_functions_it_calls_run_as_the_whole_image_does() {
 }
 
 #[test]
-fn an_expression_held_in_ram_calls_a_paged_function() {
+fn a_paged_expression_calls_a_paged_function() {
     let sample = sample();
     let resident_bytes = resident_image(&sample.bytes).unwrap();
     let resident = AppImage::parse(&resident_bytes).unwrap();

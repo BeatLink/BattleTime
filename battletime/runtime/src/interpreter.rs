@@ -192,6 +192,7 @@ enum JumpTo {
 #[derive(Clone, Copy)]
 enum TopCode<'code> {
     Here(&'code [u8]),
+    Expression(u16),
     Handler(u16),
 }
 
@@ -410,7 +411,11 @@ impl Interpreter {
         state: &AppState,
         system: &impl SystemValues,
     ) -> Result<Value, Failure> {
-        let code = image.expression_code(expression).ok_or(Failure::NoSuchCode)?;
+        let top = match image.expression_code(expression) {
+            Some(code) => TopCode::Here(code),
+            None if image.expression_place(expression).is_some() => TopCode::Expression(expression),
+            None => return Err(Failure::NoSuchCode),
+        };
         let call = Call {
             image,
             library,
@@ -420,7 +425,7 @@ impl Interpreter {
             system,
             outcome: None,
         };
-        self.run(TopCode::Here(code), call)?;
+        self.run(top, call)?;
 
         if self.depth != 1 {
             return Err(Failure::WrongResultCount);
@@ -547,6 +552,9 @@ impl Interpreter {
             let code = match running {
                 Running::Top => match top {
                     TopCode::Here(code) => code,
+                    TopCode::Expression(expression) => {
+                        paged_code(&mut cache, image, CodeUnit::Expression(expression), call.system)?
+                    }
                     TopCode::Handler(handler) => {
                         paged_code(&mut cache, image, CodeUnit::Handler(handler), call.system)?
                     }

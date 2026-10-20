@@ -25,6 +25,7 @@ const SECTION_ENTRY_BYTES: usize = layout::SECTION_ENTRY_BYTES;
 const HANDLERS_SECTION: u16 = 4;
 const FUNCTIONS_SECTION: u16 = 10;
 const WIDGETS_SECTION: u16 = 5;
+const EXPRESSIONS_SECTION: u16 = 3;
 /// The CRC field, and where the bytes it covers start.
 const CRC_AT: usize = 12;
 const CRC_COVERS_FROM: usize = 16;
@@ -43,7 +44,7 @@ pub fn cache_bytes(image: &AppImage) -> usize {
 pub fn resident_bytes(image: &AppImage) -> usize {
     image.byte_count() - image.code_bytes() - image.widget_record_bytes()
         + SECTION_ENTRY_BYTES
-        + 3 * layout::PAGED_ENTRY_BYTES
+        + 4 * layout::PAGED_ENTRY_BYTES
 }
 
 // ============================================================================
@@ -80,7 +81,13 @@ pub fn resident_image(whole: &[u8]) -> Result<Vec<u8>, ImageError> {
         let bytes = whole
             .get(offset..offset + length)
             .ok_or(ImageError::SectionOutOfBounds)?;
-        if number == HANDLERS_SECTION || number == FUNCTIONS_SECTION || number == WIDGETS_SECTION {
+        let paged_section = [
+            EXPRESSIONS_SECTION,
+            HANDLERS_SECTION,
+            FUNCTIONS_SECTION,
+            WIDGETS_SECTION,
+        ];
+        if paged_section.contains(&number) {
             let table_bytes = count as usize * layout::TABLE_ENTRY_BYTES;
             let place = CodePlace {
                 at: (offset + table_bytes) as u32,
@@ -134,6 +141,7 @@ pub fn resident_image(whole: &[u8]) -> Result<Vec<u8>, ImageError> {
 /// A piece of an app's code, by its number.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum CodeUnit {
+    Expression(u16),
     Handler(u16),
     /// A function's header and code.
     Function(u8),
@@ -193,6 +201,7 @@ impl CodeCache {
             return Ok(&self.buffer[start..start + length]);
         }
         let place = match unit {
+            CodeUnit::Expression(index) => image.expression_place(index),
             CodeUnit::Handler(index) => image.handler_place(index),
             CodeUnit::Function(index) => image.function_place(index as u16),
         }

@@ -209,9 +209,9 @@ Docs and comments the code contradicts, as of e30358e4:
 6. **P-256 as a module** when pairing starts.
 7. **Paged bytecode functions and glyph subsets**, and the shell's screens as bytecode. Paged code
    is done ([app-runtime.md](app-runtime.md#paged-code)), ahead of the stages before it, while
-   apps are still small: an app whose need is smaller that way keeps its handlers and functions on
+   apps are still small: an app whose need is smaller that way keeps its expressions, handlers and functions on
    the flash and reads them into a code cache of at least 1 KB as they run, and holds only the open
-   screen's widget records, for 6,580 B of firmware code. Today it pages 10 of 66 apps and faces,
+   screen's widget records, for 6,812 B of firmware code. Today it pages 13 of 66 apps and faces,
    saving up to 3 KB each; the gain grows with an app's code and screens. No install-time index was
    needed: the image's own tables give every piece's place, and the bindings and screen table are
    worked out from the whole image while it opens. Still to come: strings, which handlers and

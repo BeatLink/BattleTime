@@ -175,6 +175,12 @@ faces fell from 169 KB to 146 KB, and the stopwatch's need, the largest, from 20
 Measured with `tools/measure_heap.py`, `settings` open paged held 14,728 B instead of 15,768 B and
 the face 6,308 B instead of 6,552 B; opening `settings` still peaked at 6,332 B of stack.
 
+Paging expressions too, through the same code cache, added 232 B of code (448,136 B to 448,368 B).
+Thirteen apps and faces page now: `settings` needs 15,448 B instead of 16,384 B, `about` 15,036 B
+instead of 16,408 B, and `pinetime-style`, now paged, 13,612 B instead of 15,344 B. Measured,
+`settings` open paged held 14,128 B instead of 14,728 B, turning Always on and scrolling its list
+worked, and it peaked at 6,340 B of stack.
+
 Keeping four free file sectors erased ahead, so a file of up to four sectors is written without
 waiting 45 ms an erase, added 704 B of code, measured with `cargo size` against the commit before on
 2026-10-15 (434,020 B to 434,724 B of text and rodata), and 64 B of static RAM for the map of which

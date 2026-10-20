@@ -414,12 +414,13 @@ pub struct CodePlace {
 /// The sections whose data an image the watch keeps in RAM left in the image file.
 #[derive(Clone, Copy, Default)]
 struct PagedPlaces {
+    expressions: Option<CodePlace>,
     handlers: Option<CodePlace>,
     functions: Option<CodePlace>,
     widgets: Option<CodePlace>,
 }
 
-/// Reads the paged section, if the image has one; only handlers, functions and widget records may be paged.
+/// Reads the paged section, if the image has one; only expressions, handlers, functions and widget records may be paged.
 fn paged_places(bytes: &[u8], section_count: u16) -> Result<PagedPlaces, ImageError> {
     let mut places = PagedPlaces::default();
     for section_index in 0..section_count as usize {
@@ -438,6 +439,7 @@ fn paged_places(bytes: &[u8], section_count: u16) -> Result<PagedPlaces, ImageEr
             });
             match SectionKind::from_number(number) {
                 Some(SectionKind::Handlers) => places.handlers = place,
+                Some(SectionKind::Expressions) => places.expressions = place,
                 Some(SectionKind::Functions) => places.functions = place,
                 Some(SectionKind::Widgets) => places.widgets = place,
                 _ => return Err(ImageError::UnknownSection(number)),
@@ -477,6 +479,7 @@ pub struct AppImage<'image> {
     functions: EntryTable<'image>,
     data: EntryTable<'image>,
     /// Where the handlers', functions' and widget records' data starts in the whole image when it was left there; 0 when it is here.
+    paged_expressions_at: u32,
     paged_handlers_at: u32,
     paged_functions_at: u32,
     paged_widgets_at: u32,
@@ -568,6 +571,7 @@ impl<'image> AppImage<'image> {
             fonts: EntryTable::default(),
             functions: EntryTable::default(),
             data: EntryTable::default(),
+            paged_expressions_at: 0,
             paged_handlers_at: 0,
             paged_functions_at: 0,
             paged_widgets_at: 0,
@@ -575,6 +579,7 @@ impl<'image> AppImage<'image> {
         };
 
         let paged = paged_places(bytes, section_count)?;
+        image.paged_expressions_at = paged.expressions.map_or(0, |place| place.at);
         image.paged_handlers_at = paged.handlers.map_or(0, |place| place.at);
         image.paged_functions_at = paged.functions.map_or(0, |place| place.at);
         image.paged_widgets_at = paged.widgets.map_or(0, |place| place.at);
@@ -599,7 +604,12 @@ impl<'image> AppImage<'image> {
             match kind {
                 SectionKind::Strings => image.strings = EntryTable::parse(count, section_bytes)?,
                 SectionKind::State => image.read_state_section(count, section_bytes)?,
-                SectionKind::Expressions => image.expressions = EntryTable::parse(count, section_bytes)?,
+                SectionKind::Expressions => {
+                    image.expressions = match paged.expressions {
+                        Some(place) => EntryTable::parse_paged(count, section_bytes, place)?,
+                        None => EntryTable::parse(count, section_bytes)?,
+                    }
+                }
                 SectionKind::Handlers => {
                     image.handlers = match paged.handlers {
                         Some(place) => EntryTable::parse_paged(count, section_bytes, place)?,
@@ -786,7 +796,18 @@ impl<'image> AppImage<'image> {
 
     /// Whether the image's code was left in the image file, so it runs only through a `CodeCache`.
     pub fn is_paged(&self) -> bool {
-        self.paged_handlers_at != 0 || self.paged_functions_at != 0 || self.paged_widgets_at != 0
+        self.paged_expressions_at != 0
+            || self.paged_handlers_at != 0
+            || self.paged_functions_at != 0
+            || self.paged_widgets_at != 0
+    }
+
+    /// Where a paged expression's code lies in the whole image; none when the expressions are here.
+    pub fn expression_place(&self, index: u16) -> Option<CodePlace> {
+        match self.paged_expressions_at {
+            0 => None,
+            at => self.expressions.place(index, at),
+        }
     }
 
     /// Whether the widget records were left in the image file, so only a `ScreenWindow` holds any.
@@ -823,12 +844,12 @@ impl<'image> AppImage<'image> {
         }
     }
 
-    /// The bytes of every handler's code and every function's header and code together, in a whole image.
+    /// The bytes of every expression's and handler's code and every function's header and code together, in a whole image.
     pub fn code_bytes(&self) -> usize {
-        self.handlers.data.len() + self.functions.data.len()
+        self.expressions.data.len() + self.handlers.data.len() + self.functions.data.len()
     }
 
-    /// The longest handler, or function with its header, which a `CodeCache` must hold at once.
+    /// The longest expression, handler, or function with its header, which a `CodeCache` must hold at once.
     pub fn longest_code_bytes(&self) -> usize {
         let longest = |table: &EntryTable| {
             (0..table.count)
@@ -837,7 +858,9 @@ impl<'image> AppImage<'image> {
                 .max()
                 .unwrap_or(0)
         };
-        longest(&self.handlers).max(longest(&self.functions))
+        longest(&self.expressions)
+            .max(longest(&self.handlers))
+            .max(longest(&self.functions))
     }
 
     /// A function's header and code; none when it is missing or shorter than its header.

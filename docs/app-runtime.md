@@ -514,12 +514,12 @@ embed it.
 
 ### Paged code
 
-An app whose [memory need](#memory) is smaller that way keeps its handlers' and functions' code,
+An app whose [memory need](#memory) is smaller that way keeps its expressions', handlers' and functions' code,
 and the widget records of every screen but the open one, on the external flash while it is open.
 `estimate_memory_need` works the need out both ways and `paging::pages_code` takes its choice:
 paged, the app holds a resident image, a code cache and the open screen's widget records, but holds
 the whole image beside the resident one for a moment as it opens, so an app with little code or a
-small screen stays whole. Ten of the 66 apps and faces in the repository are paged, such as
+small screen stays whole. Thirteen of the 66 apps and faces in the repository are paged, such as
 `settings`, `about`, `fancy` and `omega-time`, saving up to 3 KB each.
 
 Opening a paged app takes these steps instead of the first and fourth above:
@@ -548,8 +548,9 @@ cost of reading it again. Each read is one DMA read through the image file's own
 about 40 µs plus 1 µs a byte on the watch, and a second of the file's 4-byte CRC: code read from an
 image put at the same path, such as one the companion is uploading, fails the handler with
 `CodeUnreadable` rather than running.
-Expressions stay in the resident image, since the screen evaluates them all the time; they still
-call paged functions. The verifier refuses a resident image, and a paged app takes no library after
+Expressions, the code behind every bound value, are paged too and go through the same cache; a
+screen's own expressions stay in it while it shows, so a refresh reads from the flash only those
+the cache dropped. The verifier refuses a resident image, and a paged app takes no library after
 it opens, since the bindings are worked out from the whole image. Closed apps that run in the
 background and the simulator open images whole.
 
