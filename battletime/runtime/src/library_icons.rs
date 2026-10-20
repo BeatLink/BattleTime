@@ -28,6 +28,23 @@ pub const HELD_ICONS_MOST_BYTES: u32 = 8192;
 /// What one held icon costs beside its bytes: its number and its place in the host's list.
 pub const HELD_ICON_OVERHEAD_BYTES: u32 = 16;
 
+/// Each library icon's bytes in the icons file, by number, so memory need counts an icon an app names at its
+/// size. `compiler/src/library_tests.rs` checks it against the icons the compiler draws; an icon past its end
+/// counts as `LIBRARY_ICON_MOST_BYTES`.
+pub const LIBRARY_ICON_BYTES: [u16; 72] = [
+    764, 404, 258, 280, 476, 528, 368, 252, 328, 604, 504, 392, 266, 550, 556, 376, 236, 428, 546, 540, 544,
+    762, 704, 60, 348, 386, 504, 338, 368, 346, 328, 406, 288, 168, 368, 668, 488, 694, 768, 422, 160, 412,
+    762, 302, 408, 816, 202, 202, 410, 232, 232, 198, 198, 232, 378, 264, 706, 556, 16, 386, 458, 800, 472,
+    452, 272, 280, 580, 502, 448, 368, 486, 336,
+];
+
+/// The bytes of library icon `number`, or the most an icon may take when it is past the table.
+pub fn library_icon_bytes(number: u16) -> usize {
+    LIBRARY_ICON_BYTES
+        .get(number as usize)
+        .map_or(LIBRARY_ICON_MOST_BYTES, |&bytes| bytes as usize)
+}
+
 /// The most icons the library may number; a constant from 32768 below 32768 plus this names one.
 /// Fixed colours share those numbers, so only a very dark red could be taken for an icon.
 pub const MOST_LIBRARY_ICONS: u16 = 256;

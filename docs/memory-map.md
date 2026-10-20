@@ -153,6 +153,14 @@ worked out). Across the 66 apps and faces, nodes are the largest part of the wor
 (158 KB together), then the library icons a screen may show (168 KB, counted at 1,040 B each
 though an icon averages 420 B), working memory (210 KB) and images (119 KB).
 
+Counting each library icon an app names at its own size rather than the most an icon may take
+added 1,096 B of code with the change before it, which counts an image a value picks as a library
+icon only in an app that can name one, measured with `cargo size` on 2026-10-16 (445,536 B to
+446,632 B of text and rodata), 144 B of it the table of sizes. The icons counted across the 66 apps
+and faces fell from 168 KB to 95 KB: `fancy` needs 15,464 B instead of 18,912 B, `pinetime-style`
+15,344 B instead of 18,660 B and `settings` 17,424 B. The largest need is still the stopwatch's,
+20,084 B, nearly all of it nodes.
+
 Keeping four free file sectors erased ahead, so a file of up to four sectors is written without
 waiting 45 ms an erase, added 704 B of code, measured with `cargo size` against the commit before on
 2026-10-15 (434,020 B to 434,724 B of text and rodata), and 64 B of static RAM for the map of which
@@ -454,7 +462,7 @@ it opens one. The parts, in bytes:
 | Nodes | 132 per widget of the largest screen | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
 | Paged code, instead of the image | its resident image, a code cache as large as its longest handler or function and at least 1,024, 160 for the cache's path and list, the widget records of its largest screen with 24 for their window, and 6 for each screen in the screen table; or, if more, the whole image and the resident one together, held while it opens | Chosen only when it makes the total smaller; see [app-runtime.md](app-runtime.md#paged-code) |
-| Library icons | 1,040 for each library icon a screen may show, at most 8,192 | The icons the host reads from `/system/icons` for the screen with the most: an `Image`, `Icon`, `Button` or `Badge` that names one, or takes its image from an expression in an app that can name a library icon at all (a constant from the library's range in its code, a starting value, an image other than its launcher icon that names one, an icon system value or a call to `weather_icon_at`), 3 for a `StatusIcons`, 1 for a `Battery` and the 8 KB cap for an `AppList`; each icon is at most 1,024 B, plus its place in the host's list |
+| Library icons | each library icon a screen may show at its size, rounded to 4 bytes, plus 16; one a value picks at 1,040; at most 8,192 | The icons the host reads from `/system/icons` for the screen with the most, their sizes from `LIBRARY_ICON_BYTES`, which a compiler test keeps equal to the icons file: an `Image`, `Icon`, `Button` or `Badge` that names one, or takes its image from an expression in an app that can name a library icon at all (a constant from the library's range in its code, a starting value, an image other than its launcher icon that names one, an icon system value or a call to `weather_icon_at`), the notification, Bluetooth and alarm icons for a `StatusIcons`, the charging bolt for a `Battery` and the 8 KB cap for an `AppList`; each icon is at most 1,024 B |
 
 An app's need must fit `APP_HEAP_BUDGET_BYTES`, 27,648 B: the 31,744 B heap less 4 KB for the
 system while an app is open. At rest the system holds the shell's index of app ids, about 12 B an

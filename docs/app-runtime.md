@@ -277,8 +277,9 @@ longer shown: an `Image`, `Icon`, `Button` or `Badge` that names one, directly o
 image of format 2, the icons a `StatusIcons` or `Battery` shows, and those of an `AppList`'s apps in
 view. Layout sizes an icon not yet read at 32 by 32, the side they all share. It holds at most
 8 KB of icons, about 19 average ones, and draws any past that, or missing from the file, as a
-placeholder; [memory need](memory-map.md#how-much-heap-an-app-needs) counts 1,040 bytes for each library icon a
-screen may show, up to those 8 KB.
+placeholder; [memory need](memory-map.md#how-much-heap-an-app-needs) counts each library icon a
+screen names at its own size, from `library_icons::LIBRARY_ICON_BYTES`, and one a value picks at
+the most an icon may take, 1,024 bytes, up to those 8 KB.
 
 An app calls a library function with `call library`, which costs 5 bytes in place of the function's
 body. Library code takes only its arguments and system values; text it gives back is copied into

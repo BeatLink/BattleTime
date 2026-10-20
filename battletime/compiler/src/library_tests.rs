@@ -419,3 +419,24 @@ fn exactly_the_listed_library_functions_give_back_an_icon() {
 fn every_icon_fits_the_numbers_memory_need_reads_as_library_icons() {
     assert!(ICON_NAMES.len() <= battletime_runtime::library_icons::MOST_LIBRARY_ICONS as usize);
 }
+
+#[test]
+fn the_runtime_knows_each_icon_s_size() {
+    use battletime_runtime::library_icons::{icon_count, read_icon, LIBRARY_ICON_BYTES};
+
+    let file = super::build_icons_file().unwrap();
+    let mut read = |offset: u32, out: &mut [u8]| {
+        let rest = file.get(offset as usize..)?;
+        let length = rest.len().min(out.len());
+        out[..length].copy_from_slice(&rest[..length]);
+        Some(length)
+    };
+    let count = icon_count(&mut read).unwrap();
+    let sizes: Vec<u16> = (0..count)
+        .map(|number| read_icon(&mut read, count, number).unwrap().len() as u16)
+        .collect();
+    assert_eq!(
+        sizes, LIBRARY_ICON_BYTES,
+        "copy these sizes into LIBRARY_ICON_BYTES in runtime/src/library_icons.rs"
+    );
+}

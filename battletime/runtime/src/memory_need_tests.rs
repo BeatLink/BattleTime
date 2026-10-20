@@ -1,6 +1,8 @@
 use alloc::vec;
 
-use crate::library_icons::{held_icon_bytes, HELD_ICONS_MOST_BYTES, LIBRARY_ICON_MOST_BYTES};
+use crate::library_icons::{
+    held_icon_bytes, library_icon_bytes, HELD_ICONS_MOST_BYTES, LIBRARY_ICON_MOST_BYTES,
+};
 use crate::memory_need::*;
 use crate::resources::{ImageFormat, ImageReference};
 use crate::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
@@ -76,7 +78,7 @@ fn fixed_text_counts_its_length_and_worked_out_text_a_guess() {
 }
 
 #[test]
-fn each_library_icon_shown_counts_as_held_and_an_apps_own_picture_does_not() {
+fn each_library_icon_shown_counts_at_its_size_and_an_apps_own_picture_does_not() {
     let mut image = writer();
     let own = image.image_resource(ImageFormat::Mask, 1, 1, &[255]) as i32;
     let named = image.library_image_reference(4) as i32;
@@ -90,7 +92,12 @@ fn each_library_icon_shown_counts_as_held_and_an_apps_own_picture_does_not() {
     image.widget(WidgetKind::StatusIcons, 0, &[]);
 
     let need = need_of(&image);
-    assert_eq!(need.icon_bytes, 6 * held_icon_bytes(LIBRARY_ICON_MOST_BYTES));
+    let held = |number| held_icon_bytes(library_icon_bytes(number));
+    // The named icon and the library one at their sizes, the picked one at the most, and the three status icons.
+    assert_eq!(
+        need.icon_bytes,
+        held(4) + held(7) + held_icon_bytes(LIBRARY_ICON_MOST_BYTES) + status_icons_bytes()
+    );
     assert_eq!(
         need.total_bytes,
         need.image_bytes + need.working_bytes + need.widget_bytes + need.text_bytes + need.icon_bytes
@@ -208,7 +215,16 @@ fn the_screen_with_the_most_icons_decides_them() {
 
     let need = need_of(&image);
     assert_eq!(need.widget_bytes, 4 * NODE_BYTES);
-    assert_eq!(need.icon_bytes, 3 * held_icon_bytes(LIBRARY_ICON_MOST_BYTES));
+    assert_eq!(need.icon_bytes, status_icons_bytes());
+}
+
+/// The notification, Bluetooth and alarm icons a `StatusIcons` shows, at their sizes.
+fn status_icons_bytes() -> u32 {
+    use crate::resources::library_icon::{ALARM, BLUETOOTH, NOTIFICATION};
+    [NOTIFICATION, BLUETOOTH, ALARM]
+        .map(|number| held_icon_bytes(library_icon_bytes(number)))
+        .iter()
+        .sum()
 }
 
 #[test]

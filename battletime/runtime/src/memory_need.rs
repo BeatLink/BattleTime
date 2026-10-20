@@ -7,11 +7,11 @@ use crate::image::AppImage;
 use crate::instruction::{decode, EffectKind, Instruction, SystemValue};
 use crate::interpreter::scratch_bytes_for;
 use crate::library_icons::{
-    held_icon_bytes, HELD_ICONS_MOST_BYTES, LIBRARY_FUNCTIONS_GIVING_ICONS, LIBRARY_ICON_MOST_BYTES,
-    MOST_LIBRARY_ICONS,
+    held_icon_bytes, library_icon_bytes, HELD_ICONS_MOST_BYTES, LIBRARY_FUNCTIONS_GIVING_ICONS,
+    LIBRARY_ICON_MOST_BYTES, MOST_LIBRARY_ICONS,
 };
 use crate::paging::{cache_bytes, resident_bytes};
-use crate::resources::{library_image_named_by, ImageReference};
+use crate::resources::{library_icon, library_image_named_by, ImageReference};
 use crate::widgets::{Property, PropertySource, WidgetKind, WidgetTree, DEEPEST_NESTING, MOST_WIDGETS};
 
 // ============================================================================
@@ -133,7 +133,7 @@ pub fn estimate_memory_need(image: &AppImage) -> MemoryNeed {
     let mut most_icons = 0;
     for root in tree.screens() {
         let cost = screen_cost(&tree, root, may_name_library_icons);
-        most_icons = most_icons.max(cost.icon_count);
+        most_icons = most_icons.max(cost.icon_bytes);
         if cost.node_count > largest.node_count
             || (cost.node_count == largest.node_count && cost.text_bytes > largest.text_bytes)
         {
@@ -314,8 +314,8 @@ pub fn saved_state_bytes(image: &AppImage) -> usize {
 struct ScreenCost {
     node_count: u32,
     text_bytes: u32,
-    /// How many library icons its widgets may show at once.
-    icon_count: u32,
+    /// What the library icons its widgets may show at once take while held.
+    icon_bytes: u32,
     has_app_list: bool,
 }
 
@@ -350,9 +350,9 @@ fn screen_cost(tree: &WidgetTree, root: u16, may_name_library_icons: bool) -> Sc
         };
         cost.node_count += copies;
         cost.text_bytes += copies * widget_text_bytes(tree, &widget);
-        cost.icon_count = cost
-            .icon_count
-            .saturating_add(copies.saturating_mul(widget_library_icons(
+        cost.icon_bytes = cost
+            .icon_bytes
+            .saturating_add(copies.saturating_mul(widget_library_icon_bytes(
                 tree,
                 &widget,
                 may_name_library_icons,
@@ -406,18 +406,28 @@ fn repeat_rows(
     }
 }
 
-/// How many of the shared library's icons one node of this widget may show at once.
+/// What the shared library's icons one node of this widget may show at once take while held.
 ///
-/// An image a value works out can be a library icon only when `may_name_library_icons`.
-fn widget_library_icons(
+/// An icon the widget names is counted at its size, and one a value picks at the most an icon may
+/// take; an image a value works out can be a library icon only when `may_name_library_icons`.
+fn widget_library_icon_bytes(
     tree: &WidgetTree,
     widget: &crate::widgets::Widget,
     may_name_library_icons: bool,
 ) -> u32 {
+    let held = |number: u16| held_icon_bytes(library_icon_bytes(number));
+    let any_icon = held_icon_bytes(LIBRARY_ICON_MOST_BYTES);
     match widget.kind {
-        WidgetKind::StatusIcons => 3,
+        WidgetKind::StatusIcons => [
+            library_icon::NOTIFICATION,
+            library_icon::BLUETOOTH,
+            library_icon::ALARM,
+        ]
+        .into_iter()
+        .map(held)
+        .sum(),
         // Only its charging bolt.
-        WidgetKind::Battery => 1,
+        WidgetKind::Battery => held(library_icon::CHARGING),
         // Every cell in view may be an app whose icon is a library icon; the cap on held icons bounds it.
         WidgetKind::AppList => u32::MAX,
         _ => {
@@ -425,8 +435,12 @@ fn widget_library_icons(
                 .property(Property::Image)
                 .or_else(|| widget.property(Property::Icon));
             match source {
-                Some(PropertySource::Constant(value)) => names_library_icon(tree.image(), value) as u32,
-                Some(PropertySource::Expression(_)) => may_name_library_icons as u32,
+                Some(PropertySource::Constant(value)) => match library_icon_named(tree.image(), value) {
+                    Some(Some(number)) => held(number),
+                    Some(None) => any_icon,
+                    None => 0,
+                },
+                Some(PropertySource::Expression(_)) => may_name_library_icons as u32 * any_icon,
                 _ => 0,
             }
         }
@@ -436,10 +450,10 @@ fn widget_library_icons(
 /// Whether any value the app works out could name a library icon.
 ///
 /// Such a value comes from somewhere in the app: a constant in its code, a variable's starting
-/// value, one of its images other than its launcher icon that names a library icon, a system value that is an icon, or a call to
-/// one of `LIBRARY_FUNCTIONS_GIVING_ICONS`. The compiler writes `library_icon` and the `icons` as
-/// constants. An app that has none of these only ever
-/// shows its own pictures, so its images cost no library icons.
+/// value, one of its images other than its launcher icon that names a library icon, a system value
+/// that is an icon, or a call to one of `LIBRARY_FUNCTIONS_GIVING_ICONS`. The compiler writes
+/// `library_icon` and the `icons` as constants. An app that has none of these only ever shows its
+/// own pictures, so its images cost no library icons.
 fn names_library_icons_anywhere(image: &AppImage) -> bool {
     let first = ImageReference::SharedLibrary(0).to_value() as i64;
     let names_one = |value: i64| (first..first + MOST_LIBRARY_ICONS as i64).contains(&value);
@@ -480,15 +494,16 @@ fn names_library_icons_anywhere(image: &AppImage) -> bool {
     found
 }
 
-/// Whether an image value is a library icon, or an app's image that only names one.
-fn names_library_icon(image: &AppImage, value: i32) -> bool {
-    match ImageReference::from_value(value) {
-        Some(ImageReference::App(index)) => image
+/// The library icon an image value names, itself or through an app's image; `Some(None)` for an
+/// installed app's icon, which may be any; none for an app's own picture.
+fn library_icon_named(image: &AppImage, value: i32) -> Option<Option<u16>> {
+    match ImageReference::from_value(value)? {
+        ImageReference::App(index) => image
             .resource_bytes(index)
             .and_then(library_image_named_by)
-            .is_some(),
-        Some(ImageReference::SharedLibrary(_) | ImageReference::InstalledApp(_)) => true,
-        None => false,
+            .map(Some),
+        ImageReference::SharedLibrary(number) => Some(Some(number)),
+        ImageReference::InstalledApp(_) => Some(None),
     }
 }
 
@@ -506,11 +521,9 @@ fn largest_screen_records(tree: &WidgetTree) -> u32 {
         .unwrap_or(0)
 }
 
-/// What the host holds for this many library icons, up to its cap.
-fn icons_held_bytes(icon_count: u32) -> u32 {
-    icon_count
-        .saturating_mul(held_icon_bytes(LIBRARY_ICON_MOST_BYTES))
-        .min(HELD_ICONS_MOST_BYTES)
+/// What the host holds of library icons, up to its cap.
+fn icons_held_bytes(icon_bytes: u32) -> u32 {
+    icon_bytes.min(HELD_ICONS_MOST_BYTES)
 }
 
 /// The text one node of this widget holds.
