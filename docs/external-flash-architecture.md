@@ -214,9 +214,16 @@ Docs and comments the code contradicts, as of e30358e4:
    screen's widget records, for 6,812 B of firmware code. Today it pages 13 of 66 apps and faces,
    saving up to 3 KB each; the gain grows with an app's code and screens. No install-time index was
    needed: the image's own tables give every piece's place, and the bindings and screen table are
-   worked out from the whole image while it opens. Still to come: strings, which handlers and
-   nodes borrow for as long as the image lives, and glyph subsets. Closed apps are left whole: they
-   are loaded only for a moment, and opening paged holds both images then anyway.
+   worked out from the whole image while it opens. Closed apps are left whole: they are loaded only
+   for a moment, and opening paged holds both images then anyway.
+
+   Strings were paged too and measured on 2026-10-20, then left out. Keeping the app's id, name,
+   variable keys and screen names resident and reading the rest through a string cache, fetched by
+   the interpreter's text work and staged before layout for the text arrays a screen shows, paged
+   strings in only 3 of 66 apps, since a cache that holds a screen's text arrays at once costs about
+   as much as the strings it moves out. `settings` then held 108 B more heap, not less, and it cost
+   6,320 B of code and 792 B of stack. The work is on the branch `worktree-string-paging` should an
+   app with far more text ever need it. Glyph subsets remain.
 8. **Native code compiled from bytecode**, if an app needs the speed.
 
 ## Open questions
