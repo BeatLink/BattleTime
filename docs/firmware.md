@@ -354,8 +354,11 @@ The shell draws through `DrawingScreen` (`drawing_screen.rs`) and the DMA code i
   sits in PPI group 0. TIMER1 counts the ENDs through channel 6; one before the last its compare
   disables the group through channel 7, and at the last its second compare raises TIMER1's
   interrupt (`StripSentHandler`), which ends the send in hardware time: it disables the group,
-  takes the SPIM out of list mode, deselects the display, wakes whoever awaits `bus_is_free` and
-  sends SEV, so a waiter in WFE always wakes.
+  takes the SPIM out of list mode, deselects the display, wakes every task that awaits
+  `bus_is_free` and sends SEV, so a waiter in WFE always wakes. The shell's drawing and the storage
+  task's flash work await it at once, so it keeps a waker for each, up to four; with room for one,
+  the second waiter took the first's place, and the shell, never woken, stopped until the watchdog
+  reset the watch.
 - **Sharing the bus.** The bus (`SpiBus`, the SPIM with the display's chip select and the chain) is
   taken for one transaction at a time. The flash store awaits `bus_is_free` before each program,
   erase and status poll, so it never waits on a strip either; its reads, and a caller that cannot
@@ -391,7 +394,11 @@ spin until the earlier one's erase or program ends.
 - **The storage task** (`run_storage`) alone awaits the store: the Bluetooth task's file transfers
   and packages commands, the step and slot logs and the time zone reach it as requests
   (`storage_requests.rs`). Each call's future, up to 1.8 KB, is boxed on the heap while it runs,
-  both in the task and in the shell's calls, so it costs neither static RAM nor stack.
+  both in the task and in the shell's calls, so it costs neither static RAM nor stack. A packages
+  command's reply goes to the Bluetooth task through a queue the storage task never waits on
+  (`packages::send_reply`): the Bluetooth task may itself be waiting for the storage task to take a
+  file request, and a reply channel of two pieces once left both waiting, with the store held, as
+  an `apps` listing met the companion's sync.
 - **The shell** does not await the store. At the top of each turn of its loop it waits until no
   request is under way, then calls the store directly (`Files::read_now` and the like), which run
   to their end at once by polling the chip, and no other task can take the store before the shell

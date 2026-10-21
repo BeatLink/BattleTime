@@ -1181,13 +1181,13 @@ async fn serve_connection(
     // Complete packages commands, handed to their task once the write that finished them is answered.
     let mut packages_commands: alloc::vec::Vec<alloc::vec::Vec<u8>> = alloc::vec::Vec::new();
     // A reply left from a phone that went away before it arrived is not this phone's.
-    packages::REPLIES.clear();
+    packages::clear_replies();
     let mut link_pace = LinkPace::new(Instant::now().as_secs());
     loop {
         let pace_change = ask_for_link_pace(connection, &mut link_pace);
         // Pinned where they are made, so the connection's large future is never copied across the stack.
         let next_event = core::pin::pin!(connection.next());
-        let next_reply = core::pin::pin!(select(settings::REPLIES.receive(), packages::REPLIES.receive()));
+        let next_reply = core::pin::pin!(select(settings::REPLIES.receive(), packages::next_reply()));
         let reading_change = core::pin::pin!(select3(
             battery::PERCENT_CHANGED.wait(),
             heart_rate::READING_TAKEN.wait(),

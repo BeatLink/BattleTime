@@ -881,12 +881,6 @@ impl Files {
         self.queue_write(path, Some(bytes.into()));
     }
 
-    /// Writes the whole file at once, for a write the shell must see done, or nothing while another task holds the store.
-    #[cfg_attr(not(with_shell), allow(dead_code))]
-    pub fn write_now(&self, path: &str, bytes: &[u8]) -> bool {
-        self.now(|store| run_on_heap(FileAccess::write_file(store, path, bytes)).is_ok()) == Some(true)
-    }
-
     /// Queues deleting the file, as `write_soon` queues a write.
     fn delete_soon(&self, path: &str) {
         self.queue_write(path, None);
@@ -1386,7 +1380,7 @@ impl Files {
         let mut store = self.store.lock().await;
         let Some(store) = store.as_mut() else {
             let (reply, change) = refuse_command(line, "the flash store is not mounted");
-            packages::REPLIES.send(reply).await;
+            packages::send_reply(reply);
             return change;
         };
         self.run_packages_command_on(store, line).await
@@ -1405,7 +1399,7 @@ impl Files {
         let outcome = crate::modules::call(store, &module_call.name, module_call.call, &[]).await;
         let reply =
             battletime_packages::commands::module_reply(outcome.map_err(|failure| failure.describe()));
-        packages::REPLIES.send(reply).await;
+        packages::send_reply(reply);
         Change::None
     }
 
@@ -1421,7 +1415,7 @@ impl Files {
     #[cfg(not(with_shell))]
     async fn run_packages_command_on(&self, _store: &mut WatchStore, line: &[u8]) -> Change {
         let (reply, change) = refuse_command(line, "the recovery firmware does not install apps");
-        packages::REPLIES.send(reply).await;
+        packages::send_reply(reply);
         change
     }
 }
@@ -1503,7 +1497,7 @@ struct ToBluetooth;
 #[cfg(with_shell)]
 impl battletime_packages::commands::ReplySink for ToBluetooth {
     async fn send(&mut self, piece: alloc::string::String) {
-        packages::REPLIES.send(piece).await;
+        packages::send_reply(piece);
     }
 }
 

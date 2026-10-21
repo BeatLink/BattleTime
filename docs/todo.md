@@ -587,13 +587,6 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
   page's "Navigation". Give the small size its own descender depth, or draw those pages one size up
   in wider cells.
 
-- [ ] **A queued write while the shell opens a screen stalls the watch.** In the emulator, a
-  `write_soon` the shell made while opening the face at start (the record of verified images,
-  16 bytes) left the shell and the radio waiting for good: the next packages command that read
-  the store dropped the link, and with no module run the watchdog reset the watch. Writing it at
-  once with `write_now` avoids it. Find which wait never ends, likely the storage task's queued
-  write and the painter sharing the bus, since app state saved with `write_soon` could meet it too.
-
 - [ ] **12-bit colour mode.** The ST7789 can take 12 bits a pixel, which cuts the time to send a
   full screen by a quarter, from about 115 ms to 86 ms at 8 MHz. It costs banding in gradients and
   packing pixels in pairs. Measure it once real screens run on the watch.
@@ -783,13 +776,6 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   that a watch updated from day files keeps its history on the watch and in the companion, and that
   the record keys the old day files held come free as they age out.
 - [ ] **A checkpoint of the store's tables,** so mounting need not read every ring record.
-- [ ] **A packages command during file service traffic hangs the watch.** On the PineTime (origin/dev
-  8b272b31, 2026-10-21), `{"c":"apps"}` sent while the companion's sync pass was listing and reading
-  files stopped the watch about 14 s later, and the watchdog reset it with no crash recorded. That
-  happened on every connect until the companion made its packages commands wait for the file
-  service. The same command alone answered normally. Find what the two wait on together, likely the
-  store or the flash chip, so that neither ordering can stop the main loop.
-
 - [ ] **Use the file system:** save the BLE bond there.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE, with a list of
   obsolete files that an upgrade deletes, as InfiniTime's `resources.json` has.

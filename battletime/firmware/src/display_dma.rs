@@ -41,7 +41,7 @@ use embassy_nrf::{
 };
 use embassy_sync::{
     blocking_mutex::{raw::NoopRawMutex, CriticalSectionMutex, Mutex},
-    waitqueue::AtomicWaker,
+    waitqueue::MultiWakerRegistration,
 };
 use embassy_time::{Delay, Instant};
 use embedded_hal::{
@@ -170,8 +170,19 @@ const BUS_READING_FLASH: u8 = 2;
 static BUS_USER: AtomicU8 = AtomicU8::new(BUS_FREE);
 /// Set while the display waits for the bus, so a flash read gives it up after its current piece.
 static DISPLAY_IS_WAITING: AtomicBool = AtomicBool::new(false);
-/// The task waiting for the bus to come free, woken when a strip or a flash piece has moved.
-static BUS_FREED: AtomicWaker = AtomicWaker::new();
+/// The most tasks that wait for the bus at once: the shell's drawing, the storage task's flash work, and room to spare.
+const MOST_BUS_WAITERS: usize = 4;
+
+/// The tasks waiting for the bus to come free, all woken when a strip or a flash piece has moved.
+///
+/// The shell's drawing and the storage task's flash work wait at once; with room for one waker the
+/// second took the first's place, and the shell, never woken, stopped until the watchdog reset the watch.
+static BUS_FREED: CriticalSectionMutex<RefCell<MultiWakerRegistration<MOST_BUS_WAITERS>>> =
+    CriticalSectionMutex::new(RefCell::new(MultiWakerRegistration::new()));
+
+fn wake_bus_waiters() {
+    BUS_FREED.lock(|waiters| waiters.borrow_mut().wake());
+}
 
 /// Ends a strip's send or a flash read's piece when its last byte has moved.
 pub struct StripSentHandler {
@@ -207,14 +218,14 @@ fn finish_strip() {
     registers.events_end().write_value(0);
     pac::P0.outset().write(|w| w.set_pin(DISPLAY_SELECT_PIN, true));
     BUS_USER.store(BUS_FREE, Ordering::Release);
-    BUS_FREED.wake();
+    wake_bus_waiters();
     go_on_with_flash_read();
 }
 
 /// Waits, letting other tasks run, until no strip or flash piece is moving.
 pub async fn bus_is_free() {
     poll_fn(|context| {
-        BUS_FREED.register(context.waker());
+        BUS_FREED.lock(|waiters| waiters.borrow_mut().register(context.waker()));
         match BUS_USER.load(Ordering::Acquire) {
             BUS_FREE => Poll::Ready(()),
             _ => Poll::Pending,
@@ -473,7 +484,7 @@ fn finish_flash_piece() {
                 diagnostics::add_one(Counter::FlashReadPauses);
             }
             BUS_USER.store(BUS_FREE, Ordering::Release);
-            BUS_FREED.wake();
+            wake_bus_waiters();
             if is_between_extents {
                 go_on_with_flash_read();
             }

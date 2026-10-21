@@ -61,9 +61,8 @@ impl Shell {
         if answer != VERIFIED {
             return Err(PackageError::CodeFails);
         }
-        // Written at once: a write queued here, before the next screen paints, once left the shell and the radio waiting.
         self.files
-            .write_now(VERIFIED_PATH, &with_added(&record, verifier, mark));
+            .write_soon(VERIFIED_PATH, &with_added(&record, verifier, mark));
         Ok(())
     }
 
@@ -101,7 +100,7 @@ impl Shell {
         if outcome.is_err() {
             self.files.set_app_enabled_soon(&id, false);
         }
-        let _ = packages::REPLIES.try_send(install_reply(outcome));
+        packages::send_reply(install_reply(outcome));
         self.reload_apps();
     }
 }

@@ -1428,7 +1428,7 @@ impl Shell {
             .take()
             .unwrap_or(Err(PackageError::WouldNotOpen));
         let opened = outcome.is_ok();
-        let _ = packages::REPLIES.try_send(run_reply(outcome));
+        packages::send_reply(run_reply(outcome));
         if opened {
             self.system.screen_request = Some(true);
         } else {
