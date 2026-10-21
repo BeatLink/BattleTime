@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
-members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host", "simulator", "compiler", "harness"]
+members = ["boot", "drivers/*", "services/*", "runtime", "module-abi", "ui", "app-host", "simulator", "compiler", "harness"]
 # The simulator and the app test harness need std, so plain builds for the watch leave them out.
-default-members = ["boot", "drivers/*", "services/*", "runtime", "ui", "app-host"]
+default-members = ["boot", "drivers/*", "services/*", "runtime", "module-abi", "ui", "app-host"]
 # The bootloader builds only for the watch, with its own settings.
-exclude = ["bootloader", "firmware", "third_party/trouble-host", "third_party/trouble-host-macros"]
+exclude = ["bootloader", "firmware", "modules", "third_party/trouble-host", "third_party/trouble-host-macros"]
 
 [workspace.package]
 license = "GPL-3.0-or-later"

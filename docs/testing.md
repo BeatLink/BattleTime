@@ -340,6 +340,12 @@ emulated seconds, so allow many minutes.
 UART through the bridge and checks that the call app opens, the motor keeps ringing, and the end
 line stops it and goes back to the face; it takes under two minutes.
 
+`../tools/check_modules.py FIRMWARE_ELF` builds the native modules, puts the test module at
+`/system/modules/test` and calls it through the packages characteristic: call 0 must answer 385,
+which it reaches only through the heap, data and function addresses the loader placed, an unknown
+call -1 and a missing module an error, and call 2's undefined instruction must leave a HardFault in
+the crash record naming `mod:test`; it takes about a minute.
+
 `../tools/check_heart_rate.py FIRMWARE_ELF` ends with a watch on the bridge that subscribes to the
 Heart Rate Measurement (0x2A37): nothing is notified and the sensor stays off until a settings line
 turns the background interval to always, then each reading arrives as `00` and the pulse, a read

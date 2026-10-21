@@ -1374,7 +1374,25 @@ impl Files {
     async fn run_packages_command_on(&self, store: &mut WatchStore, line: &[u8]) -> Change {
         let library_version =
             crate::apps::shared_library().and_then(battletime_packages::library::library_version);
-        battletime_packages::commands::handle_command(line, store, library_version, &mut ToBluetooth).await
+        let change =
+            battletime_packages::commands::handle_command(line, store, library_version, &mut ToBluetooth)
+                .await;
+        let Change::RunModule(module_call) = change else {
+            return change;
+        };
+        let outcome = crate::modules::call(store, &module_call.name, module_call.call).await;
+        let reply =
+            battletime_packages::commands::module_reply(outcome.map_err(|failure| failure.describe()));
+        packages::REPLIES.send(reply).await;
+        Change::None
+    }
+
+    /// Counts a crash inside a native module that this start found, so one that keeps crashing stops being run.
+    #[cfg(with_shell)]
+    async fn count_module_crash(&self) {
+        if let Some(store) = self.store.lock().await.as_mut() {
+            crate::modules::count_last_crash(store).await;
+        }
     }
 
     /// The recovery firmware has no apps, so it leaves the package manager out.
@@ -1482,6 +1500,8 @@ static WRITES_QUEUED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 pub async fn run_storage(files: &'static Files) {
     crate::tasks::name_this_task("storage");
     let mut transfer = FileTransfer::new();
+    #[cfg(with_shell)]
+    alloc::boxed::Box::pin(files.count_module_crash()).await;
     loop {
         let next = select4(
             storage_requests::REQUESTS.receive(),
@@ -1503,7 +1523,7 @@ pub async fn run_storage(files: &'static Files) {
                 foreground::wait_for_a_pause().await;
                 let change = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;
                 match change {
-                    Change::None => {}
+                    Change::None | Change::RunModule(_) => {}
                     Change::Apps => packages::CHANGED.signal(change),
                     Change::RunTemporary(_) | Change::StopTemporary => packages::TEMPORARY.signal(change),
                 }

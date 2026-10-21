@@ -17,6 +17,18 @@ struct Command<'line> {
     c: &'line str,
     id: Option<&'line str>,
     on: Option<bool>,
+    name: Option<&'line str>,
+    call: Option<u32>,
+}
+
+/// The longest module name: the crash record keeps it after a four-byte tag.
+pub const MOST_MODULE_NAME_BYTES: usize = 12;
+
+/// A call of a native module in `/system/modules`, which the firmware runs and answers.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ModuleCall {
+    pub name: heapless::String<MOST_MODULE_NAME_BYTES>,
+    pub call: u32,
 }
 
 /// What a command did, beyond its reply, that the shell should hear about.
@@ -29,6 +41,8 @@ pub enum Change {
     RunTemporary(AppId),
     /// The shell closes the open temporary app.
     StopTemporary,
+    /// The firmware runs this module call and sends its answer with `module_reply`.
+    RunModule(ModuleCall),
 }
 
 /// Where a command's reply line goes, a piece at a time; the line ends with its newline.
@@ -105,6 +119,15 @@ async fn run_command<Files: FileAccess>(
             };
         }
         ("stop", _) => return (ok_reply(name), Change::StopTemporary),
+        ("module", _) => {
+            return match module_call(command.name, command.call) {
+                Some(call) => (String::new(), Change::RunModule(call)),
+                None => (
+                    error_reply(name, "a module name is 1 to 12 letters, digits, - and _"),
+                    Change::None,
+                ),
+            };
+        }
         ("install" | "remove" | "enable" | "run", None) => {
             return (error_reply(name, "give the app's id"), Change::None)
         }
@@ -121,6 +144,26 @@ pub fn run_reply(outcome: Result<u32, PackageError>) -> String {
     match outcome {
         Ok(need_bytes) => ok_reply_with_need("run", need_bytes),
         Err(error) => error_reply_for("run", error),
+    }
+}
+
+fn module_call(name: Option<&str>, call: Option<u32>) -> Option<ModuleCall> {
+    let name = name.filter(|name| check_id(name).is_ok())?;
+    Some(ModuleCall {
+        name: heapless::String::try_from(name).ok()?,
+        call: call.unwrap_or(0),
+    })
+}
+
+/// The firmware's answer to `module`: what the call answered, or why it did not run.
+pub fn module_reply(outcome: Result<i32, &str>) -> String {
+    match outcome {
+        Ok(answer) => {
+            let mut reply = String::new();
+            let _ = writeln!(reply, "{{\"c\":\"module\",\"ok\":1,\"r\":{answer}}}");
+            reply
+        }
+        Err(message) => error_reply("module", message),
     }
 }
 
@@ -296,6 +339,41 @@ mod tests {
     fn run(line: &str, files: &mut TestStore) -> (String, Change) {
         let (reply, change, _) = run_with(line, files, None);
         (reply, change)
+    }
+
+    #[test]
+    fn module_asks_the_firmware_to_run_the_call() {
+        let mut files = file_system();
+
+        let (reply, change) = run(r#"{"c":"module","name":"test","call":2}"#, &mut files);
+
+        assert_eq!(reply, "");
+        let name = heapless::String::try_from("test").unwrap();
+        assert_eq!(change, Change::RunModule(ModuleCall { name, call: 2 }));
+    }
+
+    #[test]
+    fn module_refuses_a_name_that_is_missing_or_too_long() {
+        let mut files = file_system();
+
+        for line in [
+            r#"{"c":"module"}"#,
+            r#"{"c":"module","name":"a-name-of-thirteen"}"#,
+        ] {
+            let (reply, change) = run(line, &mut files);
+
+            assert!(reply.contains(r#""err":"a module name"#), "{reply}");
+            assert_eq!(change, Change::None);
+        }
+    }
+
+    #[test]
+    fn module_reply_gives_the_calls_answer_or_why_it_did_not_run() {
+        assert_eq!(module_reply(Ok(-3)), "{\"c\":\"module\",\"ok\":1,\"r\":-3}\n");
+        assert_eq!(
+            module_reply(Err("the module is missing")),
+            "{\"c\":\"module\",\"err\":\"the module is missing\"}\n"
+        );
     }
 
     #[test]

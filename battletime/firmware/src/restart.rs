@@ -35,9 +35,15 @@ fn crash_record_address() -> *mut [u8; RECORD_SIZE] {
 
 /// Called from the panic and HardFault handlers, so it takes no lock and allocates nothing.
 pub fn record_crash(crash: &Crash) {
+    let running_module: [u8; OPEN_APP_BYTES] =
+        core::array::from_fn(|place| RUNNING_MODULE[place].load(Ordering::Relaxed));
+    let open_app = match running_module[0] {
+        0 => core::array::from_fn(|place| OPEN_APP[place].load(Ordering::Relaxed)),
+        _ => running_module,
+    };
     let recorded = RecordedCrash {
         crash: *crash,
-        open_app: core::array::from_fn(|place| OPEN_APP[place].load(Ordering::Relaxed)),
+        open_app,
     };
     unsafe { crash_record_address().write_volatile(recorded.encode()) };
 }
@@ -51,6 +57,17 @@ static OPEN_APP: [AtomicU8; OPEN_APP_BYTES] = [const { AtomicU8::new(0) }; OPEN_
 
 pub fn set_open_app(id: &str) {
     for (kept, byte) in OPEN_APP.iter().zip(open_app_bytes(id)) {
+        kept.store(byte, Ordering::Relaxed);
+    }
+}
+
+/// The crash tag of the native module running now, which a crash records in place of the open app, or zeros.
+static RUNNING_MODULE: [AtomicU8; OPEN_APP_BYTES] = [const { AtomicU8::new(0) }; OPEN_APP_BYTES];
+
+/// Names the module about to run, so a crash inside it is recorded against it, or none once it returns.
+#[cfg_attr(not(with_shell), allow(dead_code))]
+pub fn set_running_module(crash_tag: Option<[u8; OPEN_APP_BYTES]>) {
+    for (kept, byte) in RUNNING_MODULE.iter().zip(crash_tag.unwrap_or_default()) {
         kept.store(byte, Ordering::Relaxed);
     }
 }

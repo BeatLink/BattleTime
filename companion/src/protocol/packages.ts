@@ -72,6 +72,7 @@ type Reply = {
   need?: number;
   room?: number;
   a?: [string, string, string, number, number, number?, string?][];
+  r?: number;
 };
 
 // Bytes as kilobytes with one decimal, as the apps screen and the command line show memory.
@@ -80,7 +81,7 @@ export function memoryText(bytes: number): string {
 }
 
 // The commands this client sends, so it can ignore lines meant for anyone else on the characteristic.
-const COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'launcher', 'run', 'stop']);
+const COMMANDS = new Set(['apps', 'install', 'remove', 'enable', 'launcher', 'run', 'stop', 'module']);
 
 // How long a command may take; checking a large app's code is the slowest.
 const REPLY_TIMEOUT_MS = 20000;
@@ -162,6 +163,14 @@ export class PackagesClient {
   async run(id: string): Promise<MemoryAnswer> {
     appImagePath(id);
     return memoryOf(await this.command({ c: 'run', id }));
+  }
+
+  // Runs call `call` of the native module /system/modules/<name> and gives what it answered.
+  async module(name: string, call: number): Promise<number> {
+    if (!/^[A-Za-z0-9_-]{1,12}$/.test(name)) {
+      throw new PackagesError(`${name}: a module name is 1 to 12 letters, digits, "-" and "_".`);
+    }
+    return (await this.command({ c: 'module', name, call })).r ?? 0;
   }
 
   // Closes the temporary app if one is open; its files stay.

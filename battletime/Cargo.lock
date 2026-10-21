@@ -258,6 +258,13 @@ name = "battletime-liveness"
 version = "0.1.0"
 
 [[package]]
+name = "battletime-module-abi"
+version = "0.1.0"
+dependencies = [
+ "battletime-boot",
+]
+
+[[package]]
 name = "battletime-notifications"
 version = "0.1.0"
 dependencies = [

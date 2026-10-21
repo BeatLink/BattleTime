@@ -1,0 +1,10 @@
+[package]
+name = "battletime-module-test"
+version = "0.1.0"
+edition = "2021"
+description = "A module that proves the loader: one call works, one panics and one faults"
+license.workspace = true
+publish = false
+
+[dependencies]
+battletime-module-abi = { path = "../../module-abi", features = ["module"] }

@@ -1,0 +1,17 @@
+# The native modules, each a no_std crate the firmware runs from RAM; see module-abi/src/lib.rs.
+[workspace]
+resolver = "2"
+members = ["test"]
+
+[workspace.package]
+license = "GPL-3.0-or-later"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+debug = true
+
+[profile.dev]
+panic = "abort"

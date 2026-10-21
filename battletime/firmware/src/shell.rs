@@ -1388,7 +1388,7 @@ impl Shell {
         match change {
             Change::RunTemporary(id) => self.run_temporary(id),
             Change::StopTemporary => self.stop_temporary(),
-            Change::None | Change::Apps => {}
+            Change::None | Change::Apps | Change::RunModule(_) => {}
         }
     }
 

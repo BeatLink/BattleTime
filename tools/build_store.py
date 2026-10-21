@@ -6,8 +6,9 @@ in `companion/plugins` is packed into `<id>.ntplugin`. `store.json` lists them w
 taken from the docs, and `battletime-store.zip` holds all of it in one file, which is what the companion
 downloads from a release. The shared library is written beside them for the companion's bundle, but
 stays out of the list and the zip because it ships inside the firmware. The files every watch needs
-that are not apps, such as the accelerometers' configuration and the shared library's icons, go
-under `system/` at their paths on the watch, for the companion's bundle too.
+that are not apps, such as the accelerometers' configuration, the shared library's icons and the
+native modules `tools/build_modules.sh` builds, go under `system/` at their paths on the watch, for
+the companion's bundle too.
 
 Run it inside `nix develop`; plugins also need `npm ci` in `companion/`, or `--no-plugins`.
 docs/app-store.md describes the result.
@@ -38,6 +39,8 @@ LIBRARY_FILE = "shared.ntlib"
 # The compiler writes the library's icons beside it, and the companion puts them at this path.
 ICONS_FILE = "shared.icons"
 ICONS_PATH = "/system/icons"
+# The native modules, each at /system/modules/<name>.
+MODULES_PATH = "/system/modules"
 # Files every watch needs that are not apps, by their path on the watch, which the companion puts on it.
 SYSTEM_FOLDER = "system"
 SYSTEM_FILES = {
@@ -235,6 +238,11 @@ def copy_system_files(out: Path) -> None:
         shutil.copyfile(source, target)
     # The icons file the compiler wrote beside the library.
     shutil.move(out / ICONS_FILE, out / ICONS_PATH.lstrip("/"))
+    run([str(ROOT / "tools" / "build_modules.sh")], BATTLETIME)
+    modules = out / MODULES_PATH.lstrip("/")
+    modules.mkdir(parents=True, exist_ok=True)
+    for module in sorted((BATTLETIME / "dist" / "modules").iterdir()):
+        shutil.copyfile(module, modules / module.name)
 
 
 def main() -> None:

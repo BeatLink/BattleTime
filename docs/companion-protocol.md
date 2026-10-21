@@ -436,6 +436,11 @@ Files the firmware needs that are not apps live under `/system`:
 - `/system/icons`: the shared library's icons, about 30 KB, laid out as
   [app-runtime.md](app-runtime.md#the-shared-library) says. The app host reads the ones a screen
   shows before painting it; while the file is missing they draw as empty boxes.
+- `/system/modules/<name>`: a native module, as `tools/package_module.py` packs it: native code
+  the firmware reads into its heap and runs only when asked, such as `test`, which the `module`
+  command above calls. The firmware writes `/system/modules/crashes` itself, counting the crashes
+  of each module, and runs no module that crashed the watch twice until its file changes. While a
+  module runs, a crash records `mod:<name>` as the open app.
 
 The companion app, when it connects to a watch that
 serves files, lists each file's folder and writes any file that is missing or of another size, and
@@ -619,6 +624,7 @@ error.
 | `{"c":"launcher"}` | `{"c":"launcher","ok":1}`; reads `/settings/launcher` again and regroups the launcher, as [Launcher](#launcher) describes |
 | `{"c":"run","id":id}` | `{"c":"run","ok":1,"need":need,"room":budget}` once the shell has opened the temporary app in `/temp/<id>`, as [Temporary apps](#temporary-apps-served) describes |
 | `{"c":"stop"}` | `{"c":"stop","ok":1}`; closes the temporary app if one is open |
+| `{"c":"module","name":name,"call":n}` | `{"c":"module","ok":1,"r":answer}` once the native module `/system/modules/<name>` has run call `n` (0 when left out) and returned `answer`, a signed number. `name` is 1 to 12 letters, digits, `-` and `_`. A module that is missing, damaged, built for another firmware, has no room in the heap or crashed the watch twice answers with `err` instead. A call that crashes restarts the watch, so it never answers |
 
 Before `install` and `enable` turn an app on, the package manager checks that it fits the heap
 beside everything else, and before `enable` turns one off that the watch keeps a launcher and a

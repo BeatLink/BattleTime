@@ -1,0 +1,6 @@
+[build]
+target = "thumbv7em-none-eabihf"
+
+# Linked at 0 with every relocation kept, so tools/package_module.py finds each address to move.
+[target.thumbv7em-none-eabihf]
+rustflags = ["-C", "link-arg=-Tmodule.x", "-C", "link-arg=--emit-relocs", "-C", "link-arg=--nmagic"]

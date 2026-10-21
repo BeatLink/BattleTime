@@ -26,11 +26,18 @@ export class MockPackagesService {
 
   // The commands this service answers.
   static handles(command: string): boolean {
-    return ['apps', 'install', 'remove', 'enable', 'launcher', 'run', 'stop'].includes(command);
+    return ['apps', 'install', 'remove', 'enable', 'launcher', 'run', 'stop', 'module'].includes(command);
   }
 
-  handle(message: { c: string; id?: string; on?: boolean }) {
+  handle(message: { c: string; id?: string; on?: boolean; name?: string; call?: number }) {
     const { c, id } = message;
+    if (c === 'module') {
+      // The mock's test module answers call 0 with 385, as the real one does, and any other call with -1.
+      if (!this.files.has(`/system/modules/${message.name}`)) {
+        return this.reply({ c, err: 'the module is not on the watch' });
+      }
+      return this.reply({ c, ok: 1, r: (message.call ?? 0) === 0 ? 385 : -1 });
+    }
     if (c === 'apps') {
       this.reply({ c, room: MOCK_ROOM, a: this.list() });
       return;

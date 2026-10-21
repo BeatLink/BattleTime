@@ -221,7 +221,10 @@ async fn measure_erase_suspend(files: &storage::Files) {
     record(Measure::EraseAlone, times.erase_alone);
     record(Measure::EraseSuspendTime, times.suspend);
     record(Measure::EraseSuspendStatus2, times.status_2_while_paused as u32);
-    record(Measure::EraseSuspendReadMatches, times.read_while_paused_matches as u32);
+    record(
+        Measure::EraseSuspendReadMatches,
+        times.read_while_paused_matches as u32,
+    );
     record(Measure::EraseAfterResume, times.after_resume);
     record(Measure::EraseSuspendErased, times.erased as u32);
 }

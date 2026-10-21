@@ -1,0 +1,14 @@
+[package]
+name = "battletime-module-abi"
+version = "0.1.0"
+edition = "2021"
+description = "BattleTime's native modules: the file a module is packaged in, how the firmware places it in RAM, and the table of firmware calls it is given"
+license.workspace = true
+publish = false
+
+[dependencies]
+battletime-boot = { path = "../boot" }
+
+[features]
+# The module's side: its heap, its panic handler and the firmware calls, for crates under modules/.
+module = []

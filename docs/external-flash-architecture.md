@@ -63,10 +63,12 @@ would leave about 230 KB of internal flash free, against 13 KB today.
   callee set of every handler and expression, and a checksum per page; the host keeps a 2 to 3 KB
   cache of functions and runs a handler only when its whole set fits.
 - **Native modules for rare work.** Code such as package install, the verifier, settings import and
-  pairing's P-256 maths is built as separate modules, linked at a fixed slot in the code alias,
-  stamped with the firmware's build id, and called through a table. They borrow the app's room, so
-  they run with the app closed. Apps can call native helpers built with the firmware, such as the
-  game rules removed from the runtime, the same way.
+  pairing's P-256 maths is built as separate modules, linked at 0 with their relocations kept, and
+  placed wherever the heap has room: the loader moves each address in them by where they landed,
+  through the code alias for code. They call the firmware only through a table whose ABI number
+  both sides check, so a module outlives firmware builds until that table changes. Apps can call
+  native helpers built with the firmware, such as the game rules removed from the runtime, the
+  same way.
 - **Later, native code for apps compiled from their bytecode.** At install the compiler could turn
   verified bytecode into Thumb code with bounds checks and step counters kept, for an estimated
   3 to 10 times the interpreter's speed.
@@ -208,7 +210,21 @@ Docs and comments the code contradicts, as of e30358e4:
    files all keep working without them, which is the safe mode this stage asked for. Each file is
    checked only by its size, so new artwork of the same size would not be put again; a checksum in
    the listing would close that.
-4. **The UI arena and the module loader**, proved with a test module that faults on purpose.
+4. **The module loader:** done, without a UI arena. A module takes its room from the heap like
+   any allocation and gives it back when its call returns; one that does not fit beside the open
+   app answers that the heap has no room, so no part of the heap is set aside for modules. The
+   `module` packages command ([companion-protocol.md](companion-protocol.md#packages-served)) runs
+   a call; `battletime apps module <name> [call]` sends it. `modules/test` proves it: call 0 reaches
+   its answer only through the heap, its data and function addresses the loader moved (the compiler
+   loads some through MOVW and MOVT pairs, which the loader moves too, not only through whole
+   words), call 1 panics and call 2 runs an undefined instruction. A crash inside a module records
+   `mod:<name>` as the open app, and the next start counts it against that module's file in
+   `/system/modules/crashes`; after two the module is not run again until its file changes.
+   `tools/check_modules.py` checks all of this but the restart in the emulator. The loader,
+   counting included, costs 6.7 KB of firmware code; the test module is 364 B on the flash, and
+   the verifier, built as a trial module, 14.7 KB, about twice its share of the firmware, since it
+   carries its own copy of the image parser and instruction decoder. A panic's return addresses
+   inside a module are not recorded, since the crash record looks only in the firmware's code.
 5. **Package install and the verifier as a module**, with the install-time function index.
 6. **P-256 as a module** when pairing starts.
 7. **Paged bytecode functions and glyph subsets**, and the shell's screens as bytecode. Paged code
@@ -289,7 +305,6 @@ kilobytes.
 
 ## Open questions
 
-- What the split between the UI arena and the system heap costs the app budget, likely 2 to 4 KB.
 - Real bus gaps, interrupt overhead and code-alias speed on the watch.
 - How long one P-256 step takes, and whether the accelerometer configuration can be uploaded in
   chunks.

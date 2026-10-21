@@ -130,6 +130,8 @@ BattleTime/
     ├── faces/          the watch faces in the app language, one folder each; see faces.md
     ├── firmware/       battletime-firmware: the firmware program, built only for the watch
     ├── harness/        battletime-app-testing: a test watch that runs apps on the real app host; see testing.md
+    ├── module-abi/     battletime-module-abi: the native module file, placing a module in RAM, the firmware calls it gets and its crash counts
+    ├── modules/        the native modules, a workspace of their own, each run from RAM out of /system/modules
     ├── reloader/       battletime-reloader: the one-time image that moves a watch over from InfiniTime or wasp-os
     ├── runtime/        battletime-runtime: app images, their checks, the interpreter and bindings
     ├── sdk/battletime/    the battletime package apps and faces import, and the browser preview
@@ -189,6 +191,19 @@ healthy. See [services.md](services.md).
 The firmware starts everything, runs the tasks, and holds the shell: navigation and the way back,
 the side button, transitions, screen power, closed apps, sensors, drawing by DMA, storage,
 Bluetooth, the watchdog and crash handling. See [firmware.md](firmware.md).
+
+## Native modules (`module-abi`, `modules`)
+
+A native module is rarely used native code that lives in `/system/modules/<name>` on the external
+flash instead of in the firmware. Each is a `no_std` crate under `modules/`, a workspace of its own
+that links every module at address 0 with its relocations kept; `tools/build_modules.sh` builds
+them and `tools/package_module.py` packs each into a module file. `battletime-module-abi` holds
+the file's format, `place`, which turns a file read into the heap into a runnable module by moving
+each address in it by where it landed, the `Host` table of firmware calls a module is given, and
+the crash counts that stop a module which keeps crashing. The firmware's `modules.rs` reads, places
+and calls a module when the packages characteristic asks, through the RAM's code alias, and gives
+its heap back when it returns. [external-flash-architecture.md](external-flash-architecture.md)
+explains the design; `modules/test` is the module that proves it.
 
 ## App runtime (`runtime`)
 

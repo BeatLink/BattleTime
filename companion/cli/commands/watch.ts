@@ -57,6 +57,7 @@ battletime note remove
 battletime apps [list|install <image|id>|remove <id>|hide <id>|show <id>|setup]
 battletime apps run <image> [--data <name>=<file>]... [--text <name>=<text>]... [--listen]
 battletime apps stop|forget [id]
+battletime apps module <name> [call]
 battletime quick-apps [list|set <id> ...|reset]
 battletime backup <file>
 battletime restore <file>
@@ -77,7 +78,9 @@ battletime slots [fit|recovery <start> <size>|update <start>]
   --text string (4 kB at most each) written beside it under /temp/<id>/ for the app to read; the image
   stays there as a cache. With --listen it stays connected, printing each message the app sends,
   until Ctrl+C closes the app, or stops with an error when the link drops. apps stop closes it, and apps forget closes it and deletes one temporary
-  app's files, or all of them. quick-apps
+  app's files, or all of them. apps module runs a call (0 when left out) of the native module in
+  /system/modules/<name> and prints its answer; the test module answers 385 to call 0, and its
+  calls 1 and 2 panic and fault, which restarts the watch. quick-apps
   lists the apps a swipe left or right on the face steps through, set replaces them with
   the ids given in order, and reset goes back to the watch's default. listen stays
   connected and prints what the watch sends, answering its apps' http
@@ -414,6 +417,13 @@ export async function apps(session: WatchSession, args: string[], untilStopped: 
       await packages.stop();
       say('Closed the temporary app, if one was open.');
       return;
+    case 'module': {
+      if (!first) throw new Error('Give the name of the module.');
+      const call = Number(args[2] ?? 0);
+      if (!Number.isInteger(call) || call < 0) throw new Error('A call is a whole number.');
+      say(`${first} call ${call} answered ${await packages.module(first, call)}.`);
+      return;
+    }
     case 'forget':
       await forgetTemporaryApp(await session.files(), packages, first);
       say(first ? `Deleted temporary app ${first}.` : 'Deleted every temporary app.');

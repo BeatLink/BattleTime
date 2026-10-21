@@ -1,5 +1,5 @@
 // The files every watch needs that are not apps, such as each accelerometer's configuration and the shared library's
-// icons, which the firmware no longer carries in its shared library. The companion puts any a watch lacks; `npm run import-system-files` copies
+// icons, which the firmware no longer carries in its shared library, and the native modules. The companion puts any a watch lacks; `npm run import-system-files` copies
 // them into `core/system-files/` from the store folder `tools/build_store.py` fills.
 
 use super::files::{FileClient, FileError};
@@ -14,7 +14,7 @@ pub struct SystemFile {
 }
 
 // Each at its path on the watch, as docs/companion-protocol.md lists them.
-pub const SYSTEM_FILES: [SystemFile; 3] = [
+pub const SYSTEM_FILES: [SystemFile; 4] = [
     SystemFile {
         path: "/system/accelerometer/bma421",
         contents: include_bytes!("../../system-files/accelerometer/bma421"),
@@ -26,6 +26,10 @@ pub const SYSTEM_FILES: [SystemFile; 3] = [
     SystemFile {
         path: "/system/icons",
         contents: include_bytes!("../../system-files/icons"),
+    },
+    SystemFile {
+        path: "/system/modules/test",
+        contents: include_bytes!("../../system-files/modules/test"),
     },
 ];
 
@@ -87,7 +91,12 @@ mod tests {
 
         assert_eq!(
             written,
-            ["/system/accelerometer/bma421", "/system/accelerometer/bma425", "/system/icons"]
+            [
+                "/system/accelerometer/bma421",
+                "/system/accelerometer/bma425",
+                "/system/icons",
+                "/system/modules/test"
+            ]
         );
         let files = watch.files.lock().unwrap();
         assert_eq!(files["/system/accelerometer/bma425"], SYSTEM_FILES[1].contents);
@@ -99,6 +108,7 @@ mod tests {
             ("/system/accelerometer/bma421", SYSTEM_FILES[0].contents),
             ("/system/accelerometer/bma425", SYSTEM_FILES[1].contents),
             ("/system/icons", SYSTEM_FILES[2].contents),
+            ("/system/modules/test", SYSTEM_FILES[3].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 
@@ -112,6 +122,7 @@ mod tests {
             ("/system/accelerometer/bma421", SYSTEM_FILES[0].contents),
             ("/system/accelerometer/bma425", b"cut short"),
             ("/system/icons", SYSTEM_FILES[2].contents),
+            ("/system/modules/test", SYSTEM_FILES[3].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 

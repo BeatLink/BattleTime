@@ -315,6 +315,17 @@ describe('temporary apps', () => {
     await expect(client.run('../x')).rejects.toThrow('an app id');
   });
 
+  it('runs a module call and gives its answer, or why it did not run', async () => {
+    const target = watch();
+    const client = await PackagesClient.open(target);
+    target.fileService.files.set('/system/modules/test', new Uint8Array(48));
+
+    expect(await client.module('test', 0)).toBe(385);
+    expect(await client.module('test', 7)).toBe(-1);
+    await expect(client.module('absent', 0)).rejects.toThrow('the module is not on the watch');
+    await expect(client.module('a-name-of-thirteen', 0)).rejects.toThrow('a module name');
+  });
+
   it('stops the open app, keeping its files, and forgets one app or all of them', async () => {
     const target = watch();
     const client = await PackagesClient.open(target);

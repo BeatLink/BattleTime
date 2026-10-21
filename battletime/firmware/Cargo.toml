@@ -66,6 +66,7 @@ battletime-phone-client = { path = "../services/phone_client" }
 battletime-display = { path = "../drivers/display" }
 battletime-heart-rate = { path = "../drivers/heart_rate" }
 battletime-external-flash = { path = "../drivers/external_flash", features = ["cortex-m"] }
+battletime-module-abi = { path = "../module-abi" }
 battletime-runtime = { path = "../runtime" }
 battletime-settings = { path = "../services/settings" }
 battletime-steps = { path = "../services/steps" }

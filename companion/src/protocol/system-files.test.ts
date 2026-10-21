@@ -26,11 +26,12 @@ const bundle = [
 ];
 
 describe('putMissingSystemFiles', () => {
-  it('bundles both accelerometer files and the icons at their paths', () => {
+  it('bundles both accelerometer files, the icons and the native modules at their paths', () => {
     expect(SYSTEM_FILES.map((file) => file.path)).toEqual([
       '/system/accelerometer/bma421',
       '/system/accelerometer/bma425',
       '/system/icons',
+      '/system/modules/test',
     ]);
   });
 

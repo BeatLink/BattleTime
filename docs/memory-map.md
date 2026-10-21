@@ -35,6 +35,10 @@ accelerometer (6,144 B each) lives on the external flash instead, under `/system
 update and is never written on the watch. No apps are kept in internal flash; they live in `/apps`
 on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library).
 
+Native modules, rare native code such as `modules/test`, live on the external flash too, in
+`/system/modules`, and take room in the heap only while a call runs; the loader that reads and
+places them costs the firmware 6.7 KB. See [architecture.md](architecture.md#native-modules-module-abi-modules).
+
 
 ### What fills the firmware
 
@@ -48,22 +52,22 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 142.8 KB | 49.1 KB |
-| App host (with `battletime-ui`) | 93.2 KB | 0.0 KB |
-| App runtime | 34.3 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 148.3 KB | 49.1 KB |
+| App host (with `battletime-ui`) | 96.5 KB | 0.0 KB |
+| App runtime | 37.8 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 31.7 KB | 41.3 KB |
-| core, alloc and compiler builtins | 28.8 KB | 16.5 KB |
-| Settings, companion and notifications (with serde) | 17.7 KB | 2.4 KB |
+| core, alloc and compiler builtins | 29.9 KB | 16.5 KB |
+| Settings, companion and notifications (with serde) | 17.9 KB | 2.5 KB |
 | Storage (flash store) | 17.4 KB | 13.7 KB |
 | BLEFS file service | 9.5 KB | 3.1 KB |
 | Display, graphics and drivers | 8.4 KB | 3.3 KB |
-| Embassy, allocator and Cortex-M | 7.9 KB | 5.0 KB |
-| Packages | 7.8 KB | 1.3 KB |
+| Embassy, allocator and Cortex-M | 8.1 KB | 5.0 KB |
+| Packages | 8.0 KB | 1.4 KB |
 | Updates (DFU) | 3.3 KB | 2.8 KB |
-| Other constants and padding | 26.3 KB | 14.2 KB |
-| **Code and data** | **429.0 KB** | **152.8 KB** |
+| Other constants and padding | 28.0 KB | 14.2 KB |
+| **Code and data** | **444.8 KB** | **153.0 KB** |
 | Shared library, after the code | 6.6 KB | none |
-| Free of the 480 KB region, after its header | 44.1 KB | 327.0 KB |
+| Free of the 480 KB region, after its header | 28.4 KB | 326.8 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -437,13 +441,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,387 B | 11,474 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,235 B | 11,474 B |
 | Bluetooth controller | 2,618 B | 2,618 B |
 | App host (with `battletime-ui`) | 396 B | 0 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | Other | 5 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,824 B** | **24,736 B** |
-| Left for the stack | 9,696 B | 40,784 B |
+| **Static RAM** (`.data` and `.bss`) | **55,672 B** | **24,736 B** |
+| Left for the stack | 9,848 B | 40,784 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
