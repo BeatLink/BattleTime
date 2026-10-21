@@ -168,7 +168,7 @@ impl<'file> NativeFile<'file> {
         let start = read_u32(self.bytes, at + 4)? as usize;
         let length = read_u32(self.bytes, at + 8)? as usize;
         let code = self.bytes.get(start..start.checked_add(length)?)?;
-        (start % 4 == 0).then_some((unit, code))
+        start.is_multiple_of(4).then_some((unit, code))
     }
 
     /// The native code for a unit, if the file has it.
