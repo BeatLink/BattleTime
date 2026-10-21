@@ -705,6 +705,8 @@ struct Shell {
     lit: bool,
     /// While the help screen shows, when its time changes next, so it is painted once a minute.
     help_drawn_at: Option<Value>,
+    /// The store's change count when the face would not open, so it is tried again once files change, such as the verifier arriving.
+    face_failed_at: Option<u32>,
     /// Whether the screen went off by dimming, for an always-on screen, rather than by sleeping.
     dimmed: bool,
     /// Whether the light is lowered for the last moments before the screen timeout.
@@ -969,6 +971,7 @@ impl Shell {
             self.temporary_outcome = Some(Err(PackageError::WouldNotOpen));
         } else if showing == Showing::Face {
             self.help_drawn_at = None;
+            self.face_failed_at = Some(storage::store_changes());
         } else {
             self.open(Showing::Face, Transition::None);
         }
@@ -985,6 +988,17 @@ impl Shell {
         }
         if let Some(icons) = self.launcher_icons.take() {
             icons.release();
+        }
+    }
+
+    /// Opens the face again if it would not open before and files have changed since, as when the companion puts the system files after an update.
+    fn retry_face_after_file_changes(&mut self) {
+        let changed = self
+            .face_failed_at
+            .is_some_and(|at| at != storage::store_changes());
+        if changed && self.host.is_none() && self.firmware_page.is_none() && self.showing == Showing::Face {
+            self.face_failed_at = None;
+            self.open(Showing::Face, Transition::None);
         }
     }
 
@@ -2031,6 +2045,7 @@ pub async fn run_shell(
         },
         lit: true,
         help_drawn_at: None,
+        face_failed_at: None,
         dimmed: false,
         light_lowered: false,
         panel_switched_at: Instant::from_ticks(0),
@@ -2145,6 +2160,7 @@ pub async fn run_shell(
             Either4::Third(()) => {
                 diagnostics::set(Counter::ShellLastWake, 3);
                 shell.follow_screen_timeout(last_input);
+                shell.retry_face_after_file_changes();
                 if let Some(host) = &mut shell.host {
                     host.tick(clock::utc_now(), &mut shell.system);
                 }

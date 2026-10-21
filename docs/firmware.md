@@ -109,6 +109,11 @@ flowchart LR
   which the companion puts with the other system files. The shell opens them like any app image
   but from there, never from `/apps`, so they are not installed packages and the launcher never
   lists them. While one is missing, the swipe that would open it goes back to the face.
+- **Verified once.** The firmware carries no verifier; the shell runs the verifier module over an
+  image after its install or before its first open, as [app-runtime.md](app-runtime.md#opening-an-app)
+  describes. A face that would not open, as when the verifier arrives only after an update, is
+  tried again on the next timer wake once the store has changed, so the help screen gives way to
+  the face as soon as the companion's system files are written.
 
 ### Side button
 

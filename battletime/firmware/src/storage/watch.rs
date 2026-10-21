@@ -523,6 +523,11 @@ type WatchStore = FlashStore<StoreFlash, 128, 128, 192>;
 /// Counts the erases and page programs the store has started, so an `OpenFile` can tell its map may be stale.
 static STORE_CHANGES: AtomicU32 = AtomicU32::new(0);
 
+/// How many erases and page programs the store has started, so a caller can tell whether files may have changed.
+pub fn store_changes() -> u32 {
+    STORE_CHANGES.load(Ordering::Acquire)
+}
+
 /// How often a running erase or page program is checked while other tasks run.
 const ERASE_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_millis(2);
 const PROGRAM_POLL_INTERVAL: embassy_time::Duration = embassy_time::Duration::from_micros(100);

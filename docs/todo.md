@@ -12,13 +12,6 @@ document for its part instead.
   file by its size alone, so a new verifier module of the same length as the old one would stay
   unsent, and the watch would check apps by the older rules. Compare a checksum, such as a module
   file's CRC in its header, or the store's own.
-- [ ] **Native modules on the watch.** `tools/check_modules.py` proves the loader, the verifier
-  module and a crash inside a module in the emulator, which runs RAM's code alias with no wait
-  states. On the watch, install an app (the Installing page), call `battletime apps module test 0`
-  (385), then `1` and `2` (each restarts the watch, the crash naming `mod:test`), and check that a
-  third call answers that the module no longer runs. `battletime apps module p256` gives how many
-  microseconds one P-256 key exchange takes on the chip, which pairing's design needs.
-
 - [ ] **A firmware upload through `SlotFlash` on the PineTime.** The update and recovery slots are
   now erased and written through `SlotFlash`, which waits on the timer instead of spinning. Moving
   the recovery slot over the Nordic UART is proven in the emulator (`tools/check_slot_move.py`),
