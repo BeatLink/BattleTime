@@ -85,9 +85,21 @@ pub enum Measure {
     /// The longest a strip waited for the bus in a busy redraw with a 4 KB read in the background, which streams
     /// to its end, since an async wait for the bus does not ask it to pause.
     LongestStripWaitBackground4k,
+    /// A sector erase left alone, on a sector of the free room between the slots.
+    EraseAlone,
+    /// From asking the chip to pause an erase until it read idle; the whole rest of the erase if it never paused.
+    EraseSuspendTime,
+    /// The second status register once paused, whose top bit is the chip's suspended bit.
+    EraseSuspendStatus2,
+    /// 1 when a read made while the erase was paused gave the right bytes.
+    EraseSuspendReadMatches,
+    /// From resuming until the erase ended.
+    EraseAfterResume,
+    /// 1 when the sector read back erased at the end.
+    EraseSuspendErased,
 }
 
-pub const RESULT_COUNT: usize = Measure::LongestStripWaitBackground4k as usize + 1;
+pub const RESULT_COUNT: usize = Measure::EraseSuspendErased as usize + 1;
 const FINISHED: u32 = 0xBE7C_0001;
 
 pub static RESULTS: [AtomicU32; RESULT_COUNT] = [const { AtomicU32::new(0) }; RESULT_COUNT];
@@ -188,11 +200,30 @@ pub async fn run_bench(display: &'static SharedDisplay, files: &'static storage:
     measure_open_reads(&mut buffer, files).await;
     measure_frames(display, files).await;
     measure_loops().await;
+    measure_erase_suspend(files).await;
 
     record(Measure::State, FINISHED);
     loop {
         Timer::after_secs(60).await;
     }
+}
+
+/// A sector of the free room between the update and recovery slots, which nothing keeps anything in.
+const SCRATCH_SECTOR: u32 = 0x000A_0000;
+
+/// Whether the chip pauses an erase for a read and carries it on afterwards.
+async fn measure_erase_suspend(files: &storage::Files) {
+    Timer::after(PAUSE).await;
+    files.wait_until_free().await;
+    let Some(times) = files.measure_erase_suspend(SCRATCH_SECTOR, RAW_ADDRESS, cycles) else {
+        return;
+    };
+    record(Measure::EraseAlone, times.erase_alone);
+    record(Measure::EraseSuspendTime, times.suspend);
+    record(Measure::EraseSuspendStatus2, times.status_2_while_paused as u32);
+    record(Measure::EraseSuspendReadMatches, times.read_while_paused_matches as u32);
+    record(Measure::EraseAfterResume, times.after_resume);
+    record(Measure::EraseSuspendErased, times.erased as u32);
 }
 
 /// The mean and the most of `REPEATS` timings.

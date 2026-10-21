@@ -45,9 +45,14 @@ const WRITE_ENABLE: u8 = 0x06;
 const READ_STATUS: u8 = 0x05;
 const READ_CHIP_ID: u8 = 0x9F;
 const DEEP_POWER_DOWN: u8 = 0xB9;
+const SUSPEND: u8 = 0x75;
+const RESUME: u8 = 0x7A;
+const READ_STATUS_2: u8 = 0x35;
 const RELEASE_POWER_DOWN: u8 = 0xAB;
 
 const WRITE_IN_PROGRESS_BIT: u8 = 0b0000_0001;
+/// Status register 2's bit saying an erase or program is paused.
+pub const SUSPENDED_BIT: u8 = 0b1000_0000;
 const WAKE_UP_TIME_IN_MICROSECONDS: u32 = 50;
 const BUSY_POLL_INTERVAL_IN_MICROSECONDS: u32 = 100;
 
@@ -340,6 +345,34 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
             .map_err(Error::Spi)?;
         self.operation_may_be_running = true;
         Ok(())
+    }
+
+    /// Asks the chip to pause the erase or program under way, so it reads again; `resume_operation` carries on.
+    ///
+    /// The XT25F32B is idle about 94 µs later, with `SUSPENDED_BIT` set in status register 2.
+    pub fn suspend_operation(&mut self) -> Result<(), Error<FlashSpi::Error>> {
+        self.spi.write(&[SUSPEND]).map_err(Error::Spi)
+    }
+
+    /// Carries on the erase or program `suspend_operation` paused.
+    pub fn resume_operation(&mut self) -> Result<(), Error<FlashSpi::Error>> {
+        self.spi.write(&[RESUME]).map_err(Error::Spi)?;
+        // A read while paused saw the chip idle, so the driver must wait for the erase again.
+        self.operation_may_be_running = true;
+        Ok(())
+    }
+
+    /// Both status registers: the first holds the busy bit, the second the suspended bit, its top one.
+    pub fn read_status_registers(&mut self) -> Result<[u8; 2], Error<FlashSpi::Error>> {
+        let mut first = [0];
+        let mut second = [0];
+        self.spi
+            .transaction(&mut [Operation::Write(&[READ_STATUS]), Operation::Read(&mut first)])
+            .map_err(Error::Spi)?;
+        self.spi
+            .transaction(&mut [Operation::Write(&[READ_STATUS_2]), Operation::Read(&mut second)])
+            .map_err(Error::Spi)?;
+        Ok([first[0], second[0]])
     }
 
     /// Reads the chip's status once, and says whether the erase `start_erasing_sector` began is over.

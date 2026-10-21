@@ -188,8 +188,12 @@ Docs and comments the code contradicts, as of e30358e4:
      reads, under which a paused read no longer blocks the executor.
    - Sectors erased ahead: done. `prepare_room` keeps the next four free file sectors erased, so
      a file of up to 16 KB, such as an app image, is written without an erase, for 704 B of flash.
-     Reads still wait behind an erase that runs; suspending one (commands 0x75 and 0x7A) remains
-     unconfirmed for the XT25F32B.
+     Reads still wait behind an erase that runs. The XT25F32B does suspend one, measured on the
+     watch by the bench's `measure_erase_suspend`: a sector erase takes 50.0 ms left alone; asked
+     to pause (0x75) about 2 ms in, the chip is idle 94 µs later with status register 2's SUS bit
+     set, a read while paused returns the right bytes, and after resuming (0x7A) the erase ends
+     48.1 ms later with the sector erased. The emulator does not model it. So a read need wait at
+     most about 0.1 ms behind an erase; the store does not use this yet.
 2. **Load before painting.** Done for the shared library's icons, the largest part: after layout,
    when a list scrolls and when the launcher's icons arrive, the app host reads the library icons
    the shown widgets draw into the heap, up to 8 KB, and drops the rest, so painting never waits on
@@ -287,7 +291,5 @@ kilobytes.
 
 - What the split between the UI arena and the system heap costs the app budget, likely 2 to 4 KB.
 - Real bus gaps, interrupt overhead and code-alias speed on the watch.
-- Whether the XT25F32B suspends an erase (commands 0x75 and 0x7A); unconfirmed, and not modelled
-  by the emulator.
 - How long one P-256 step takes, and whether the accelerometer configuration can be uploaded in
   chunks.

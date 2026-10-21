@@ -20,6 +20,8 @@ struct FakeChip {
     writing_enabled: bool,
     busy_polls_after_each_write: u8,
     busy_polls_left: u8,
+    /// The busy polls an erase paused by SUSPEND has left, which RESUME carries on.
+    suspended_polls: Option<u8>,
     status_polls: usize,
     programmed_addresses: Vec<u32>,
     erased_addresses: Vec<u32>,
@@ -34,6 +36,7 @@ impl FakeChip {
             writing_enabled: false,
             busy_polls_after_each_write: 0,
             busy_polls_left: 0,
+            suspended_polls: None,
             status_polls: 0,
             programmed_addresses: Vec::new(),
             erased_addresses: Vec::new(),
@@ -101,8 +104,8 @@ impl SpiDevice for FakeChip {
             return Ok(());
         }
         assert!(
-            self.busy_polls_left == 0 || command[0] == READ_STATUS,
-            "the chip ignores every command but a status read while it is busy"
+            self.busy_polls_left == 0 || [READ_STATUS, READ_STATUS_2, SUSPEND].contains(&command[0]),
+            "the chip ignores every command but status reads and a suspend while it is busy"
         );
 
         match (command[0], &mut operations[1..]) {
@@ -120,6 +123,24 @@ impl SpiDevice for FakeChip {
                     status[0] = WRITE_IN_PROGRESS_BIT;
                 } else {
                     status[0] = 0;
+                }
+            }
+            (READ_STATUS_2, [Operation::Read(status)]) => {
+                status[0] = if self.suspended_polls.is_some() {
+                    SUSPENDED_BIT
+                } else {
+                    0
+                };
+            }
+            (SUSPEND, []) => {
+                if self.busy_polls_left > 0 {
+                    self.suspended_polls = Some(self.busy_polls_left);
+                    self.busy_polls_left = 0;
+                }
+            }
+            (RESUME, []) => {
+                if let Some(polls) = self.suspended_polls.take() {
+                    self.busy_polls_left = polls;
                 }
             }
             (READ_DATA, [Operation::Read(bytes)]) => {
@@ -398,6 +419,28 @@ fn a_background_erase_returns_at_once_and_reports_when_the_chip_is_done() {
     assert_eq!(parts.spi.erased_addresses, [0x7000]);
     assert_eq!(parts.spi.status_polls, 3);
     assert_eq!(parts.delay.microseconds_waited, WAKE_UP_TIME_IN_MICROSECONDS);
+}
+
+#[test]
+fn a_suspended_erase_lets_the_chip_read_and_carries_on_when_resumed() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 3;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+
+    flash.start_erasing_sector(0x7000).unwrap();
+    assert!(!flash.erase_has_finished().unwrap());
+    flash.suspend_operation().unwrap();
+    let paused = flash.read_status_registers().unwrap();
+    let mut bytes = [0u8; 4];
+    flash.read(0x9000, &mut bytes).unwrap();
+    flash.resume_operation().unwrap();
+    let resumed = flash.read_status_registers().unwrap();
+
+    assert_eq!(paused, [0, SUSPENDED_BIT]);
+    assert_eq!(bytes, [0xFF; 4]);
+    assert_eq!(resumed[1], 0);
+    assert!(!flash.erase_has_finished().unwrap());
+    assert!(flash.erase_has_finished().unwrap());
 }
 
 #[test]

@@ -83,6 +83,23 @@ const BUSY_WAIT: BusyWait = BusyWait {
 
 type FlashOnBus = ExternalFlash<crate::display_dma::FlashOnBus, BusyWait>;
 type SharedExternalFlash = Mutex<NoopRawMutex, RefCell<FlashOnBus>>;
+
+/// What the bench measured of pausing an erase, in CPU cycles where it is a time.
+#[cfg(feature = "bench")]
+pub struct EraseSuspendTimes {
+    /// A whole sector erase, left alone.
+    pub erase_alone: u32,
+    /// From asking the chip to pause until it read idle, or until the erase ended if it never paused.
+    pub suspend: u32,
+    /// The second status register once paused; its top bit says the chip suspended.
+    pub status_2_while_paused: u8,
+    /// Whether a read made while paused gave the same bytes as before the erase began.
+    pub read_while_paused_matches: bool,
+    /// From resuming until the erase ended.
+    pub after_resume: u32,
+    /// Whether the sector read back erased at the end.
+    pub erased: bool,
+}
 type SharedInternalFlash = Mutex<NoopRawMutex, RefCell<Nvmc<'static>>>;
 type BootStatePage = BlockingAsync<BlockingPartition<'static, NoopRawMutex, Nvmc<'static>>>;
 
@@ -1089,6 +1106,68 @@ impl Files {
 
     /// Reads the flash at `address` straight into `out` by DMA with the store held, for the bench's raw timings.
     #[cfg(feature = "bench")]
+    /// Erases the sector at `scratch` twice, the second time pausing and resuming it, and reads
+    /// `reference` while it is paused; the bench's measure of whether the chip suspends an erase.
+    ///
+    /// `now` counts CPU cycles. Holding the store keeps every other task off the chip meanwhile.
+    #[cfg(feature = "bench")]
+    pub fn measure_erase_suspend(
+        &self,
+        scratch: u32,
+        reference: u32,
+        now: impl Fn() -> u32,
+    ) -> Option<EraseSuspendTimes> {
+        const BUSY: u8 = 1;
+        const CYCLES_PER_MILLISECOND: u32 = 64_000;
+        let _store = self.store.try_lock().ok()?;
+        let mut before = [0u8; 256];
+        let mut during = [0u8; 256];
+        self.external_flash.lock(|flash| {
+            let mut flash = flash.borrow_mut();
+            flash.wake_if_asleep().ok()?;
+            flash.prepare_read(reference, before.len()).ok()?;
+            crate::display_dma::read_flash(reference, &mut before);
+
+            let start = now();
+            flash.start_erasing_sector(scratch).ok()?;
+            while !flash.erase_has_finished().ok()? {}
+            let erase_alone = now().wrapping_sub(start);
+
+            flash.start_erasing_sector(scratch).ok()?;
+            let started = now();
+            while now().wrapping_sub(started) < 2 * CYCLES_PER_MILLISECOND {}
+            let asked = now();
+            flash.suspend_operation().ok()?;
+            let mut status = flash.read_status_registers().ok()?;
+            while status[0] & BUSY != 0 && now().wrapping_sub(asked) < 100 * CYCLES_PER_MILLISECOND {
+                status = flash.read_status_registers().ok()?;
+            }
+            let suspend = now().wrapping_sub(asked);
+            crate::display_dma::read_flash(reference, &mut during);
+
+            let resumed = now();
+            flash.resume_operation().ok()?;
+            while flash.read_status_registers().ok()?[0] & BUSY != 0
+                && now().wrapping_sub(resumed) < 200 * CYCLES_PER_MILLISECOND
+            {}
+            let after_resume = now().wrapping_sub(resumed);
+            // The driver still counts the erase as under way, until it reads the chip idle once.
+            flash.operation_has_finished().ok()?;
+            let mut erased = [0u8; 256];
+            flash.prepare_read(scratch, erased.len()).ok()?;
+            crate::display_dma::read_flash(scratch, &mut erased);
+
+            Some(EraseSuspendTimes {
+                erase_alone,
+                suspend,
+                status_2_while_paused: status[1],
+                read_while_paused_matches: during == before,
+                after_resume,
+                erased: erased.iter().all(|&byte| byte == 0xFF),
+            })
+        })
+    }
+
     pub fn read_flash_now(&self, address: u32, out: &mut [u8]) {
         let Ok(_store) = self.store.try_lock() else {
             return;

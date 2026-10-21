@@ -66,6 +66,12 @@ MEASURES = [
     "open-file read 4 KB (mean)", "open-file read 4 KB (most)",
     "open-file reads match the store (count)",
     "longest strip wait, busy, 4 KB background read",
+    "sector erase, left alone",
+    "erase suspend: asked to pause until idle",
+    "erase suspend: status register 2, top bit set if paused (count)",
+    "erase suspend: read while paused matches (count)",
+    "erase suspend: resumed until the erase ended",
+    "erase suspend: sector erased at the end (count)",
 ]
 
 # ============================================================================
