@@ -34,7 +34,10 @@ fn read_font_file(offset: u32, out: &mut [u8]) -> Option<usize> {
 /// Draws, then, if the drawing met glyphs not yet read, reads them and draws again.
 pub fn draw_with_glyphs(mut draw: impl FnMut()) {
     draw();
-    if font_file::load_missing_glyphs() {
+    for _ in 0..font_file::MOST_PASSES {
+        if !font_file::load_missing_glyphs() {
+            break;
+        }
         draw();
     }
 }

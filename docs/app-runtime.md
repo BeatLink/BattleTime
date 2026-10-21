@@ -802,10 +802,14 @@ without it, such as one built before, draws `dot_matrix` as `normal`.
 
 On the watch the text font lives on the external flash at `/system/font`, a system file the
 companion puts, and no copy is kept in the firmware or the shared library. `font_file` keeps a copy
-in the heap holding only the glyphs drawn lately, at most 2,048 B, which the memory need counts in
-the system's share. A lookup that misses notes the character; after layout the host reads the
-noted glyphs, builds the copy again, the missed ones first and then those used since the last build, and lays the screen
-out once more, and the firmware's own pages draw, read what they missed and draw again. While the
+holding only the glyphs drawn lately, at most 2,048 B, in a static buffer of its own that the heap
+gave up: built anywhere in the heap, the copy moved at each build and split the free room, so the
+verifier module's one 15 KB block stopped fitting. A lookup that misses notes the character; after layout the host reads the
+noted glyphs, up to 64 a read and four reads a layout, builds the copy again, the missed ones
+first and then those used since the last build, and lays the screen
+out once more, and the firmware's own pages draw, read what they missed and draw again. Rows that scroll in
+are drawn without a layout, so once a frame is done the shell has the host lay out again if it
+missed any. While the
 file cannot be read, those pages draw without text: the status page as coloured steps and a
 progress bar, the help screen as a clock of bars. The `built-in-fonts` feature starts the font
 filled from `app-host/fonts/`, for the simulator, and the test harness installs the whole file.

@@ -121,14 +121,14 @@ pub const PASSING_BYTES: u32 = 1_536;
 /// Rows of a Repeat taken to be built when their number is worked out while the app runs.
 pub const ASSUMED_ROWS: u32 = 8;
 
-/// The heap the firmware has: 10 KB for the system and 20.25 KB for the UI; the flash store keeps its tables outside it.
-pub const HEAP_BYTES: u32 = 30_976;
+/// The heap the firmware has: 10 KB for the system and 18.25 KB for the UI; the flash store and the text font's glyphs keep their bytes outside it.
+pub const HEAP_BYTES: u32 = 28_928;
 
-/// The most the text font's glyphs in use take on the heap, read from the external flash as screens draw them.
+/// The most the text font's glyphs in use take, read from the external flash as screens draw them, in a static buffer the heap gave up.
 pub const TEXT_FONT_BYTES: u32 = 2_048;
 
-/// What the system holds on the heap while an app is open: notifications, file transfers, the shell and the text font's glyphs.
-pub const SYSTEM_BYTES: u32 = 4_096 + TEXT_FONT_BYTES;
+/// What the system holds on the heap while an app is open: notifications, file transfers and the shell.
+pub const SYSTEM_BYTES: u32 = 4_096;
 
 /// The most an open app may need, leaving the system its share.
 pub const APP_HEAP_BUDGET_BYTES: u32 = HEAP_BYTES - SYSTEM_BYTES;

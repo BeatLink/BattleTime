@@ -1145,7 +1145,10 @@ impl<'image> AppHost<'image> {
     fn measure_and_lay_out(&mut self) {
         self.measure_and_place();
         // The text it measured may hold characters whose glyphs are still on the external flash.
-        if crate::font_file::load_missing_glyphs() {
+        for _ in 0..crate::font_file::MOST_PASSES {
+            if !crate::font_file::load_missing_glyphs() {
+                break;
+            }
             self.measure_and_place();
             self.redraw_whole_screen();
         }
@@ -2623,6 +2626,15 @@ impl<'image> AppHost<'image> {
     // ------------------------------------------------------------------------
     // Drawing
     // ------------------------------------------------------------------------
+
+    /// Lays the screen out again if drawing met glyphs not read yet, which reads them, and redraws it; gives whether it did.
+    pub fn read_glyphs_drawing_missed(&mut self) -> bool {
+        if !crate::font_file::has_missing_glyphs() {
+            return false;
+        }
+        self.measure_and_lay_out();
+        true
+    }
 
     /// Whether `draw` has anything to do.
     pub fn needs_drawing(&self) -> bool {

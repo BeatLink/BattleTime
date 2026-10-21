@@ -1973,6 +1973,10 @@ async fn draw_host(screen: &mut DrawingScreen, host: &mut AppHost<'static>) {
         .draw_step_at_async(screen, &mut [], started.as_millis())
         .await;
     diagnostics::add(Counter::DrawMicroseconds, started.elapsed().as_micros() as u32);
+    // Rows that scrolled in draw without a new layout, so what they missed is read now and drawn next.
+    if !host.needs_drawing() {
+        host.read_glyphs_drawing_missed();
+    }
 }
 
 /// The name an app image gives itself, cut to fit a notification's source.
