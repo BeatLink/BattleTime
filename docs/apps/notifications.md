@@ -39,7 +39,7 @@ A chat opened by tapping it, with its app, the time it came and **Dismiss**.
 
 ![The preview of a notification that just arrived](../../battletime/harness/snapshots/screens/shell-notifications-preview.png)
 
-The preview a new missed call opens, its bar along the top running out.
+The preview a new calendar event opens, its bar along the top running out and its long title wrapped.
 
 ![The preview tapped to read the notification in full](../../battletime/harness/snapshots/screens/shell-notifications-preview-open.png)
 

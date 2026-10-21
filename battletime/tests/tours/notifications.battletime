@@ -16,9 +16,10 @@ snapshot message
 tap "Dismiss"
 expect screen main
 expect no text "Alex"
+notify "Calendar" "Dentist appointment tomorrow" "Bring your card"  # a long title wraps
 start on preview            # as the shell opens it when a notification arrives
-expect text "Jamie"
-expect text "Missed call"
+expect text "Dentist appointment"
+expect text "Bring your card"
 snapshot preview
 wait 6s
 expect no effect back
