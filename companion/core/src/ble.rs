@@ -92,10 +92,14 @@ async fn within<T, E: Into<BleError>>(
     what: &str,
     step: impl Future<Output = Result<T, E>>,
 ) -> Result<T, BleError> {
-    match tokio::time::timeout(limit, step).await {
+    let result = match tokio::time::timeout(limit, step).await {
         Ok(result) => result.map_err(Into::into),
         Err(_) => fail(format!("Timed out {what}.")),
+    };
+    if let Err(error) = &result {
+        log::warn!("{what} failed: {error}");
     }
+    result
 }
 
 // ============================================================================
@@ -209,6 +213,11 @@ impl WatchBle {
     }
 
     fn emit(&self, name: &str, payload: Value) {
+        match name {
+            "state" | "mode" => log::info!("link {name}: {payload}"),
+            "error" => log::warn!("link error: {payload}"),
+            _ => {}
+        }
         (self.inner.sink)(name, payload);
     }
 
@@ -234,6 +243,7 @@ impl WatchBle {
             })
             .await?;
         if adapters.is_empty() {
+            log::warn!("no Bluetooth adapter found");
             return fail("This computer has no Bluetooth adapter.");
         }
         let mut states = Vec::new();
@@ -242,8 +252,12 @@ impl WatchBle {
         }
         let current = *self.inner.chosen.lock().unwrap();
         let Some(chosen) = choose_adapter(&states, current) else {
+            log::warn!("every Bluetooth adapter is off: {states:?}");
             return fail("The Bluetooth adapter is powered off.");
         };
+        if current != Some(chosen) {
+            log::info!("using Bluetooth adapter {chosen} of {}", adapters.len());
+        }
         *self.inner.chosen.lock().unwrap() = Some(chosen);
         Ok(adapters[chosen].clone())
     }
@@ -262,6 +276,7 @@ impl WatchBle {
                         ble.report_device(&adapter, &id).await;
                     }
                     CentralEvent::DeviceDisconnected(id) => ble.on_disconnected(&id),
+                    CentralEvent::StateUpdate(state) => log::info!("Bluetooth adapter is now {state:?}"),
                     _ => {}
                 }
             }
@@ -274,6 +289,7 @@ impl WatchBle {
     // ========================================================================
 
     pub async fn start_scan(&self) -> Result<(), BleError> {
+        log::info!("scanning for watches");
         let adapter = self.adapter().await?;
         {
             let mut scan = self.inner.scan.lock().unwrap();
@@ -331,6 +347,7 @@ impl WatchBle {
     // Drops the link and comes back to `address` without the UART, which is how a firmware update follows the watch into its bootloader.
     pub async fn reconnect(&self, address: &str) -> Result<(), BleError> {
         let _turn = self.inner.operation.lock().await;
+        log::info!("reconnecting to {address} without the UART");
         self.drop_link().await;
         self.emit("state", json!("disconnected"));
         tokio::time::sleep(Duration::from_secs(1)).await;
@@ -339,6 +356,7 @@ impl WatchBle {
 
     pub async fn disconnect(&self) -> Result<(), BleError> {
         let _turn = self.inner.operation.lock().await;
+        log::info!("disconnecting as asked");
         self.drop_link().await;
         self.emit("state", json!("disconnected"));
         Ok(())
@@ -348,6 +366,7 @@ impl WatchBle {
         match self.try_connect(address, uart).await {
             Ok(()) => Ok(()),
             Err(error) => {
+                log::warn!("connecting to {address} failed: {error}");
                 self.drop_link().await;
                 self.emit("state", json!("disconnected"));
                 Err(error)
@@ -357,6 +376,10 @@ impl WatchBle {
 
     async fn try_connect(&self, address: &str, uart: bool) -> Result<(), BleError> {
         let adapter = self.adapter().await?;
+        log::info!(
+            "connecting to {address}{}",
+            if uart { "" } else { " for its bootloader" }
+        );
         self.emit("state", json!("connecting"));
 
         let peripheral = self.find(&adapter, address).await?;
@@ -369,13 +392,21 @@ impl WatchBle {
         }
 
         // BlueZ may already hold the link from a previous run or another tool.
-        if !peripheral.is_connected().await.unwrap_or(false) {
+        if peripheral.is_connected().await.unwrap_or(false) {
+            log::info!("the platform already holds a link to {address}");
+        } else {
             within(STEP_TIMEOUT, "connecting to the watch", peripheral.connect()).await?;
         }
         self.resolve_services(&peripheral).await?;
 
         let characteristics: Vec<Characteristic> = peripheral.characteristics().into_iter().collect();
         let served: Vec<Uuid> = peripheral.services().iter().map(|service| service.uuid).collect();
+        log::info!(
+            "the watch serves {} services and {} characteristics: {}",
+            served.len(),
+            characteristics.len(),
+            describe_characteristics(&characteristics)
+        );
         let mut mode = "bootloader";
         let mut rx = None;
         if uart {
@@ -449,6 +480,7 @@ impl WatchBle {
         {
             return Ok(());
         }
+        log::warn!("services never resolved, so the link is dropped and made again");
         let _ = tokio::time::timeout(DISCONNECT_TIMEOUT, peripheral.disconnect()).await;
         tokio::time::sleep(Duration::from_millis(1500)).await;
         within(STEP_TIMEOUT, "connecting to the watch", peripheral.connect()).await?;
@@ -518,7 +550,10 @@ impl WatchBle {
             ours
         };
         if ours {
+            log::info!("the watch's link dropped");
             self.emit("state", json!("disconnected"));
+        } else {
+            log::debug!("a link that is not the watch's dropped: {id:?}");
         }
     }
 
@@ -531,7 +566,13 @@ impl WatchBle {
             peripheral
         };
         if let Some(peripheral) = peripheral {
-            let _ = tokio::time::timeout(DISCONNECT_TIMEOUT, peripheral.disconnect()).await;
+            log::info!("dropping the link");
+            if tokio::time::timeout(DISCONNECT_TIMEOUT, peripheral.disconnect())
+                .await
+                .is_err()
+            {
+                log::warn!("the platform did not finish disconnecting in time");
+            }
         }
     }
 
@@ -584,6 +625,7 @@ impl WatchBle {
             .find(|found| found.service_uuid == service && found.uuid == characteristic)
             .cloned()
             .ok_or_else(|| {
+                log::debug!("asked for {characteristic} in {service}, which the watch does not serve");
                 BleError(format!(
                     "The watch has no characteristic {characteristic} in service {service}."
                 ))
@@ -597,7 +639,10 @@ impl WatchBle {
 
     pub async fn gatt_read(&self, service: &str, characteristic: &str) -> Result<Vec<u8>, BleError> {
         let (peripheral, found) = self.characteristic(service, characteristic)?;
-        within(STEP_TIMEOUT, "reading from the watch", peripheral.read(&found)).await
+        log::debug!("reading {} ({:?})", found.uuid, found.properties);
+        let read = within(STEP_TIMEOUT, "reading from the watch", peripheral.read(&found)).await?;
+        log::debug!("read {} bytes from {}", read.len(), found.uuid);
+        Ok(read)
     }
 
     // `mode` is "request" for a write the watch acknowledges, anything else for one it does not.
@@ -614,6 +659,7 @@ impl WatchBle {
         } else {
             WriteType::WithoutResponse
         };
+        log::debug!("writing {} bytes to {} ({write_type:?})", data.len(), found.uuid);
         within(
             STEP_TIMEOUT,
             "writing to the watch",
@@ -649,6 +695,7 @@ impl WatchBle {
         {
             return Ok(());
         }
+        log::debug!("subscribing to {}", found.uuid);
         within(
             STEP_TIMEOUT,
             "subscribing to the watch",
@@ -686,6 +733,15 @@ impl WatchBle {
         let _ = self.stop_scan().await;
         let _ = self.disconnect().await;
     }
+}
+
+// Each characteristic as its id and what it allows, for the log.
+fn describe_characteristics(characteristics: &[Characteristic]) -> String {
+    characteristics
+        .iter()
+        .map(|found| format!("{} {:?}", found.uuid, found.properties))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn forget(link: &mut Link) {

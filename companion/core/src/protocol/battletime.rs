@@ -189,6 +189,105 @@ pub async fn read_diagnostics(link: &impl GattLink) -> Result<Vec<DiagnosticCoun
 }
 
 // ============================================================================
+// The last restart, as src/protocol/debug-report.ts reads it
+// ============================================================================
+
+// The nRF52832's RESETREAS bits, most telling first, as the watch names them.
+const RESET_REASONS: [(u32, &str); 8] = [
+    (1 << 1, "watchdog"),
+    (1 << 3, "lockup"),
+    (1 << 2, "software"),
+    (1 << 0, "reset pin"),
+    (1 << 16, "woke by pin"),
+    (1 << 17, "woke by comparator"),
+    (1 << 18, "debugger"),
+    (1 << 19, "woke by NFC"),
+];
+
+// After the counters come the reset reasons, the crash kind, eight detail words and four words of the open app's id.
+const CRASH_DETAIL_WORDS: usize = 8;
+const OPEN_APP_WORDS: usize = 4;
+
+pub fn reset_reason_names(register: u32) -> Vec<&'static str> {
+    if register == 0 {
+        return vec!["power on"];
+    }
+    let known = RESET_REASONS.iter().fold(0, |bits, (bit, _)| bits | bit);
+    let mut names: Vec<&str> = RESET_REASONS
+        .iter()
+        .filter(|(bit, _)| register & bit != 0)
+        .map(|(_, name)| *name)
+        .collect();
+    if register & !known != 0 {
+        names.push("unknown");
+    }
+    names
+}
+
+// The last restart and the crash before it in one line for the log, or None from a firmware that sends only counters.
+pub fn describe_last_restart(bytes: &[u8]) -> Option<String> {
+    let words: Vec<u32> = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|word| u32::from_le_bytes(*word))
+        .collect();
+    let after = words.get(DIAGNOSTIC_COUNTERS.len()..)?;
+    if after.len() < 2 + CRASH_DETAIL_WORDS {
+        return None;
+    }
+    let hex = |word: &u32| format!("0x{word:08x}");
+    let details = &after[2..2 + CRASH_DETAIL_WORDS];
+    let addresses = |words: &[u32]| {
+        words
+            .iter()
+            .filter(|word| **word != 0)
+            .map(hex)
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let crash = match after[1] {
+        0 => "no crash".to_string(),
+        1 => format!("panic at {}", addresses(details)),
+        2 => format!(
+            "HardFault pc {} lr {} status {} address {}{}",
+            hex(&details[0]),
+            hex(&details[1]),
+            hex(&details[2]),
+            hex(&details[3]),
+            if details[2] & 0xff != 0 {
+                ", stack overflow"
+            } else {
+                ""
+            }
+        ),
+        3 => format!(
+            "out of memory asking for {} bytes with {} free, at {}",
+            details[0],
+            details[1],
+            addresses(&details[2..])
+        ),
+        kind => format!(
+            "crash kind {kind}: {}",
+            details.iter().map(hex).collect::<Vec<_>>().join(" ")
+        ),
+    };
+    let open_app = bytes
+        .get((DIAGNOSTIC_COUNTERS.len() + 2 + CRASH_DETAIL_WORDS) * 4..)
+        .map(|rest| &rest[..rest.len().min(OPEN_APP_WORDS * 4)])
+        .map(|id| {
+            String::from_utf8_lossy(id.split(|byte| *byte == 0).next().unwrap_or_default()).into_owned()
+        })
+        .filter(|id| !id.is_empty());
+    Some(format!(
+        "last restart: {} ({}), {crash}{}",
+        reset_reason_names(after[0]).join(", "),
+        hex(&after[0]),
+        open_app.map(|id| format!(", with {id} open")).unwrap_or_default()
+    ))
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -259,6 +358,52 @@ mod tests {
         assert_eq!(read.len(), 8);
         assert_eq!((read[0].key, read[0].value), ("shellLoops", 7));
         assert_eq!((read[7].key, read[7].value), ("accelerometerState", 4));
+    }
+
+    // Diagnostics with every counter zero, then the given words after them.
+    fn diagnostics_ending_with(words: &[u32], open_app: &str) -> Vec<u8> {
+        let mut bytes = vec![0; DIAGNOSTIC_COUNTERS.len() * 4];
+        for word in words {
+            bytes.extend_from_slice(&word.to_le_bytes());
+        }
+        let mut id = open_app.as_bytes().to_vec();
+        id.resize(OPEN_APP_WORDS * 4, 0);
+        bytes.extend_from_slice(&id);
+        bytes
+    }
+
+    #[test]
+    fn the_last_restart_names_a_watchdog_reset_after_a_hard_fault_in_an_open_app() {
+        let bytes = diagnostics_ending_with(
+            &[1 << 1, 2, 0x1234, 0x5678, 0x10, 0x2000_0000, 0, 0, 0, 0],
+            "weather",
+        );
+        assert_eq!(
+            describe_last_restart(&bytes).unwrap(),
+            "last restart: watchdog (0x00000002), HardFault pc 0x00001234 lr 0x00005678 status 0x00000010 address 0x20000000, stack overflow, with weather open"
+        );
+    }
+
+    #[test]
+    fn a_power_on_with_no_crash_says_so() {
+        let bytes = diagnostics_ending_with(&[0; 10], "");
+        assert_eq!(
+            describe_last_restart(&bytes).unwrap(),
+            "last restart: power on (0x00000000), no crash"
+        );
+    }
+
+    #[test]
+    fn counters_alone_say_nothing_about_the_last_restart() {
+        assert_eq!(describe_last_restart(&[0; 32]), None);
+    }
+
+    #[test]
+    fn unknown_reset_bits_are_named_unknown() {
+        assert_eq!(
+            reset_reason_names((1 << 2) | (1 << 30)),
+            vec!["software", "unknown"]
+        );
     }
 
     #[test]

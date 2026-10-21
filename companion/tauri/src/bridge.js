@@ -11,6 +11,33 @@
   // Tauri's own scripts may run after this one, so its globals are looked up at call time.
   const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
 
+  // The window's warnings, errors and uncaught failures go to the companion's log too.
+  const describe = (part) => {
+    if (part instanceof Error) return `${part.message}\n${part.stack ?? ''}`;
+    if (typeof part === 'string') return part;
+    try {
+      return JSON.stringify(part);
+    } catch {
+      return String(part);
+    }
+  };
+  const log = (level, parts) => {
+    try {
+      invoke('app_log', { level, message: parts.map(describe).join(' ') }).catch(() => {});
+    } catch {
+      // Tauri's scripts have not run yet, so the line stays in the window's console only.
+    }
+  };
+  for (const level of ['warn', 'error']) {
+    const original = console[level].bind(console);
+    console[level] = (...parts) => {
+      original(...parts);
+      log(level, parts);
+    };
+  }
+  window.addEventListener('error', (event) => log('error', [event.error ?? event.message]));
+  window.addEventListener('unhandledrejection', (event) => log('error', ['Unhandled rejection:', event.reason]));
+
   // Every call gives { ok, value } or { ok: false, error }.
   const call = (command, args) =>
     invoke(command, args).then(

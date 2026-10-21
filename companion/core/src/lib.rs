@@ -3,6 +3,7 @@
 pub mod ble;
 pub mod daemon;
 pub mod gadgetbridge;
+pub mod logging;
 pub mod plugins;
 pub mod protocol;
 pub mod sync;

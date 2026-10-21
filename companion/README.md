@@ -220,6 +220,24 @@ It is signed with the release key, which the repository keeps in its secrets:
 
 Every later release must be signed with the same key, or phones refuse it as an update.
 
+## Logs
+
+`core/src/logging.rs` keeps one log for the core, the app and the window. It covers each step of
+connecting and its failures, every GATT read, write and subscribe with its characteristic, links
+dropping, the daemon bringing the watch back, sync passes and plugin lines. It also logs Rust
+panics. Each time the watch connects it logs why the watch last restarted and the crash before
+that, read from its diagnostics, so a restart loop shows as one such line per connection.
+
+- **On Android** it goes to the system log under the `BattleTime` tag, and the Kotlin half uses
+  `PhoneBridge`: `adb logcat -s BattleTime PhoneBridge`.
+- **On the desktop** it goes to the terminal.
+- **On both**, it is also written to `logs/companion.log` in the app's data folder. Past 2 MB the
+  file becomes `companion.old.log` and a new one starts.
+
+The companion's own lines are kept down to debug, btleplug's down to info, and other libraries'
+warnings only. The window's `console.warn`, `console.error` and uncaught errors reach the same log
+through the `app_log` command.
+
 ## Layout
 
 ```

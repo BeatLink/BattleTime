@@ -34,6 +34,7 @@ use std::sync::{Arc, OnceLock, Weak};
 use battletime_companion_core::ble::{BleError, WatchBle};
 use battletime_companion_core::daemon::device::Device;
 use battletime_companion_core::daemon::{Daemon, DaemonSetup, Features};
+use battletime_companion_core::logging;
 use battletime_companion_core::web_request;
 use serde::Serialize;
 use serde_json::Value;
@@ -96,6 +97,18 @@ async fn ble_start_scan(app: AppHandle, companion: State<'_, Companion>) -> Answ
     bluetooth_allowed(&app).await?;
     companion.daemon.set_scanning(true);
     answer(companion.ble().start_scan().await)
+}
+
+// A line from the window's own log, such as an error its scripts did not catch.
+#[tauri::command]
+fn app_log(level: String, message: String) {
+    let level = match level.as_str() {
+        "error" => log::Level::Error,
+        "warn" => log::Level::Warn,
+        "info" => log::Level::Info,
+        _ => log::Level::Debug,
+    };
+    log::log!(target: "battletime_companion_lib::window", level, "{message}");
 }
 
 #[tauri::command]
@@ -394,6 +407,7 @@ async fn web_request(request: web_request::WebRequest) -> Answer<web_request::We
 fn process_daemon(data_dir: PathBuf, device: Arc<dyn Device>) -> Arc<Daemon> {
     DAEMON
         .get_or_init(|| {
+            logging::start_with_file(&data_dir);
             let runtime = tauri::async_runtime::handle().inner().clone();
             let _entered = runtime.enter();
             Daemon::start(DaemonSetup {
@@ -530,7 +544,7 @@ async fn follow_autostart(daemon: Arc<Daemon>) {
         let wanted = daemon.settings().view::<DesktopSettings>().start_with_computer;
         if let Some(folder) = autostart::autostart_folder() {
             if let Err(error) = autostart::set_autostart(&folder, wanted, &autostart::program()) {
-                eprintln!("Could not change the autostart entry: {error}");
+                log::warn!("Could not change the autostart entry: {error}");
             }
         }
         if changes.changed().await.is_err() {
@@ -576,7 +590,7 @@ async fn serve_command_line(daemon: Arc<Daemon>, data_dir: std::path::PathBuf) {
 
     let path = socket::default_socket_path(&data_dir);
     if let Err(error) = socket::serve_daemon(&daemon, &path).await {
-        eprintln!(
+        log::warn!(
             "The command line socket at {} could not start: {error}",
             path.display()
         );
@@ -585,6 +599,8 @@ async fn serve_command_line(daemon: Arc<Daemon>, data_dir: std::path::PathBuf) {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    logging::start();
+    log::info!("BattleTime Companion {} starting", env!("CARGO_PKG_VERSION"));
     // A second launch shows the running companion's window instead of starting another.
     #[cfg(desktop)]
     let launches = {
@@ -596,7 +612,7 @@ pub fn run() {
             Ok(single_instance::Claim::AlreadyRunning) => return,
             Ok(single_instance::Claim::First(listener)) => Some(listener),
             Err(error) => {
-                eprintln!("Could not check for a running companion: {error}");
+                log::warn!("Could not check for a running companion: {error}");
                 None
             }
         }
@@ -651,9 +667,9 @@ pub fn run() {
                 tauri::async_runtime::spawn(follow_autostart(daemon));
                 // The tray library may be missing on a desktop with no tray, which it reports by panicking.
                 match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| add_tray(app))) {
-                    Ok(Err(error)) => eprintln!("Could not add the tray icon: {error}"),
+                    Ok(Err(error)) => log::warn!("Could not add the tray icon: {error}"),
                     Err(_) => {
-                        eprintln!("This desktop has no tray, so the companion runs without an icon there.")
+                        log::info!("This desktop has no tray, so the companion runs without an icon there.")
                     }
                     Ok(Ok(())) => {}
                 }
@@ -679,6 +695,7 @@ pub fn run() {
             let _ = (window, event);
         })
         .invoke_handler(tauri::generate_handler![
+            app_log,
             ble_start_scan,
             ble_stop_scan,
             ble_connect,

@@ -38,9 +38,10 @@ use crate::plugins::http;
 use crate::plugins::runtime::DataWrite;
 use crate::plugins::store::PluginStore;
 use crate::protocol::battletime::{
-    read_battery_level, read_capabilities, set_watch_time, Capabilities, FILE_TRANSFER, FILE_TRANSFER_SERVICE,
+    describe_last_restart, read_battery_level, read_capabilities, set_watch_time, Capabilities,
+    BATTLETIME_DIAGNOSTICS, BATTLETIME_SERVICE, FILE_TRANSFER, FILE_TRANSFER_SERVICE,
 };
-use crate::protocol::link::WriteMode;
+use crate::protocol::link::{GattLink, WriteMode};
 use crate::sync::files::{FileClient, FileTransport};
 use crate::sync::store::{SyncSettings, SyncStore, LONGEST_INTERVAL, SHORTEST_INTERVAL};
 use crate::sync::{SyncOutput, SyncReport, Syncer};
@@ -379,6 +380,7 @@ impl Daemon {
                 name: name.into(),
             })
         });
+        log::info!("connecting to {name} ({id}) as the user asked");
         self.link.connect(id.to_string()).await?;
         self.update_settings(&json!({ "lastWatchId": id, "lastWatchName": name }))?;
         Ok(())
@@ -386,6 +388,7 @@ impl Daemon {
 
     // Disconnects, and keeps the watch away until the user connects again.
     pub async fn disconnect(&self) -> Result<(), String> {
+        log::info!("disconnecting as the user asked; the watch is not brought back until they connect again");
         self.holds.lock().unwrap().user_disconnected = true;
         self.keeper_wake.notify_one();
         self.refresh_keeping();
@@ -394,6 +397,14 @@ impl Daemon {
 
     // Holds the keeper back while a firmware update moves the link itself.
     pub fn hold(&self, held: bool) {
+        log::info!(
+            "keeping the watch {}",
+            if held {
+                "held for a firmware update"
+            } else {
+                "released"
+            }
+        );
         self.holds.lock().unwrap().held = held;
         self.keeper_wake.notify_one();
     }
@@ -436,9 +447,13 @@ impl Daemon {
                     name,
                 })
             });
-            match self.link.connect(address).await {
+            log::info!("bringing back the remembered watch {address} after {failures} failed tries");
+            match self.link.connect(address.clone()).await {
                 Ok(()) => failures = 0,
-                Err(_) => failures += 1,
+                Err(error) => {
+                    failures += 1;
+                    log::warn!("bringing back {address} failed ({failures} in a row): {error}");
+                }
             }
         }
     }
@@ -510,6 +525,7 @@ impl Daemon {
             )
         };
         self.publish();
+        log::info!("the watch is connected in {mode} mode");
         let epoch = self.next_epoch(watch_id);
         self.plugins.on_connection(true);
         self.syncer.on_connection(true);
@@ -522,6 +538,7 @@ impl Daemon {
     }
 
     fn on_disconnected(&self) {
+        log::info!("the watch is disconnected");
         self.change(|state| {
             state.connection = "disconnected".into();
             state.mode = "application".into();
@@ -565,6 +582,10 @@ impl Daemon {
         }
         let link = self.shared_link();
         let capabilities = read_capabilities(&link);
+        log::info!("the watch offers {capabilities:?}");
+        if capabilities.diagnostics {
+            self.log_last_restart(&link).await;
+        }
         self.change(|state| state.capabilities = capabilities);
         self.readiness.send_modify(|readiness| {
             if readiness.epoch == epoch {
@@ -580,9 +601,21 @@ impl Daemon {
         }
     }
 
+    // Logs why the watch last restarted and the crash before it, which is how a restart loop shows itself.
+    async fn log_last_restart(&self, link: &SharedLink) {
+        match link.read(BATTLETIME_SERVICE, BATTLETIME_DIAGNOSTICS).await {
+            Ok(bytes) => match describe_last_restart(&bytes) {
+                Some(line) => log::info!("the watch's {line}"),
+                None => log::info!("the watch's firmware does not say why it last restarted"),
+            },
+            Err(error) => log::warn!("reading the watch's diagnostics failed: {error}"),
+        }
+    }
+
     async fn set_clock(&self) {
-        if let Err(error) = set_watch_time(&self.shared_link(), &chrono::Local::now()).await {
-            self.change(|state| state.last_error = Some(error));
+        match set_watch_time(&self.shared_link(), &chrono::Local::now()).await {
+            Ok(()) => log::info!("set the watch's clock"),
+            Err(error) => self.report_error(error),
         }
     }
 
@@ -695,6 +728,7 @@ impl Daemon {
             }
             "error" => {
                 let text = message["msg"].as_str().unwrap_or_default().to_string();
+                log::warn!("the watch reported an error: {text}");
                 self.change(|state| state.last_error = Some(text));
             }
             _ => {}
@@ -775,6 +809,7 @@ impl Daemon {
     // Shows a background job's failure to the window as the last error.
     pub fn report_error(&self, text: impl Into<String>) {
         let text = text.into();
+        log::warn!("{text}");
         self.change(|state| state.last_error = Some(text));
     }
 
@@ -848,7 +883,7 @@ impl HostOutput for DaemonOutput {
     }
 
     fn log(&self, plugin: &str, line: &str) {
-        eprintln!("plugin {plugin}: {line}");
+        log::info!("plugin {plugin}: {line}");
         if let Some(daemon) = self.daemon.upgrade() {
             daemon.emit("plugins:log", json!({ "id": plugin, "line": line }));
         }
@@ -861,6 +896,10 @@ impl SyncOutput for DaemonOutput {
     }
 
     fn synced(&self, report: &SyncReport) {
+        log::info!("sync pass finished: {} changed", report.changed.len());
+        for error in &report.errors {
+            log::warn!("sync: {error}");
+        }
         if let Some(daemon) = self.daemon.upgrade() {
             daemon.plugins.on_synced(&report.changed);
             daemon.emit("sync:report", serde_json::to_value(report).unwrap_or_default());
