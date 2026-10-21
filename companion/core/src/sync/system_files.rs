@@ -14,7 +14,7 @@ pub struct SystemFile {
 }
 
 // Each at its path on the watch, as docs/companion-protocol.md lists them.
-pub const SYSTEM_FILES: [SystemFile; 5] = [
+pub const SYSTEM_FILES: [SystemFile; 6] = [
     SystemFile {
         path: "/system/accelerometer/bma421",
         contents: include_bytes!("../../system-files/accelerometer/bma421"),
@@ -26,6 +26,10 @@ pub const SYSTEM_FILES: [SystemFile; 5] = [
     SystemFile {
         path: "/system/icons",
         contents: include_bytes!("../../system-files/icons"),
+    },
+    SystemFile {
+        path: "/system/modules/p256",
+        contents: include_bytes!("../../system-files/modules/p256"),
     },
     SystemFile {
         path: "/system/modules/test",
@@ -99,6 +103,7 @@ mod tests {
                 "/system/accelerometer/bma421",
                 "/system/accelerometer/bma425",
                 "/system/icons",
+                "/system/modules/p256",
                 "/system/modules/test",
                 "/system/modules/verifier"
             ]
@@ -113,8 +118,9 @@ mod tests {
             ("/system/accelerometer/bma421", SYSTEM_FILES[0].contents),
             ("/system/accelerometer/bma425", SYSTEM_FILES[1].contents),
             ("/system/icons", SYSTEM_FILES[2].contents),
-            ("/system/modules/test", SYSTEM_FILES[3].contents),
-            ("/system/modules/verifier", SYSTEM_FILES[4].contents),
+            ("/system/modules/p256", SYSTEM_FILES[3].contents),
+            ("/system/modules/test", SYSTEM_FILES[4].contents),
+            ("/system/modules/verifier", SYSTEM_FILES[5].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 
@@ -128,8 +134,9 @@ mod tests {
             ("/system/accelerometer/bma421", SYSTEM_FILES[0].contents),
             ("/system/accelerometer/bma425", b"cut short"),
             ("/system/icons", SYSTEM_FILES[2].contents),
-            ("/system/modules/test", SYSTEM_FILES[3].contents),
-            ("/system/modules/verifier", SYSTEM_FILES[4].contents),
+            ("/system/modules/p256", SYSTEM_FILES[3].contents),
+            ("/system/modules/test", SYSTEM_FILES[4].contents),
+            ("/system/modules/verifier", SYSTEM_FILES[5].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 

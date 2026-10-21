@@ -31,6 +31,7 @@ describe('putMissingSystemFiles', () => {
       '/system/accelerometer/bma421',
       '/system/accelerometer/bma425',
       '/system/icons',
+      '/system/modules/p256',
       '/system/modules/test',
       '/system/modules/verifier',
     ]);

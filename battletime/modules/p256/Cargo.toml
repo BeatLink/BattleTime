@@ -1,0 +1,12 @@
+[package]
+name = "battletime-module-p256"
+version = "0.1.0"
+edition = "2021"
+description = "P-256 as a module: the elliptic-curve maths that Bluetooth's secure pairing needs, kept out of the firmware"
+license.workspace = true
+publish = false
+
+[dependencies]
+battletime-module-abi = { path = "../../module-abi", features = ["module"] }
+# The same crate and features TrouBLE's security feature uses.
+p256 = { version = "0.13.2", default-features = false, features = ["ecdh", "arithmetic"] }

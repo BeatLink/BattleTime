@@ -439,7 +439,9 @@ Files the firmware needs that are not apps live under `/system`:
 - `/system/modules/<name>`: a native module, as `tools/package_module.py` packs it: native code
   the firmware reads into its heap and runs only when asked. `verifier` checks an app's code once,
   after its install or before its first open, since the firmware carries no verifier; without it
-  the watch opens no app. `test` is the one the `module` command above calls to prove the loader.
+  the watch opens no app. `p256` holds the elliptic-curve maths for pairing, whose call 0 is a
+  self-test answering how many microseconds one key exchange took. `test` is the one the `module`
+  command above calls to prove the loader.
 - `/system/verified`: written by the firmware, never the companion. It names each image the
   verifier module passed by its CRC and length, for this firmware build only, so after an update
   each app shows a Checking page the first time it opens. The firmware writes `/system/modules/crashes` itself, counting the crashes

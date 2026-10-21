@@ -5,7 +5,8 @@ writes it, and no record of verified images, so the face opening at start shows 
 module ran. The script starts the firmware with the emulator's Bluetooth bridge and connects
 through `tools/packages_over_hci.py`, without BlueZ. Installing the call app again must answer
 with its need once the shell verified it, and the face must be back afterwards. Call 0 must answer 385,
-which it reaches only through its heap, its data and function addresses the loader moved; an
+which it reaches only through its heap, its data and function addresses the loader moved, and
+the P-256 module's self-test must find the Bluetooth specification's DHKey; an
 unknown call must answer -1, and a missing module an error. Call 2 then runs an undefined
 instruction, and the crash record in RAM must name a HardFault inside `mod:test`.
 
@@ -106,6 +107,11 @@ def main():
             reply = watch.run_command(packages, call_line("test", 0))
             results.append(check_call.check("call 0 answers 385", '"r":385' in reply,
                                             f"{reply} in {time.monotonic() - started:.1f} s"))
+            reply = watch.run_command(packages, call_line("p256", 0))
+            answer = reply.split('"r":')[-1].rstrip("}") if '"r":' in reply else ""
+            results.append(check_call.check("the P-256 module works out the specification's DHKey",
+                                            answer.lstrip("-").isdigit() and int(answer) > 0,
+                                            f"{reply}, microseconds when positive"))
             reply = watch.run_command(packages, call_line("test", 7))
             results.append(check_call.check("an unknown call answers -1", '"r":-1' in reply, reply))
             reply = watch.run_command(packages, call_line("absent", 0))

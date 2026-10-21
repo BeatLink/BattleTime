@@ -16,7 +16,8 @@ document for its part instead.
   module and a crash inside a module in the emulator, which runs RAM's code alias with no wait
   states. On the watch, install an app (the Installing page), call `battletime apps module test 0`
   (385), then `1` and `2` (each restarts the watch, the crash naming `mod:test`), and check that a
-  third call answers that the module no longer runs.
+  third call answers that the module no longer runs. `battletime apps module p256` gives how many
+  microseconds one P-256 key exchange takes on the chip, which pairing's design needs.
 
 - [ ] **A firmware upload through `SlotFlash` on the PineTime.** The update and recovery slots are
   now erased and written through `SlotFlash`, which waits on the timer instead of spinning. Moving
@@ -640,7 +641,9 @@ The full report is [InfiniTime files against BattleTime](https://claude.ai/artif
 ### Bluetooth
 
 - [ ] **Pairing with a passkey.** Secure Connections with a 6-digit passkey shown on screen, as
-  InfiniTime does. Needs encryption in the controller first.
+  InfiniTime does. Needs encryption in the controller first. The P-256 maths is ready as the `p256` native module
+  ([external-flash-architecture.md](external-flash-architecture.md)), so pairing costs the firmware
+  only the calls into it.
 - [ ] **Bonding** saved to the file system and restored at start.
 - [ ] **The Current Time from an iPhone.** iOS is expected to serve its Current Time service only
   over an encrypted link, so the watch's read of it is refused until pairing works; then an iPhone
