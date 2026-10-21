@@ -456,12 +456,17 @@ impl WatchBle {
                 }
             }
             if tokio::time::Instant::now() >= deadline {
+                // A scan left running blocks the next one on Android and drains the battery.
+                if scanning {
+                    let _ = adapter.stop_scan().await;
+                }
                 return fail(format!(
                     "No watch at {address} is in range. Wake it, or move it closer."
                 ));
             }
             if !scanning {
-                adapter.start_scan(ScanFilter::default()).await?;
+                log::info!("{address} is not known yet, so scanning for it");
+                adapter.start_scan(find_filter()).await?;
                 scanning = true;
             }
             tokio::time::sleep(FIND_POLL).await;
@@ -735,6 +740,17 @@ impl WatchBle {
     }
 }
 
+// Android pauses a scan with no filter while the screen is off, so there it looks only for what a watch advertises.
+fn find_filter() -> ScanFilter {
+    if cfg!(target_os = "android") {
+        ScanFilter {
+            services: vec![DFU_SERVICE, NUS_SERVICE],
+        }
+    } else {
+        ScanFilter::default()
+    }
+}
+
 // Each characteristic as its id and what it allows, for the log.
 fn describe_characteristics(characteristics: &[Characteristic]) -> String {
     characteristics
@@ -815,6 +831,11 @@ mod tests {
         assert_eq!(choose_adapter(&[None, Some(PoweredOff)], None), Some(0));
         assert_eq!(choose_adapter(&[Some(PoweredOff)], Some(0)), None);
         assert_eq!(choose_adapter(&[], None), None);
+    }
+
+    #[test]
+    fn finding_a_watch_off_android_scans_for_everything() {
+        assert!(find_filter().services.is_empty());
     }
 
     #[test]

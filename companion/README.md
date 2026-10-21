@@ -198,6 +198,9 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
   through Tauri's fs plugin; a note is read again on each check rather than watched.
 - **Plugin pages** are served at `http://plugin.localhost/<id>/`, since Android's webview reaches
   the app's own schemes that way.
+- **Finding the watch** before a connect scans only for the DFU and UART services the watch
+  advertises, since Android pauses a scan with no filter while the screen is off. The scan stops
+  if the watch is not found, because Android refuses new scans while old ones are left running.
 - **Not on Android**: D-Bus, note file watching and shell commands for remote buttons, which are
   compiled out.
 
