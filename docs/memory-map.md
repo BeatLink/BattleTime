@@ -56,7 +56,7 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 |---|---:|---:|
 | Firmware (start-up, shell, tasks) | 151.9 KB | 49.7 KB |
 | App host (with `battletime-ui`) | 99.5 KB | 0.0 KB |
-| App runtime | 31.8 KB | 0.0 KB |
+| App runtime | 33.4 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 31.7 KB | 41.4 KB |
 | core, alloc and compiler builtins | 30.1 KB | 16.4 KB |
 | Settings, companion and notifications (with serde) | 19.6 KB | 2.5 KB |
@@ -66,10 +66,10 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 | Packages | 8.5 KB | 1.4 KB |
 | Embassy, allocator and Cortex-M | 7.7 KB | 4.9 KB |
 | Updates (DFU) | 3.4 KB | 2.9 KB |
-| Other constants and padding | 25.9 KB | 14.0 KB |
-| **Code and data** | **445.7 KB** | **153.5 KB** |
+| Other constants and padding | 26.1 KB | 14.0 KB |
+| **Code and data** | **447.5 KB** | **153.5 KB** |
 | Shared library, after the code | 1.7 KB | none |
-| Free of the 480 KB region, after its header | 32.3 KB | 326.3 KB |
+| Free of the 480 KB region, after its header | 30.5 KB | 326.3 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
