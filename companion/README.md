@@ -207,6 +207,11 @@ Each `v*` tag publishes `BattleTime-Companion-<version>.apk` with the watch imag
 ([release.yml](../.github/workflows/release.yml)). It is one APK for all four phone processors,
 built by `npm run tauri-android:release`, with the version taken from the tag.
 
+Every push to `master` also builds the APK, kept as the `companion-android` artifact of its
+[Companion](../.github/workflows/companion.yml) run. It is numbered one patch above the newest `v*`
+tag (0.2.2 after v0.2.1), so it installs over that release with its data kept, and the next release
+installs over it in turn.
+
 It is signed with the release key, which the repository keeps in its secrets:
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` and
 `ANDROID_KEY_ALIAS`. The workflow writes the key into `tauri/gen/android` as `release.jks` and
