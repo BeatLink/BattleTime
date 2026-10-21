@@ -559,6 +559,11 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
 
 ## Display and SPI bus
 
+- [ ] **A deeper descender for the small text size.** The firmware's own pages draw in the `small`
+  size, whose descender gets about 3 pixels, so a g's tail looks squashed, as in the Checking
+  page's "Navigation". Give the small size its own descender depth, or draw those pages one size up
+  in wider cells.
+
 - [ ] **A queued write while the shell opens a screen stalls the watch.** In the emulator, a
   `write_soon` the shell made while opening the face at start (the record of verified images,
   16 bytes) left the shell and the radio waiting for good: the next packages command that read
