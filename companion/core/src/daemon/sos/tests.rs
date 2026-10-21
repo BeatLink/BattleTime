@@ -14,6 +14,7 @@ use crate::daemon::device::{CallCommand, Device, DeviceAnswer, DeviceKind, Locat
 use crate::daemon::link::Link;
 use crate::daemon::settings::SettingsStore;
 use crate::daemon::DaemonSetup;
+use crate::protocol::battletime::Capabilities;
 use crate::protocol::link::WriteMode;
 
 // ============================================================================
@@ -144,6 +145,10 @@ struct Rig {
     daemon: Arc<Daemon>,
     sos: Arc<Sos>,
     phone: Arc<FakePhone>,
+    // Every change written into the watch app's state.
+    written: Arc<Mutex<Vec<Value>>>,
+    // Whether the next writes fail, as over a link that drops.
+    writes_fail: Arc<Mutex<bool>>,
     _folder: tempfile::TempDir,
 }
 
@@ -165,11 +170,29 @@ fn rig_on(kind: DeviceKind, location: Result<Location, String>, settings: Value)
         },
         Arc::new(NoLink),
     );
-    let sos = Sos::start(&daemon);
+    let written = Arc::new(Mutex::new(Vec::new()));
+    let writes_fail = Arc::new(Mutex::new(false));
+    let (heard, failing) = (written.clone(), writes_fail.clone());
+    let write_state: StateWriter = Arc::new(move |changes| {
+        let fails = *failing.lock().unwrap();
+        if !fails {
+            heard.lock().unwrap().push(changes);
+        }
+        Box::pin(async move {
+            if fails {
+                Err("the link dropped".to_string())
+            } else {
+                Ok(())
+            }
+        })
+    });
+    let sos = Sos::start_with(&daemon, write_state);
     Rig {
         daemon,
         sos,
         phone,
+        written,
+        writes_fail,
         _folder: folder,
     }
 }
@@ -217,6 +240,34 @@ fn log_messages(rig: &Rig) -> Vec<String> {
         .iter()
         .map(|entry| entry["message"].as_str().unwrap().to_string())
         .collect()
+}
+
+// Says a watch that serves files is connected, on a new connection.
+fn connect(rig: &Rig) {
+    rig.daemon.readiness.send_modify(|readiness| {
+        readiness.epoch += 1;
+        readiness.watch_id = Some("watch".to_string());
+        readiness.capabilities = Some(Capabilities {
+            files: true,
+            ..Capabilities::default()
+        });
+    });
+}
+
+fn disconnect(rig: &Rig) {
+    rig.daemon.readiness.send_modify(|readiness| {
+        readiness.epoch += 1;
+        readiness.watch_id = None;
+        readiness.capabilities = None;
+    });
+}
+
+fn written(rig: &Rig) -> Vec<Value> {
+    rig.written.lock().unwrap().clone()
+}
+
+fn stopped_on_watch() -> Value {
+    json!({ "is_active": false, "reached_phone": false })
 }
 
 async fn pass(duration: Duration) {
@@ -407,4 +458,78 @@ async fn a_computer_does_nothing_but_say_it_needs_a_phone() {
         log_messages(&rig),
         ["SOS needs the companion on an Android phone."]
     );
+}
+
+// ============================================================================
+// Telling the watch the phone stopped it
+// ============================================================================
+
+#[tokio::test(start_paused = true)]
+async fn stopping_on_the_phone_turns_the_watch_apps_sos_off() {
+    let rig = rig(two_contacts());
+    connect(&rig);
+    watch_sends(&rig, 1);
+    settle().await;
+    rig.sos.end_from_phone();
+    settle().await;
+    assert_eq!(written(&rig), [stopped_on_watch()]);
+    assert_eq!(log_messages(&rig)[0], "Told the watch to stop signalling.");
+    assert!(asked(&rig).contains(&"screen on=false record=false".to_string()));
+}
+
+#[tokio::test(start_paused = true)]
+async fn stopping_on_the_watch_writes_nothing_back() {
+    let rig = rig(two_contacts());
+    connect(&rig);
+    watch_sends(&rig, 1);
+    settle().await;
+    watch_sends(&rig, 0);
+    settle().await;
+    assert!(written(&rig).is_empty());
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_watch_that_is_away_is_told_when_it_connects() {
+    let rig = rig(two_contacts());
+    watch_sends(&rig, 1);
+    settle().await;
+    rig.sos.end_from_phone();
+    settle().await;
+    assert!(written(&rig).is_empty());
+    assert!(log_messages(&rig)[0].starts_with("The watch is away"));
+
+    connect(&rig);
+    settle().await;
+    assert_eq!(written(&rig), [stopped_on_watch()]);
+    disconnect(&rig);
+    connect(&rig);
+    settle().await;
+    assert_eq!(written(&rig).len(), 1);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_failed_telling_is_tried_again_on_the_next_connection() {
+    let rig = rig(two_contacts());
+    connect(&rig);
+    *rig.writes_fail.lock().unwrap() = true;
+    rig.sos.end_from_phone();
+    settle().await;
+    assert!(log_messages(&rig)[0].starts_with("Could not tell the watch to stop"));
+
+    *rig.writes_fail.lock().unwrap() = false;
+    disconnect(&rig);
+    connect(&rig);
+    settle().await;
+    assert_eq!(written(&rig), [stopped_on_watch()]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_new_sos_from_the_watch_cancels_an_untold_stop() {
+    let rig = rig(two_contacts());
+    rig.sos.end_from_phone();
+    watch_sends(&rig, 1);
+    settle().await;
+    connect(&rig);
+    settle().await;
+    assert!(written(&rig).is_empty());
 }

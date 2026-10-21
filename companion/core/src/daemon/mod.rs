@@ -744,7 +744,7 @@ impl Daemon {
             }
             match (&event, self.features()) {
                 (PhoneEvent::Call { state, .. }, Some(features)) => features.sos.on_call(*state),
-                (PhoneEvent::SosStopped, Some(features)) => features.sos.end(),
+                (PhoneEvent::SosStopped, Some(features)) => features.sos.end_from_phone(),
                 _ => {}
             }
             let settings: CoreSettings = self.settings.view();

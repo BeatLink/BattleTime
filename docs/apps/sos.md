@@ -60,4 +60,7 @@ Held with no phone connected, so the watch only signals.
 ## With the companion app
 
 The watch sends `{"t":"app","ch":"sos","d":{"on":1}}` when the SOS starts, and
-`{"t":"app","ch":"sos","d":{"on":0}}` when it is stopped on the watch.
+`{"t":"app","ch":"sos","d":{"on":0}}` when it is stopped on the watch. When the SOS is stopped on the
+phone instead, the companion rewrites the app's state with `is_active` and `reached_phone` false, as
+[app state](../companion-protocol.md#app-state-served) describes; an open app opens again on it,
+back at the hold button with the signals stopped.

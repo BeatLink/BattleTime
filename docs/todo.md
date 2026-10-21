@@ -8,6 +8,13 @@ document for its part instead.
 
 ## Hardware tests
 
+- [ ] **The SOS app on the PineTime.** The `sos` app has run only in the simulator and harness.
+  Check that holding the button for five seconds keeps reporting the finger until it lifts, so the
+  hold completes and an early release cancels; that a swipe to the Signals page while holding
+  cancels the hold; that the light, screen and vibration flash "... --- ..." in step; and that an SOS
+  stopped from the phone takes the open app back to its hold button. The phone's half is in
+  [the companion's TODO](../companion/TODO.md#sos).
+
 - [ ] **A firmware upload through `SlotFlash` on the PineTime.** The update and recovery slots are
   now erased and written through `SlotFlash`, which waits on the timer instead of spinning. Moving
   the recovery slot over the Nordic UART is proven in the emulator (`tools/check_slot_move.py`),

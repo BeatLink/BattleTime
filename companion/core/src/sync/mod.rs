@@ -211,11 +211,25 @@ impl Syncer {
 
     // Holds the app's state on the watch, rewrites it, then lets go, so nothing the watch saves meanwhile is lost under the write.
     pub async fn write_app_state(&self, id: &str, changes: &Value) -> Result<Value, String> {
+        self.write_app_state_from(id, changes, false).await
+    }
+
+    // As `write_app_state`, but an app that has saved nothing yet gets a state file holding only what matches.
+    pub async fn write_app_state_or_create(&self, id: &str, changes: &Value) -> Result<Value, String> {
+        self.write_app_state_from(id, changes, true).await
+    }
+
+    async fn write_app_state_from(
+        &self,
+        id: &str,
+        changes: &Value,
+        missing_is_empty: bool,
+    ) -> Result<Value, String> {
         let _turn = self.turn.lock().await;
         self.output.write_to_watch(encode_for_watch(
             &json!({ "t": "state", "app": id, "hold": true }),
         ));
-        match pass::write_app_state(&self.files, &self.store, id, changes).await {
+        match pass::write_app_state_from(&self.files, &self.store, id, changes, missing_is_empty).await {
             Ok(state) => {
                 // An open app then takes up the new state instead of saving over it.
                 self.output

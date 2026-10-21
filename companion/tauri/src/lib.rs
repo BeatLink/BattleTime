@@ -273,7 +273,7 @@ fn daemon_clear_remote_log(companion: State<'_, Companion>) -> Answer<()> {
 
 #[tauri::command]
 fn daemon_stop_sos(companion: State<'_, Companion>) -> Answer<()> {
-    features(&companion)?.sos.end();
+    features(&companion)?.sos.end_from_phone();
     Ok(())
 }
 

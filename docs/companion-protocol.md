@@ -283,7 +283,9 @@ reply to these, but `request`.
 
 The companion app reads the `sos` channel itself, from the watch's SOS app.
 `{"t":"app","ch":"sos","d":{"on":1}}` starts an SOS on the phone and `{"on":0}` stops it; see
-[SOS](companion/phone-features.md#sos).
+[SOS](companion/phone-features.md#sos). An SOS stopped on the phone reaches the watch as a rewrite of
+`/apps/sos/state` with `is_active` false ([App state](#app-state-served)); an app that has saved no
+state yet gets a file holding nothing, so it opens on its defaults.
 
 Bangle.js has no message asking the phone again, and Gadgetbridge logs `request` as one it does not
 know and sends nothing; it sends the music and navigation whenever they change. The companion app
