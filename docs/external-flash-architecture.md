@@ -246,9 +246,11 @@ Docs and comments the code contradicts, as of e30358e4:
    verifier, and the shell tries it again once the store has changed. The
    firmware lost 4.2 KB of verifier code to the stage-4 loader's 7.1 KB, so both together cost
    2.8 KB, and the stack spare across an install went from 2.4 KB to 3.4 KB. No install-time function
-   index was needed, as paging found. The rest of the install, the facts and id checks, could join
-   the module later, for 2 to 4 KB more, while listing, turning apps on and off and the launcher's
-   order stay in the firmware, which the shell needs at every turn.
+   index was needed, as paging found. The rest of the install stays in the firmware, as measured
+   after: its facts check runs `estimate_memory_need`, which every open and every listing need
+   anyway, so moving the id, library and facts checks into the module would save about 0.3 KB. The
+   only sizeable rare native code left, the slot-moving commands (2 to 3 KB), moves the recovery
+   firmware, which must not depend on a file that may be missing, so it stays too.
 6. **P-256 as a module:** done ahead of pairing. `modules/p256` (10,948 B on the flash, none in the
    firmware) holds the `p256` crate's ECDH, the one TrouBLE's security feature uses. Its call 0
    works out the DHKey of the Bluetooth specification's P-256 sample data and answers the
