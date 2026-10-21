@@ -834,3 +834,21 @@ fn a_native_file_belongs_to_one_image() {
     assert!(crate::native_file::NativeFile::parse(&file_bytes, &other_image).is_none());
     assert!(crate::native_file::NativeFile::parse(&file_bytes[..20], &image_bytes).is_none());
 }
+
+#[test]
+fn the_translator_input_refuses_what_it_cannot_read_or_fit() {
+    let image_bytes = game_of_life();
+    let image = AppImage::parse(&image_bytes).unwrap();
+    let input = crate::native_file::translator_input(&image_bytes, &image);
+    let length = crate::native_file::write_from_input(&input, None).unwrap();
+
+    let mut too_small = vec![0; length - 1];
+    assert_eq!(
+        crate::native_file::write_from_input(&input, Some(&mut too_small)),
+        Err(crate::native_file::WriteError::NoRoom)
+    );
+    assert_eq!(
+        crate::native_file::write_from_input(&input[..input.len() - 1], None),
+        Err(crate::native_file::WriteError::BadInput)
+    );
+}

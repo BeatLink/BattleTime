@@ -10,7 +10,6 @@
 //! small routine per unit. Calls are handed over, so the interpreter makes them, and the unit can
 //! be entered again at the instruction after each.
 
-use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -102,11 +101,12 @@ fn decode_unit(
         return Err(Untranslatable::BadJump);
     }
 
-    let mut depth_at_target: BTreeMap<usize, usize> = BTreeMap::new();
+    // Indexed by offset, one past the end included.
+    let mut depth_at_target: Vec<Option<usize>> = vec![None; code.len() + 1];
     let mut depth = Some(0);
     for index in 0..decoded.len() {
         let offset = decoded[index].offset;
-        depth = merge(depth, depth_at_target.get(&offset).copied())?;
+        depth = merge(depth, depth_at_target[offset])?;
         decoded[index].depth = depth;
         let Some(before) = depth else {
             continue;
@@ -125,8 +125,7 @@ fn decode_unit(
                 if target <= offset {
                     return Err(Untranslatable::BadJump);
                 }
-                let known = depth_at_target.get(&target).copied();
-                depth_at_target.insert(target, merge(Some(after), known)?.unwrap_or_default());
+                depth_at_target[target] = merge(Some(after), depth_at_target[target])?;
                 if matches!(instruction, Instruction::Jump(_)) {
                     depth = None;
                 }
@@ -143,7 +142,7 @@ fn decode_unit(
             _ => {}
         }
     }
-    let end_depth = merge(depth, depth_at_target.get(&code.len()).copied())?;
+    let end_depth = merge(depth, depth_at_target[code.len()])?;
     Ok((decoded, end_depth))
 }
 
@@ -210,7 +209,7 @@ fn is_call(instruction: Instruction) -> bool {
 // ============================================================================
 
 /// One way to hand over: where the interpreter carries on, the depth there, and the steps to give back.
-#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 struct Handover {
     offset: usize,
     depth: usize,
@@ -222,26 +221,27 @@ struct Writer {
     /// The routine that calls the execute helper, written once the unit is.
     execute: Label,
     uses_execute: bool,
-    handovers: BTreeMap<Handover, Label>,
-    labels: BTreeMap<usize, Label>,
+    handovers: Vec<(Handover, Label)>,
+    /// Indexed by offset, one past the end included.
+    labels: Vec<Option<Label>>,
 }
 
 impl Writer {
     fn handover(&mut self, handover: Handover) -> Label {
-        if let Some(label) = self.handovers.get(&handover) {
+        if let Some((_, label)) = self.handovers.iter().find(|(known, _)| *known == handover) {
             return *label;
         }
         let label = self.assembler.label();
-        self.handovers.insert(handover, label);
+        self.handovers.push((handover, label));
         label
     }
 
     fn label_at(&mut self, offset: usize) -> Label {
-        if let Some(label) = self.labels.get(&offset) {
-            return *label;
+        if let Some(label) = self.labels[offset] {
+            return label;
         }
         let label = self.assembler.label();
-        self.labels.insert(offset, label);
+        self.labels[offset] = Some(label);
         label
     }
 }
@@ -304,8 +304,8 @@ pub fn translate(
         execute,
         uses_execute: false,
         assembler,
-        handovers: BTreeMap::new(),
-        labels: BTreeMap::new(),
+        handovers: Vec::new(),
+        labels: vec![None; code.len() + 1],
     };
     let exit = writer.assembler.label();
     let finish = writer.label_at(code.len());
@@ -379,12 +379,7 @@ pub fn translate(
         write_execute_routine(&mut writer.assembler, writer.execute, exit);
     }
 
-    let handovers: Vec<(Handover, Label)> = writer
-        .handovers
-        .iter()
-        .map(|(key, label)| (*key, *label))
-        .collect();
-    for (handover, label) in handovers {
+    for (handover, label) in core::mem::take(&mut writer.handovers) {
         let assembler = &mut writer.assembler;
         assembler.place(label);
         if handover.refund > 0 {

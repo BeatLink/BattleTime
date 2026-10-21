@@ -1,0 +1,11 @@
+[package]
+name = "battletime-module-aot"
+version = "0.1.0"
+edition = "2021"
+description = "The translator as a module: turns a verified app image's looping code into native code, once, after its install"
+license.workspace = true
+publish = false
+
+[dependencies]
+battletime-aot = { path = "../../aot" }
+battletime-module-abi = { path = "../../module-abi", features = ["module"] }

@@ -76,55 +76,157 @@ pub fn call_effects(image: &AppImage) -> Vec<StackEffect> {
         .collect()
 }
 
-/// The native file for a verified image, with every unit that has a loop and translates.
-pub fn write(image_bytes: &[u8], image: &AppImage) -> Vec<u8> {
-    let effects = call_effects(image);
-    let mut units: Vec<(u8, u16, Vec<u8>)> = Vec::new();
-    let mut add = |kind: u8, index: u16, code: Option<&[u8]>, local_count: usize| {
-        let Some(code) = code.filter(|code| has_loop(code)) else {
-            return;
-        };
-        if let Ok(native) = translate(code, local_count, &effects) {
-            units.push((kind, index, native));
+/// What the translator needs of an image, which the firmware works out from the image it parsed.
+///
+/// It holds the image's CRC field and length, each function's stack effect, and each unit with a
+/// loop: its kind, number, locals and code. The translator module reads only this, so it needs
+/// none of the image checks.
+pub fn translator_input<'image>(image_bytes: &[u8], image: &AppImage<'image>) -> Vec<u8> {
+    let mut units: Vec<(u8, u16, u8, &'image [u8])> = Vec::new();
+    let mut add = |kind: u8, index: u16, local_count: usize, code: Option<&'image [u8]>| {
+        if let Some(code) = code.filter(|code| has_loop(code) && code.len() <= u16::MAX as usize) {
+            units.push((kind, index, local_count as u8, code));
         }
     };
     for index in 0..image.expression_count() {
-        add(EXPRESSION_KIND, index, image.expression_code(index), MOST_LOCALS);
+        add(EXPRESSION_KIND, index, MOST_LOCALS, image.expression_code(index));
     }
     for index in 0..image.handler_count() {
-        add(HANDLER_KIND, index, image.handler_code(index), MOST_LOCALS);
+        add(HANDLER_KIND, index, MOST_LOCALS, image.handler_code(index));
     }
     for index in 0..image.function_count() {
         if let Some(function) = image.function(index) {
             add(
                 FUNCTION_KIND,
                 index,
-                Some(function.code),
                 function.local_count as usize,
+                Some(function.code),
             );
         }
     }
 
-    let mut file = Vec::new();
-    file.extend(MAGIC);
-    file.extend(FORMAT_VERSION.to_le_bytes());
-    file.extend((units.len() as u16).to_le_bytes());
-    file.extend(image_crc(image_bytes).to_le_bytes());
-    file.extend((image_bytes.len() as u32).to_le_bytes());
-    let mut code_at = HEADER_BYTES + units.len() * ENTRY_BYTES;
-    for (kind, index, native) in &units {
-        file.push(*kind);
-        file.push(0);
-        file.extend(index.to_le_bytes());
-        file.extend((code_at as u32).to_le_bytes());
-        file.extend((native.len() as u32).to_le_bytes());
-        code_at = (code_at + native.len()).next_multiple_of(4);
+    let effects = call_effects(image);
+    let mut input = Vec::new();
+    input.extend(image_crc(image_bytes).to_le_bytes());
+    input.extend((image_bytes.len() as u32).to_le_bytes());
+    input.extend((effects.len() as u16).to_le_bytes());
+    for effect in &effects {
+        input.extend([effect.taken as u8, effect.left as u8]);
     }
-    for (_, _, native) in &units {
-        file.extend(native);
-        file.resize(file.len().next_multiple_of(4), 0);
+    input.extend((units.len() as u16).to_le_bytes());
+    for (kind, index, local_count, code) in units {
+        input.extend([kind, local_count]);
+        input.extend(index.to_le_bytes());
+        input.extend((code.len() as u16).to_le_bytes());
+        input.extend(code);
     }
-    file
+    input
+}
+
+/// One unit as the translator input gives it.
+struct UnitSource<'input> {
+    kind: u8,
+    index: u16,
+    local_count: usize,
+    code: &'input [u8],
+}
+
+/// The units in a translator input, after its effects.
+fn unit_sources(input: &[u8], units_at: usize) -> impl Iterator<Item = Option<UnitSource<'_>>> + '_ {
+    let count = read_u16(input, units_at).unwrap_or(0);
+    let mut at = units_at + 2;
+    (0..count).map(move |_| {
+        let kind = *input.get(at)?;
+        let local_count = *input.get(at + 1)? as usize;
+        let index = read_u16(input, at + 2)?;
+        let length = read_u16(input, at + 4)? as usize;
+        let code = input.get(at + 6..at + 6 + length)?;
+        at += 6 + length;
+        Some(UnitSource {
+            kind,
+            index,
+            local_count,
+            code,
+        })
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WriteError {
+    BadInput,
+    NoRoom,
+}
+
+/// The native file's length for a translator input, after writing the file to `out` when it is given.
+///
+/// A unit that does not translate is left out, so the interpreter runs it.
+pub fn write_from_input(input: &[u8], out: Option<&mut [u8]>) -> Result<usize, WriteError> {
+    let image_crc = read_u32(input, 0).ok_or(WriteError::BadInput)?;
+    let image_length = read_u32(input, 4).ok_or(WriteError::BadInput)?;
+    let effect_count = read_u16(input, 8).ok_or(WriteError::BadInput)? as usize;
+    let effect_bytes = input.get(10..10 + effect_count * 2).ok_or(WriteError::BadInput)?;
+    let effects: Vec<StackEffect> = effect_bytes
+        .chunks(2)
+        .map(|pair| StackEffect {
+            taken: pair[0] as usize,
+            left: pair[1] as usize,
+        })
+        .collect();
+    let units_at = 10 + effect_count * 2;
+
+    let mut translated = 0;
+    let mut code_bytes = 0;
+    for source in unit_sources(input, units_at) {
+        let source = source.ok_or(WriteError::BadInput)?;
+        if let Ok(native) = translate(source.code, source.local_count, &effects) {
+            translated += 1;
+            code_bytes += native.len().next_multiple_of(4);
+        }
+    }
+    let table_bytes = HEADER_BYTES + translated * ENTRY_BYTES;
+    let length = table_bytes + code_bytes;
+    let Some(out) = out else {
+        return Ok(length);
+    };
+    let out = out.get_mut(..length).ok_or(WriteError::NoRoom)?;
+    out.fill(0);
+
+    out[..4].copy_from_slice(&MAGIC);
+    out[FORMAT_VERSION_AT..FORMAT_VERSION_AT + 2].copy_from_slice(&FORMAT_VERSION.to_le_bytes());
+    out[UNIT_COUNT_AT..UNIT_COUNT_AT + 2].copy_from_slice(&(translated as u16).to_le_bytes());
+    out[IMAGE_CRC_AT..IMAGE_CRC_AT + 4].copy_from_slice(&image_crc.to_le_bytes());
+    out[IMAGE_LENGTH_AT..IMAGE_LENGTH_AT + 4].copy_from_slice(&image_length.to_le_bytes());
+    let mut entry_at = HEADER_BYTES;
+    let mut code_at = table_bytes;
+    for source in unit_sources(input, units_at).flatten() {
+        let Ok(native) = translate(source.code, source.local_count, &effects) else {
+            continue;
+        };
+        let entry = out
+            .get_mut(entry_at..entry_at + ENTRY_BYTES)
+            .ok_or(WriteError::NoRoom)?;
+        entry[0] = source.kind;
+        entry[2..4].copy_from_slice(&source.index.to_le_bytes());
+        entry[4..8].copy_from_slice(&(code_at as u32).to_le_bytes());
+        entry[8..12].copy_from_slice(&(native.len() as u32).to_le_bytes());
+        out.get_mut(code_at..code_at + native.len())
+            .ok_or(WriteError::NoRoom)?
+            .copy_from_slice(&native);
+        entry_at += ENTRY_BYTES;
+        code_at += native.len().next_multiple_of(4);
+    }
+    Ok(length)
+}
+
+/// The native file for a verified image, with every unit that has a loop and translates.
+pub fn write(image_bytes: &[u8], image: &AppImage) -> Vec<u8> {
+    let input = translator_input(image_bytes, image);
+    let length = write_from_input(&input, None).unwrap_or(0);
+    let mut file = alloc::vec![0; length];
+    match write_from_input(&input, Some(&mut file)) {
+        Ok(_) => file,
+        Err(_) => Vec::new(),
+    }
 }
 
 // ============================================================================

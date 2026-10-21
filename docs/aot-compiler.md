@@ -33,6 +33,11 @@ file's CRC, so the host runs native code only when the file is the one the watch
 image. A phone that rewrote it could make the watch run code of its choosing, but an unsigned
 firmware update already lets a connected phone do that; signed updates would close both.
 
+The module is 11.2 KB. It reads no image: the firmware, which has parsed the image already, gives
+it only what translating needs, from `native_file::translator_input`: the image's CRC field and
+length, each function's stack effect, and each looping unit's kind, number, locals and code. The
+first call measures the native file and the second writes it into room the firmware lends.
+
 ## What gets compiled
 
 Native code is about four times the size of its bytecode and must sit in RAM, where the app's whole

@@ -1,7 +1,7 @@
 # The native modules, each a no_std crate the firmware runs from RAM; see module-abi/src/lib.rs.
 [workspace]
 resolver = "2"
-members = ["p256", "test", "verifier"]
+members = ["aot", "p256", "test", "verifier"]
 
 [workspace.package]
 license = "GPL-3.0-or-later"
