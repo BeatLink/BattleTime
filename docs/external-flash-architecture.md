@@ -291,7 +291,8 @@ Docs and comments the code contradicts, as of e30358e4:
    cannot be read, the status page as coloured update steps and a progress bar, the help screen as a
    clock of bars; Bluetooth, updates and diagnostics never needed it. The dot-matrix font was
    already in the images of the apps that use it.
-8. **Native code compiled from bytecode**, if an app needs the speed.
+8. **Native code compiled from bytecode**, if an app needs the speed; under way, as
+   [aot-compiler.md](aot-compiler.md) describes.
 
 ## Paging strings
 

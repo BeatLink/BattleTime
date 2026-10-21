@@ -73,6 +73,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "battletime-aot"
+version = "0.1.0"
+dependencies = [
+ "battletime-runtime",
+]
+
+[[package]]
 name = "battletime-app-host"
 version = "0.1.0"
 dependencies = [

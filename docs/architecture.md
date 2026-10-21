@@ -112,6 +112,7 @@ BattleTime/
     ├── package.json    the npm workspace for apps/, faces/, shell/ and sdk/battletime
     ├── rust-toolchain.toml  the Rust version and the watch's target
     ├── app-host/       battletime-app-host: runs an open app and draws its widgets
+    ├── aot/            battletime-aot: translates verified app bytecode into Thumb-2 machine code; see aot-compiler.md
     ├── apps/           the apps in the app language, one folder each; see apps.md
     ├── boot/           battletime-boot: the flash layout, image header, slot table, version record and migration plan
     ├── bootloader/     battletime-bootloader: the bootloader program, built only for the watch
@@ -207,6 +208,14 @@ whose `MODULE_STACK_BYTES` asks for a stack of its own, as `p256` does, gets it 
 and the loader moves thread mode onto it with the process stack pointer for the call, while
 interrupts stay on the main stack. [external-flash-architecture.md](external-flash-architecture.md)
 explains the design; `modules/test` is the module that proves it.
+
+## Native code from bytecode (`aot`)
+
+`battletime-aot` translates one verified code unit into a Thumb-2 function that runs on the
+interpreter's own operand stack and locals, so the interpreter can take over at the start of any
+instruction. Its `thumb` assembler writes the few instructions the translation needs, and the
+`simulator` feature runs them on the computer, where the tests check translated code against the
+interpreter. [aot-compiler.md](aot-compiler.md) gives the design and how far it has got.
 
 ## App runtime (`runtime`)
 

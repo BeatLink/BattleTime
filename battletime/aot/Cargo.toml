@@ -1,0 +1,17 @@
+[package]
+name = "battletime-aot"
+version = "0.1.0"
+edition = "2021"
+description = "BattleTime's translator from verified app bytecode to Thumb-2 machine code, run on the watch at install"
+license.workspace = true
+publish = false
+
+[dependencies]
+battletime-runtime = { path = "../runtime" }
+
+[dev-dependencies]
+battletime-runtime = { path = "../runtime", features = ["writer"] }
+
+[features]
+# The Thumb-2 simulator, for running translated code on the computer.
+simulator = []
