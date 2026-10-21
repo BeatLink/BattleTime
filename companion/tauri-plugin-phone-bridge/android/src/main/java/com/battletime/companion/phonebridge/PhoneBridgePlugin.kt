@@ -76,6 +76,15 @@ class SendBroadcastArgs {
       ],
       alias = "calls",
     ),
+    Permission(
+      strings = [
+        Manifest.permission.CALL_PHONE,
+        Manifest.permission.SEND_SMS,
+        Manifest.permission.CAMERA,
+        Manifest.permission.RECORD_AUDIO,
+      ],
+      alias = "sos",
+    ),
   ],
 )
 class PhoneBridgePlugin(private val activity: Activity) : Plugin(activity) {
@@ -152,6 +161,37 @@ class PhoneBridgePlugin(private val activity: Activity) : Plugin(activity) {
     }
     CallMonitor.start(activity)
     invoke.resolveObject(essential.all { granted(it) })
+  }
+
+  // What the SOS may do, each true once Android allows it; `overlay` lets it open its screen and calls from the background.
+  private fun sosPermissionState(): JSObject =
+    JSObject()
+      .put("calls", granted(Manifest.permission.CALL_PHONE))
+      .put("texts", granted(Manifest.permission.SEND_SMS))
+      .put("camera", granted(Manifest.permission.CAMERA))
+      .put("microphone", granted(Manifest.permission.RECORD_AUDIO))
+      .put("overlay", Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(activity))
+
+  @Command
+  fun sosPermissions(invoke: Invoke) {
+    invoke.resolve(sosPermissionState())
+  }
+
+  @Command
+  fun requestSosPermissions(invoke: Invoke) {
+    requestPermissionForAlias("sos", invoke, "sosPermissionsAnswered")
+  }
+
+  @PermissionCallback
+  fun sosPermissionsAnswered(invoke: Invoke) {
+    invoke.resolve(sosPermissionState())
+  }
+
+  // Opens Android's page for drawing over other apps, which has no question to ask in place.
+  @Command
+  fun openOverlaySettings(invoke: Invoke) {
+    activity.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${activity.packageName}")))
+    invoke.resolve()
   }
 
   // ==========================================================================

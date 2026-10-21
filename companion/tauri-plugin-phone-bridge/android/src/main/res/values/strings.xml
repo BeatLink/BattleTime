@@ -3,4 +3,15 @@
   <string name="phone_bridge_channel_name">Watch connection</string>
   <string name="phone_bridge_keepalive_title">Connected to %1$s</string>
   <string name="phone_bridge_keepalive_text">Forwarding notifications to your watch</string>
+  <string name="phone_bridge_sos_channel_name">SOS</string>
+  <string name="phone_bridge_sos_title">SOS</string>
+  <string name="phone_bridge_sos_detail">Your watch sent an SOS. Help is being called and your contacts are being texted where you are.</string>
+  <string name="phone_bridge_sos_stop">Stop SOS</string>
+  <string name="phone_bridge_sos_notification_text">Tap to open the SOS screen and start recording</string>
+  <string name="phone_bridge_sos_recording">Recording for your SOS</string>
+  <string name="phone_bridge_sos_both_cameras">Recording both cameras and sound</string>
+  <string name="phone_bridge_sos_back_camera">Recording the back camera and sound</string>
+  <string name="phone_bridge_sos_sound_only">Recording sound only</string>
+  <string name="phone_bridge_sos_not_recording">Not recording: the app may not use the camera or microphone</string>
+  <string name="phone_bridge_sos_saved">Recordings saved in Movies/BattleTime SOS</string>
 </resources>

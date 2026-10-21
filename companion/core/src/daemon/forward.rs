@@ -237,6 +237,7 @@ impl Forwarder {
                     messages.extend(music_messages(media));
                 }
             }
+            PhoneEvent::SosStopped => {}
         }
         messages
     }

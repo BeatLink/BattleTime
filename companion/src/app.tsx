@@ -15,6 +15,7 @@ import PluginsScreen from '@/screens/plugins';
 import QrCodeScreen from '@/screens/qr-code';
 import QuickAppsScreen from '@/screens/quick-apps';
 import RemoteScreen from '@/screens/remote';
+import SosScreen from '@/screens/sos';
 import ScanScreen from '@/screens/scan';
 import SettingsScreen from '@/screens/settings';
 import SetupScreen from '@/screens/setup';
@@ -46,6 +47,7 @@ const SCREENS: Record<Route, ComponentType> = {
   '/qr-code': QrCodeScreen,
   '/survival': SurvivalScreen,
   '/remote': RemoteScreen,
+  '/sos': SosScreen,
   '/quick-apps': QuickAppsScreen,
   '/backup': BackupScreen,
   '/apps': AppsScreen,

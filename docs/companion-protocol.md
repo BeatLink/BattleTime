@@ -281,6 +281,10 @@ app; `d` holds up to 4 whole numbers, in the order the app wrote them, or is `{}
 remote app's third button sends `{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no
 reply to these, but `request`.
 
+The companion app reads the `sos` channel itself, from the watch's SOS app.
+`{"t":"app","ch":"sos","d":{"on":1}}` starts an SOS on the phone and `{"on":0}` stops it; see
+[SOS](companion/phone-features.md#sos).
+
 Bangle.js has no message asking the phone again, and Gadgetbridge logs `request` as one it does not
 know and sends nothing; it sends the music and navigation whenever they change. The companion app
 answers `{"t":"request","n":"music"}` with `musicinfo` and `musicstate` for what the phone plays,

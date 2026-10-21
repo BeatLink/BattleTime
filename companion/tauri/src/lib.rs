@@ -272,6 +272,12 @@ fn daemon_clear_remote_log(companion: State<'_, Companion>) -> Answer<()> {
 }
 
 #[tauri::command]
+fn daemon_stop_sos(companion: State<'_, Companion>) -> Answer<()> {
+    features(&companion)?.sos.end();
+    Ok(())
+}
+
+#[tauri::command]
 fn daemon_stop_finding_phone(companion: State<'_, Companion>) {
     companion.daemon.stop_finding_phone();
 }
@@ -700,6 +706,7 @@ pub fn run() {
             daemon_send_remote_layout,
             daemon_test_remote_button,
             daemon_clear_remote_log,
+            daemon_stop_sos,
             #[cfg(desktop)]
             desktop_notification_access,
             #[cfg(desktop)]

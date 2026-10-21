@@ -18,6 +18,7 @@ pub mod replies;
 pub mod settings;
 #[cfg(unix)]
 pub mod socket;
+pub mod sos;
 pub mod state;
 pub mod weather;
 
@@ -143,6 +144,7 @@ pub struct Features {
     pub http_proxy: Arc<http_proxy::HttpProxy>,
     pub notes: Arc<notes::NoteKeeper>,
     pub remote: Arc<remote::Remote>,
+    pub sos: Arc<sos::Sos>,
 }
 
 impl Daemon {
@@ -163,6 +165,7 @@ impl Daemon {
             http_proxy: http_proxy::HttpProxy::start(&daemon),
             notes: notes::NoteKeeper::start(&daemon),
             remote: remote::Remote::start(&daemon),
+            sos: sos::Sos::start(&daemon),
         };
         let _ = daemon.features.set(features);
         daemon
@@ -738,6 +741,11 @@ impl Daemon {
             if let PhoneEvent::Media(media) = &event {
                 let media = media.clone();
                 self.change(|state| state.now_playing = Some(media));
+            }
+            match (&event, self.features()) {
+                (PhoneEvent::Call { state, .. }, Some(features)) => features.sos.on_call(*state),
+                (PhoneEvent::SosStopped, Some(features)) => features.sos.end(),
+                _ => {}
             }
             let settings: CoreSettings = self.settings.view();
             let quiet = Forwarder::needs_quiet(&event, &settings) && self.device.is_do_not_disturb().await;

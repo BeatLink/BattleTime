@@ -90,6 +90,10 @@ object DaemonHost {
         null
       }
       "intent" -> startIntent(context, input.getJSONObject("intent"))
+      "sosScreen" -> SosActivity.show(context, input.getBoolean("on"), input.getBoolean("record"))
+      "callNumber" -> PhoneActions.callNumber(context, input.getString("number"))
+      "dialNumber" -> PhoneActions.dialNumber(context, input.getString("number"))
+      "sendText" -> PhoneActions.sendText(context, input.getString("number"), input.getString("text"))
       else -> throw PhoneActionException("The phone does not know how to $action")
     }
     return when (answer) {

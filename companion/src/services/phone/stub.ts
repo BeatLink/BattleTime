@@ -1,4 +1,4 @@
-import type { PhoneBridge } from './types';
+import { NO_SOS_PERMISSIONS, type PhoneBridge } from './types';
 
 const unsupported = () => Promise.reject(new Error('The phone bridge is only available in the app, on Android and the desktop'));
 
@@ -11,6 +11,9 @@ export const unavailablePhoneBridge: PhoneBridge = {
   hasNotificationAccess: async () => false,
   openNotificationAccessSettings: unsupported,
   requestCallPermissions: async () => false,
+  sosPermissions: async () => NO_SOS_PERMISSIONS,
+  requestSosPermissions: async () => NO_SOS_PERMISSIONS,
+  openOverlaySettings: unsupported,
   isDoNotDisturb: async () => false,
   subscribe: () => () => {},
   answerCall: unsupported,

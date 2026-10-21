@@ -21,6 +21,11 @@ export type BridgeKind = 'phone' | 'computer' | 'none';
 
 export type DeviceLocation = { latitude: number; longitude: number; name: string };
 
+// What the SOS may do on this device; `overlay` lets it open its screen and place calls while the app is in the background.
+export type SosPermissions = { calls: boolean; texts: boolean; camera: boolean; microphone: boolean; overlay: boolean };
+
+export const NO_SOS_PERMISSIONS: SosPermissions = { calls: false, texts: false, camera: false, microphone: false, overlay: false };
+
 export interface PhoneBridge {
   /** False where there is nothing to read: a plain browser, outside the app. */
   readonly available: boolean;
@@ -33,6 +38,12 @@ export interface PhoneBridge {
   openNotificationAccessSettings(): Promise<void>;
   /** Resolves true when call state can be read and calls answered; the number and name need the call log and contacts too. */
   requestCallPermissions(): Promise<boolean>;
+  /** What the SOS may do here; nothing on a computer. */
+  sosPermissions(): Promise<SosPermissions>;
+  /** Asks for calls, texts, camera and microphone, and resolves what is allowed now. */
+  requestSosPermissions(): Promise<SosPermissions>;
+  /** Opens Android's page for letting the app display over other apps. */
+  openOverlaySettings(): Promise<void>;
   /** True whenever the interruption filter is anything but "all". */
   isDoNotDisturb(): Promise<boolean>;
   subscribe(listener: (event: PhoneEvent) => void): () => void;

@@ -19,6 +19,9 @@ function fakeDevice(answers: Partial<Record<keyof TauriPhoneDevice, Answer>> = {
     hasNotificationAccess: answer('hasNotificationAccess'),
     openNotificationAccessSettings: answer('openNotificationAccessSettings'),
     requestCallPermissions: answer('requestCallPermissions'),
+    sosPermissions: answer('sosPermissions'),
+    requestSosPermissions: answer('requestSosPermissions'),
+    openOverlaySettings: answer('openOverlaySettings'),
     isDoNotDisturb: answer('isDoNotDisturb'),
     answerCall: answer('answerCall'),
     rejectCall: answer('rejectCall'),
@@ -91,6 +94,19 @@ describe('createTauriPhoneBridge', () => {
     await expect(bridge.hasNotificationAccess()).resolves.toBe(true);
     await expect(bridge.requestCallPermissions()).resolves.toBe(false);
     await expect(bridge.isDoNotDisturb()).resolves.toBe(true);
+  });
+
+  it('reads and asks for what the SOS may do, and opens the overlay setting', async () => {
+    const allowed = { calls: true, texts: true, camera: true, microphone: false, overlay: false };
+    const { device, calls } = fakeDevice({
+      sosPermissions: { ok: true, value: allowed },
+      requestSosPermissions: { ok: true, value: { ...allowed, microphone: true } },
+    });
+    const bridge = createTauriPhoneBridge(device);
+    await expect(bridge.sosPermissions()).resolves.toEqual(allowed);
+    await expect(bridge.requestSosPermissions()).resolves.toEqual({ ...allowed, microphone: true });
+    await bridge.openOverlaySettings();
+    expect(calls.openOverlaySettings).toHaveBeenCalled();
   });
 
   it('passes actions on and turns a refusal into an error', async () => {

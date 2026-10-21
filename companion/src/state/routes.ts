@@ -14,6 +14,7 @@ export type StackRoute =
   | '/qr-code'
   | '/survival'
   | '/remote'
+  | '/sos'
   | '/quick-apps'
   | '/backup'
   | '/apps'
@@ -37,6 +38,7 @@ export const STACK_TITLES: Record<StackRoute, string> = {
   '/qr-code': 'QR code',
   '/survival': 'Survival',
   '/remote': 'Remote',
+  '/sos': 'SOS',
   '/quick-apps': 'Quick apps',
   '/backup': 'Backup',
   '/apps': 'Apps',

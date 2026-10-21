@@ -19,6 +19,9 @@ Lets the companion's window use every part of the phone bridge.
 - `allow-open-uri`
 - `allow-start-activity`
 - `allow-send-broadcast`
+- `allow-sos-permissions`
+- `allow-request-sos-permissions`
+- `allow-open-overlay-settings`
 - `allow-register-listener`
 - `allow-remove-listener`
 
@@ -242,6 +245,32 @@ Denies the open_notification_access_settings command without any pre-configured 
 <tr>
 <td>
 
+`phone-bridge:allow-open-overlay-settings`
+
+</td>
+<td>
+
+Enables the open_overlay_settings command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:deny-open-overlay-settings`
+
+</td>
+<td>
+
+Denies the open_overlay_settings command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `phone-bridge:allow-open-uri`
 
 </td>
@@ -398,6 +427,32 @@ Denies the request_ignore_battery_optimizations command without any pre-configur
 <tr>
 <td>
 
+`phone-bridge:allow-request-sos-permissions`
+
+</td>
+<td>
+
+Enables the request_sos_permissions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:deny-request-sos-permissions`
+
+</td>
+<td>
+
+Denies the request_sos_permissions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `phone-bridge:allow-send-broadcast`
 
 </td>
@@ -443,6 +498,32 @@ Enables the silence_call command without any pre-configured scope.
 <td>
 
 Denies the silence_call command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:allow-sos-permissions`
+
+</td>
+<td>
+
+Enables the sos_permissions command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`phone-bridge:deny-sos-permissions`
+
+</td>
+<td>
+
+Denies the sos_permissions command without any pre-configured scope.
 
 </td>
 </tr>

@@ -87,6 +87,17 @@ messages are the ones it lists as not served yet.
 - **The command line's buttons file.** `battletime remote` reads its own JSON file; the desktop app
   could export its buttons there.
 
+## SOS
+
+- **Untried on a phone.** The SOS screen, the recording from both cameras, the calls and the texts
+  have run only against a fake phone in the core's tests; try them on Android 14 or later with a
+  contact's number before relying on them.
+- **The watch is not told when the phone stops it.** Stopping on the phone ends the calls and the
+  recording, but the watch keeps signalling until stopped there; the `message` event is not in the
+  bytecode yet.
+- **A lost phone loses the recording.** Each file is kept only once the SOS stops; short pieces, or an
+  upload as it records, would keep the part made before the phone was taken.
+
 ## Quick apps
 
 - **Untried with a watch.** Reading and writing `/settings/quick_apps` has run only against the

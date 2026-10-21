@@ -3,7 +3,7 @@
 // tauri/src/desktop.rs reads them over D-Bus and passes raw facts through window.battletime.desktop;
 // this file turns those into the same events the Android bridge sends.
 
-import type { DeviceLocation, MediaCommand, PhoneBridge, PhoneEvent } from './types';
+import { NO_SOS_PERMISSIONS, type DeviceLocation, type MediaCommand, type PhoneBridge, type PhoneEvent } from './types';
 
 // ============================================================================
 // What the bridge carries
@@ -233,6 +233,9 @@ export function createDesktopPhoneBridge(device: DesktopDeviceBridge): PhoneBrid
     openNotificationAccessSettings: () =>
       Promise.reject(new Error('The desktop app reads notifications without any setting')),
     requestCallPermissions: async () => false,
+    sosPermissions: async () => NO_SOS_PERMISSIONS,
+    requestSosPermissions: async () => NO_SOS_PERMISSIONS,
+    openOverlaySettings: () => Promise.reject(new Error('Only the Android app has an SOS screen')),
     isDoNotDisturb: () => unwrap<boolean>(device.isDoNotDisturb()),
     subscribe(listener) {
       listeners.add(listener);

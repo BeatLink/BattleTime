@@ -18,6 +18,9 @@ permissions = [
   "allow-open-uri",
   "allow-start-activity",
   "allow-send-broadcast",
+  "allow-sos-permissions",
+  "allow-request-sos-permissions",
+  "allow-open-overlay-settings",
   "allow-register-listener",
   "allow-remove-listener",
 ]

@@ -176,8 +176,8 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
   (location before Android 12) and, on Android 13 and later, notifications for the keep-alive.
 - **The phone's part** comes from [tauri-plugin-phone-bridge](tauri-plugin-phone-bridge), a Tauri
   plugin whose Kotlin answers the window directly: the notification listener, call monitor, media
-  tracker and keep-alive service, the phone's location for the weather and the remote buttons'
-  intents. Its `build.rs` copies in btleplug's Java. `bridge.js` gives the window
+  tracker and keep-alive service, the phone's location for the weather, the remote buttons'
+  intents, and the SOS screen and recording (`SosActivity`, `SosRecordingService`). Its `build.rs` copies in btleplug's Java. `bridge.js` gives the window
   `window.battletime.phone` in place of the desktop's `desktop` and `remote`, and
   `src/services/phone/tauri-android.ts` turns it into the `phoneBridge`.
 - **The daemon outlives the window.** There is one per process, made by whichever comes first: the
@@ -240,6 +240,7 @@ src/screens/             One file per screen
   qr-code.tsx            QR codes for text, links or Wi-Fi networks, and the list the watch's qr-code app keeps
   survival.tsx           A checklist of the emergency guides the watch's survival app carries
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
+  sos.tsx                The watch's SOS: emergency contacts, whom to call, recording, and a running SOS
   launcher.tsx           The launcher's style, view and groups, and which group each app is in
   quick-apps.tsx         The apps a swipe left or right on the watch face steps through
   files.tsx              The watch's file system: browse, send, read, delete, free space

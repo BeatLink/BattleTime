@@ -8,6 +8,7 @@ import { Row, ToggleRow } from '@/components/row';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
 import { useWatch } from '@/hooks/use-watch';
+import { useRouter } from '@/navigation';
 import { MAX_RESPONSE, parseHostList } from '@/services/http-proxy';
 import { phoneBridge } from '@/services/phone';
 import { deviceWord } from '@/services/phone/words';
@@ -38,6 +39,7 @@ function quitCompanion(): Promise<unknown> {
 
 function SettingsForm() {
   const { settings, updateSettings, transportKind } = useWatch();
+  const router = useRouter();
   const task = useTask();
   const [place, setPlace] = useState(settings.weatherQuery);
   const [located, setLocated] = useState<string | null>(null);
@@ -75,6 +77,10 @@ function SettingsForm() {
           onClick={settings.lastWatchId ? () => updateSettings({ lastWatchId: null, lastWatchName: null }) : undefined}
         />
         {phoneBridge.kind === 'phone' ? <BatteryLimitsRow bridge={phoneBridge} /> : null}
+      </Card>
+
+      <Card title="Safety">
+        <Row label="SOS" detail="Whom the watch's SOS calls and texts, and whether the phone records" onClick={() => router.push('/sos')} />
       </Card>
 
       <Card title="Sync">
