@@ -13,8 +13,9 @@ import { qr, qrUsage } from './commands/qr';
 import { recovery, recoveryUsage } from './commands/recovery';
 import { remote, REMOTE_OFFLINE, remoteUsage } from './commands/remote';
 import { scan, scanUsage } from './commands/scan';
-import { diag, line, send, sendUsage } from './commands/send';
+import { diag, line, message, send, sendUsage } from './commands/send';
 import { store, storeUsage } from './commands/store';
+import { survival, survivalUsage } from './commands/survival';
 import {
   alarms,
   apps,
@@ -69,6 +70,8 @@ ${launcherUsage}
 ${storeUsage}
 
 ${qrUsage}
+
+${survivalUsage}
 
 ${debugUsage}
 
@@ -131,6 +134,7 @@ const NEEDS_WATCH = new Set([
   'find',
   'vibrate',
   'send',
+  'message',
   'line',
   'diag',
   'status',
@@ -143,6 +147,7 @@ const NEEDS_WATCH = new Set([
   'files',
   'note',
   'qr',
+  'survival',
   'remote',
   'launcher',
   'apps',
@@ -258,6 +263,14 @@ async function main(argv: string[]): Promise<number> {
         say('Sent.');
         break;
 
+      case 'message':
+        if (!rest[0] || !rest[1]) {
+          throw new Error('Give the topic and the message as JSON.');
+        }
+        await message(session, rest[0], rest[1]);
+        say('Sent.');
+        break;
+
       case 'line':
         if (!rest[0]) {
           throw new Error('Give the line to send.');
@@ -314,6 +327,10 @@ async function main(argv: string[]): Promise<number> {
 
       case 'qr':
         await qr(session, rest);
+        break;
+
+      case 'survival':
+        await survival(session, rest);
         break;
 
       case 'remote':

@@ -10,6 +10,7 @@ repository.workspace = true
 btleplug = "0.13"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 futures = "0.3"
+log = "0.4"
 rquickjs = "0.14"
 rustls = { version = "0.23", default-features = false, features = ["logging", "ring", "std", "tls12"] }
 serde = { version = "1", features = ["derive"] }

@@ -364,6 +364,16 @@ impl TestWatch {
         self.send(Touch::Click { x, y })
     }
 
+    /// A finger landing and staying down, until `release` lifts it.
+    pub fn press(&mut self, x: i32, y: i32) -> EventResult {
+        self.send(Touch::Press { x, y })
+    }
+
+    /// A finger lifting, after `press` put it down.
+    pub fn release(&mut self, x: i32, y: i32) -> EventResult {
+        self.send(Touch::Release { x, y })
+    }
+
     /// A finger held still until the panel reports a long press, then lifted.
     pub fn long_press(&mut self, x: i32, y: i32) -> EventResult {
         self.send(Touch::Press { x, y });
@@ -547,13 +557,18 @@ impl TestWatch {
 
     /// Reads a companion line as the watch does, keeps its music or weather, and tells the app of it.
     ///
-    /// Only the messages the shell passes to apps are taken: a call, music, weather, navigation, find or vibrate.
+    /// Only the messages the shell passes to apps are taken: a call, music, weather, navigation, find,
+    /// vibrate, or an `app` message, which goes to the app it names as `receive_app_message` describes.
     pub fn receive_from_phone(&mut self, line: &str) -> Result<(), String> {
         // The watch rounds a JSON line's fractions as the line arrives, before reading it.
         let rounded = battletime_companion::with_fractions_rounded(line.as_bytes());
         let bytes = rounded.as_deref().unwrap_or(line.as_bytes());
         let message = battletime_companion::parse_line(bytes)
             .map_err(|error| format!("the watch cannot read {line:?}: {error:?}"))?;
+        if let Message::App(message) = message {
+            self.receive_app_message(&message);
+            return Ok(());
+        }
         self.receive_phone_message(message).map_err(|_| {
             format!("{line:?} is not a call, music, weather, navigation, find or vibrate message")
         })

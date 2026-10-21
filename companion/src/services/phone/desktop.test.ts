@@ -11,7 +11,7 @@ import {
   type RawNotify,
   type RawPlayer,
 } from './desktop';
-import type { PhoneBridge, PhoneEvent } from './types';
+import { NO_SOS_PERMISSIONS, type PhoneBridge, type PhoneEvent } from './types';
 import { deviceWord } from './words';
 
 // ============================================================================
@@ -242,6 +242,8 @@ describe('createDesktopPhoneBridge', () => {
     await expect(bridge.isDoNotDisturb()).resolves.toBe(false);
     await expect(bridge.requestCallPermissions()).resolves.toBe(false);
     await expect(bridge.answerCall()).rejects.toThrow('no calls');
+    await expect(bridge.sosPermissions()).resolves.toEqual(NO_SOS_PERMISSIONS);
+    await expect(bridge.openOverlaySettings()).rejects.toThrow('Android');
     await expect(bridge.rejectCall()).rejects.toThrow('no calls');
     await expect(bridge.silenceCall()).rejects.toThrow('no calls');
     await expect(bridge.openNotificationAccessSettings()).rejects.toThrow();

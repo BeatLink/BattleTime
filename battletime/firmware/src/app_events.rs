@@ -6,7 +6,8 @@
 //! messages wait together in one `PhoneUpdates`, again only the latest of each. Dismissals from
 //! the phone queue up a few deep instead, so two close together both arrive, as do the apps whose
 //! saved state the phone rewrote. The app whose state the phone is rewriting is held here at once, as
-//! its message arrives, so the shell never saves it between the phone's read and write.
+//! its message arrives, so the shell never saves it between the phone's read and write. A message
+//! for one app waits on the heap until the shell takes it, and a newer one replaces it.
 
 extern crate alloc;
 
@@ -15,8 +16,8 @@ use core::cell::RefCell;
 
 use battletime_accelerometer::{wake_gestures::WakeGesture, Acceleration};
 use battletime_app_host::closed_apps::StateHold;
-use battletime_companion::{Message, PhoneNotification, PhoneUpdates, StateStep};
-use embassy_futures::select::{select, select3, select4, Either, Either3, Either4};
+use battletime_companion::{AppMessage, Message, PhoneNotification, PhoneUpdates, StateStep};
+use embassy_futures::select::{select, select4, Either, Either4};
 use embassy_sync::{
     blocking_mutex::{raw::CriticalSectionRawMutex, Mutex},
     channel::Channel,
@@ -28,6 +29,7 @@ static ACCELERATION: Signal<CriticalSectionRawMutex, Acceleration> = Signal::new
 static SHAKES: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 static WAKE_GESTURES: Signal<CriticalSectionRawMutex, WakeGesture> = Signal::new();
 static NOTIFICATIONS: Signal<CriticalSectionRawMutex, Box<PhoneNotification>> = Signal::new();
+static APP_MESSAGES: Signal<CriticalSectionRawMutex, Box<AppMessage>> = Signal::new();
 static PHONE_UPDATES: Mutex<CriticalSectionRawMutex, RefCell<PhoneUpdates>> =
     Mutex::new(RefCell::new(PhoneUpdates::new()));
 static PHONE_UPDATED: Signal<CriticalSectionRawMutex, ()> = Signal::new();
@@ -52,6 +54,8 @@ pub enum AppEvent {
     NotificationDismissed(i64),
     /// The phone let go of this app's saved state, true when it rewrote it.
     StateWritten(StateWritten, bool),
+    /// A message from the phone for the app it names.
+    AppMessage(Box<AppMessage>),
 }
 
 pub fn acceleration_read(reading: Acceleration) {
@@ -77,6 +81,13 @@ pub fn notification_arrived(notification: PhoneNotification) {
 pub fn phone_message_arrived(message: Message<'_>) {
     if cfg!(with_shell) && PHONE_UPDATES.lock(|updates| updates.borrow_mut().record(message)) {
         PHONE_UPDATED.signal(());
+    }
+}
+
+/// Passes a message for an app on to the shell, replacing one it has not taken yet; builds without the shell drop it.
+pub fn app_message_arrived(message: Box<AppMessage>) {
+    if cfg!(with_shell) {
+        APP_MESSAGES.signal(message);
     }
 }
 
@@ -108,7 +119,7 @@ pub fn with_state_hold<Answer>(use_hold: impl FnOnce(&mut StateHold) -> Answer) 
     STATE_HOLD.lock(|hold| use_hold(&mut hold.borrow_mut()))
 }
 
-/// Waits for the next event: a notification, then the phone's updates, a dismissal, a shake, a wake gesture and a reading.
+/// Waits for the next event: a notification, then the phone's updates, a dismissal, a state written, an app message, a shake, a wake gesture and a reading.
 pub async fn next() -> AppEvent {
     let phone_updated = async {
         PHONE_UPDATED.wait().await;
@@ -116,16 +127,22 @@ pub async fn next() -> AppEvent {
     };
     match select4(
         NOTIFICATIONS.wait(),
-        select3(phone_updated, DISMISSALS.receive(), STATES_WRITTEN.receive()),
+        select4(
+            phone_updated,
+            DISMISSALS.receive(),
+            STATES_WRITTEN.receive(),
+            APP_MESSAGES.wait(),
+        ),
         select(SHAKES.wait(), WAKE_GESTURES.wait()),
         ACCELERATION.wait(),
     )
     .await
     {
         Either4::First(notification) => AppEvent::Notification(notification),
-        Either4::Second(Either3::First(updates)) => AppEvent::Phone(updates),
-        Either4::Second(Either3::Second(id)) => AppEvent::NotificationDismissed(id),
-        Either4::Second(Either3::Third((app, written))) => AppEvent::StateWritten(app, written),
+        Either4::Second(Either4::First(updates)) => AppEvent::Phone(updates),
+        Either4::Second(Either4::Second(id)) => AppEvent::NotificationDismissed(id),
+        Either4::Second(Either4::Third((app, written))) => AppEvent::StateWritten(app, written),
+        Either4::Second(Either4::Fourth(message)) => AppEvent::AppMessage(message),
         Either4::Third(Either::First(())) => AppEvent::Shake,
         Either4::Third(Either::Second(gesture)) => AppEvent::WakeGesture(gesture),
         Either4::Fourth(reading) => AppEvent::Acceleration(reading),

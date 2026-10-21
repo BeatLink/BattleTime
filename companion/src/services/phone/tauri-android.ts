@@ -5,7 +5,7 @@
 
 import type { AndroidIntents } from '../remote-actions';
 import { toPhoneEvent } from './events';
-import type { DeviceLocation, MediaCommand, PhoneBridge, PhoneEvent } from './types';
+import type { DeviceLocation, MediaCommand, PhoneBridge, PhoneEvent, SosPermissions } from './types';
 
 // ============================================================================
 // What the bridge carries
@@ -17,6 +17,9 @@ export type TauriPhoneDevice = {
   hasNotificationAccess(): Promise<BridgeResult>;
   openNotificationAccessSettings(): Promise<BridgeResult>;
   requestCallPermissions(): Promise<BridgeResult>;
+  sosPermissions(): Promise<BridgeResult>;
+  requestSosPermissions(): Promise<BridgeResult>;
+  openOverlaySettings(): Promise<BridgeResult>;
   isDoNotDisturb(): Promise<BridgeResult>;
   answerCall(): Promise<BridgeResult>;
   rejectCall(): Promise<BridgeResult>;
@@ -63,6 +66,9 @@ export function createTauriPhoneBridge(device: TauriPhoneDevice): PhoneBridge {
     hasNotificationAccess: () => unwrap<boolean>(device.hasNotificationAccess()),
     openNotificationAccessSettings: () => unwrap<void>(device.openNotificationAccessSettings()),
     requestCallPermissions: () => unwrap<boolean>(device.requestCallPermissions()),
+    sosPermissions: () => unwrap<SosPermissions>(device.sosPermissions()),
+    requestSosPermissions: () => unwrap<SosPermissions>(device.requestSosPermissions()),
+    openOverlaySettings: () => unwrap<void>(device.openOverlaySettings()),
     isDoNotDisturb: () => unwrap<boolean>(device.isDoNotDisturb()),
     subscribe(listener: (event: PhoneEvent) => void) {
       return device.onEvent((raw) => {

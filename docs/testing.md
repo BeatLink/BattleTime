@@ -50,7 +50,8 @@ tests and given to every app.
 | `press_button()` | A click of the side button, which goes back a screen. |
 | `advance(Duration)` | Moves the clock on, waking the app at each time it asked for on the way, in order. |
 | `deliver(PushedEvent::Steps { .. })` | An event from the phone or a sensor, with the system values it carries. |
-| `receive_from_phone(line)` | A companion line from the phone, read by `battletime-companion` as the watch reads it. |
+| `receive_from_phone(line)` | A companion line from the phone, read by `battletime-companion` as the watch reads it. An `app` message goes to the app it names: the open one, or a closed one run in the background as the shell runs it. |
+| `receive_app_message(message)` | An `AppMessage` already read, handed to the app it names as above. |
 | `set_system_value`, `set_system_text`, `screen_off`, `screen_on`, `install_apps(&["timer"])` | Change the battery, the firmware version or another value, the screen, or the launcher's list. |
 | `switch_to_app(id)`, `switch_to_face(id)` | Leaves the open app closed with its state, as the shell does, and opens another. Installed and left apps with timers or alarms run when those come due, and one that calls `wake_screen` opens on the screen its `go` named, with the screen lit; `closed_app_ids()` lists those waiting. |
 | `is_choosing_face()` | Whether the face chooser shows. An app's `choose_watch_face` opens it as the shell does: the face `settings.watch_face` names among the faces turned on in `system().packages` opens, hears no touches, steps to the next or previous one on a swipe left or right, saving it in `watch_face` and `watch_face_name`, and `press_button()` goes back to the app. |
@@ -99,6 +100,7 @@ expect no failures
 | `install <id> ...` | Installs these apps, so a launcher lists them. |
 | `tap X Y`, `tap "text"` | Taps a point, or the middle of the shown widget whose text is exactly that. |
 | `long-press ...`, `double-tap ...` | The same, held or tapped twice. |
+| `press X Y`, `release X Y` | Puts a finger down and leaves it there, through any `wait`, then lifts it; either also takes `"text"`. |
 | `drag X1 Y1 X2 Y2` | Presses, drags in steps and lifts. |
 | `swipe up`, `down`, `left`, `right` | A swipe across the middle of the screen. |
 | `button` | Clicks the side button, which goes back a screen. |
@@ -109,6 +111,7 @@ expect no failures
 | `shake` | Delivers a shake from the accelerometer. |
 | `acceleration X Y Z` | Delivers an accelerometer reading in thousandths of g, which `acceleration` subscriptions get at their next period. |
 | `heart 72` | Delivers a heart rate reading in beats per minute; `set heart_rate_status 3` first makes it count as measuring. |
+| `message <app id> "data"` | Sends that app a message from the phone, `{"t":"app","ch":"<app id>","d":<data>}`, such as `message sos "{\"on\":0}"`, through `phone`. |
 | `navigation` | Tells the app the phone's navigation changed; the turn comes from the system values. |
 | `write "/path" "text"` | Writes a whole text file, as the phone does. |
 | `reopen` | Leaves the app and opens it again with its state kept, so it reads its files afresh. |
@@ -307,6 +310,10 @@ real install, build a flash image and pass it with the library:
 cargo run -p battletime-packages --example filesystem_use -- --image flash.bin --no-theme stopwatch=stopwatch.ntapp
 python3 -I ../tools/measure_stack.py FIRMWARE_ELF --launcher --flash flash.bin --library shared.ntlib
 ```
+
+`--uart LINE ...` writes companion lines to the Nordic UART over the emulator's Bluetooth bridge, a
+couple of seconds apart, such as `--uart '{"t":"app","ch":"sos","d":{"on":0}}'` to run a closed
+app's message handler.
 
 Without `--no-theme` the image carries an all-black theme, so the launcher and apps draw black.
 Without the library no text or icons are drawn, so timings and stack use come out far too low.

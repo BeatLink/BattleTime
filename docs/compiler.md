@@ -293,6 +293,14 @@ Effect arguments that are text may point into the call's text buffer, such as th
   `define_app`'s old `subscriptions`, `onOpen` and other lifecycle options. A period under 20 ms, a
   period under a minute without `while_open: true`, and `acceleration` without it are errors, as
   the runtime's checks have it.
+- `on("message", handler)` needs a function whose first parameter's type, written out or a `type`
+  alias, lists the fields it reads (`message_argument` in `subscriptions.rs`): up to 4 `number` or
+  `boolean` fields and 1 `string`, each named 1 to 32 letters, digits, `_` or `-`; a handler with
+  no parameter reads nothing. The parameter stands for an object whose text field is event field 0,
+  read with `ReadEventText`, and whose numbers are fields 1 to 4 in the order written. Each key is
+  added to the strings, and `Subscription::for_message` keeps their numbers in the record, so the
+  watch matches the phone's keys by name. Past the limits, or a field of another type, is an error
+  naming it. It needs `phone_messages`, and `background` without `while_open`.
 - `at_most_every` compiles to a handler that reads `now`, compares it with a hidden `~last_runN`
   Instant, and skips the app's handler until the pause has passed; no runtime support is needed.
 - Handlers read event fields by name; text fields (a notification's `app`, `title` and `body`, a
@@ -327,7 +335,7 @@ arguments.
 
 ## Not supported yet
 
-- The `message` and `http_response` events, `daily` days from a signal, and a Chart's second and
+- The `http_response` event, `daily` days from a signal, and a Chart's second and
   third series.
 - `vibrate_sequence` and `http_request`.
 - More than 16 loops, or more than 16 branches waiting to join, in one handler or expression.

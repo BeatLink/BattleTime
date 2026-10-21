@@ -11,6 +11,33 @@
   // Tauri's own scripts may run after this one, so its globals are looked up at call time.
   const invoke = (command, args) => window.__TAURI_INTERNALS__.invoke(command, args);
 
+  // The window's warnings, errors and uncaught failures go to the companion's log too.
+  const describe = (part) => {
+    if (part instanceof Error) return `${part.message}\n${part.stack ?? ''}`;
+    if (typeof part === 'string') return part;
+    try {
+      return JSON.stringify(part);
+    } catch {
+      return String(part);
+    }
+  };
+  const log = (level, parts) => {
+    try {
+      invoke('app_log', { level, message: parts.map(describe).join(' ') }).catch(() => {});
+    } catch {
+      // Tauri's scripts have not run yet, so the line stays in the window's console only.
+    }
+  };
+  for (const level of ['warn', 'error']) {
+    const original = window.console[level].bind(window.console);
+    window.console[level] = (...parts) => {
+      original(...parts);
+      log(level, parts);
+    };
+  }
+  window.addEventListener('error', (event) => log('error', [event.error ?? event.message]));
+  window.addEventListener('unhandledrejection', (event) => log('error', ['Unhandled rejection:', event.reason]));
+
   // Every call gives { ok, value } or { ok: false, error }.
   const call = (command, args) =>
     invoke(command, args).then(
@@ -85,6 +112,9 @@
     hasNotificationAccess: () => phoneCall('has_notification_access'),
     openNotificationAccessSettings: () => phoneCall('open_notification_access_settings'),
     requestCallPermissions: () => phoneCall('request_call_permissions'),
+    sosPermissions: () => phoneCall('sos_permissions'),
+    requestSosPermissions: () => phoneCall('request_sos_permissions'),
+    openOverlaySettings: () => phoneCall('open_overlay_settings'),
     isDoNotDisturb: () => phoneCall('is_do_not_disturb'),
     answerCall: () => phoneCall('answer_call'),
     rejectCall: () => phoneCall('reject_call'),
@@ -162,6 +192,7 @@
     sendRemoteLayout: () => call('daemon_send_remote_layout'),
     testRemoteButton: (index) => call('daemon_test_remote_button', { index }),
     clearRemoteLog: () => call('daemon_clear_remote_log'),
+    stopSos: () => call('daemon_stop_sos'),
     onState: (listener) => subscribe('daemon:state', listener, (each, payload) => each(payload)),
     onSettings: (listener) => subscribe('daemon:settings', listener, (each, payload) => each(payload)),
     onSent: (listener) => subscribe('daemon:sent', listener, (each, payload) => each(payload)),

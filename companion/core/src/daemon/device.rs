@@ -33,6 +33,8 @@ pub enum PhoneEvent {
         number: Option<String>,
     },
     Media(Media),
+    // The wearer stopped the SOS from the phone's SOS screen.
+    SosStopped,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +149,25 @@ pub trait Device: Send + Sync + 'static {
     fn remote_action(&self, _action: &Value) -> DeviceAnswer<Value> {
         Box::pin(async { Err("This device cannot run that action.".to_string()) })
     }
+
+    // Shows the SOS screen, recording from the cameras when `record` is true, or with `on` false stops recording and closes it.
+    fn sos_screen(&self, _on: bool, _record: bool) -> DeviceAnswer<()> {
+        Box::pin(async { Err("This device has no SOS screen.".to_string()) })
+    }
+
+    // Places a call to the number straight away.
+    fn call_number(&self, _number: &str) -> DeviceAnswer<()> {
+        Box::pin(async { Err("This device cannot place calls.".to_string()) })
+    }
+
+    // Opens the dialer with the number typed in, for a number such as 911 that no app may call itself.
+    fn dial_number(&self, _number: &str) -> DeviceAnswer<()> {
+        Box::pin(async { Err("This device cannot place calls.".to_string()) })
+    }
+
+    fn send_text(&self, _number: &str, _text: &str) -> DeviceAnswer<()> {
+        Box::pin(async { Err("This device cannot send texts.".to_string()) })
+    }
 }
 
 #[cfg(test)]
@@ -186,6 +207,10 @@ mod tests {
         assert_eq!(
             PhoneEvent::from_value(&json!({ "type": "call", "state": "ringing" })),
             None
+        );
+        assert_eq!(
+            PhoneEvent::from_value(&json!({ "type": "sosStopped" })),
+            Some(PhoneEvent::SosStopped)
         );
         assert_eq!(PhoneEvent::from_value(&json!({ "type": "other" })), None);
     }

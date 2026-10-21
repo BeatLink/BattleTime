@@ -1,0 +1,22 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "First aid",
+        "Survival",
+        "Wilderness"
+      ]
+    },
+    {
+      "name": "topic",
+      "reached_by": "tap \"First aid\"",
+      "texts": [
+        "CPR",
+        "First aid",
+        "Severe bleeding"
+      ]
+    }
+  ]
+}

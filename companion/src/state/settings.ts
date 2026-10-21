@@ -5,6 +5,7 @@ import { NOTE_SOURCES, type NoteSource } from '@/services/note-source';
 import { readWebAccess, type WebAccess } from '@/services/web-request';
 import { DEFAULT_SYNC_INTERVAL_SECONDS } from '@/services/sync';
 import type { Place } from '@/services/weather';
+import { DEFAULT_EMERGENCY_NUMBER, readSosContacts, type SosCall, type SosContact } from '@/state/sos';
 import { appStorage } from '@/state/storage';
 import type { KeyValueStorage } from '@/services/app-store';
 
@@ -43,6 +44,12 @@ export type Settings = {
   // The watch's remote buttons, in order, and the layout the watch was last sent.
   remoteButtons: RemoteButton[];
   remoteOnWatch: RemoteOnWatch | null;
+  // The SOS: whom it texts and calls, whether it calls them or the emergency number, and whether it texts and records.
+  sosContacts: SosContact[];
+  sosCall: SosCall;
+  sosEmergencyNumber: string;
+  sosTextLocation: boolean;
+  sosRecord: boolean;
   // How often everything on the watch is read again while it is connected.
   syncIntervalSeconds: number;
   // On the desktop: keep the watch after the window closes, and start hidden with the computer.
@@ -76,6 +83,11 @@ export const defaultSettings: Settings = {
   noteOnWatch: null,
   remoteButtons: [],
   remoteOnWatch: null,
+  sosContacts: [],
+  sosCall: 'contacts',
+  sosEmergencyNumber: DEFAULT_EMERGENCY_NUMBER,
+  sosTextLocation: true,
+  sosRecord: true,
   syncIntervalSeconds: DEFAULT_SYNC_INTERVAL_SECONDS,
   runInBackground: true,
   startWithComputer: false,
@@ -99,6 +111,8 @@ export function readSettings(parsed: unknown): Settings {
     ...stored,
     noteUrlAccess: readWebAccess(stored.noteUrlAccess),
     remoteButtons: readRemoteButtons(stored.remoteButtons),
+    sosContacts: readSosContacts(stored.sosContacts),
+    sosCall: stored.sosCall === 'emergency' ? 'emergency' : 'contacts',
   };
 }
 

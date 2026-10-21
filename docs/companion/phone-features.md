@@ -28,6 +28,7 @@ open the phone's setting, and whether Do Not Disturb is on.
 | Music | the active media session | any MPRIS player: browsers, Spotify, VLC and the rest |
 | Do Not Disturb | the phone's Do Not Disturb | KDE's, Cinnamon's, GNOME's or dunst's |
 | Location for the weather | the phone's location | GeoClue, when it runs |
+| SOS | calls, texts and records | none |
 | The clock | the phone's | the computer's |
 
 The Android app skips ongoing, media and call notifications and its own. While it keeps a watch it
@@ -91,6 +92,39 @@ app needed.
 - The watch's [Finder](../apps/phone-finder.md) app tells the companion it is looking, and the
   Watch screen then says **The watch is looking for this phone**. The companion shows this card but
   does not ring.
+
+## SOS
+
+Holding the button in the watch's [SOS](../apps/sos.md) app for 5 seconds sends an SOS to the
+Android app, which then, at once:
+
+- opens a red SOS screen over the lock screen, with a **Stop SOS** button;
+- records video, from the front and back cameras together where the phone can, else from the back
+  camera, else only sound, into `Movies/BattleTime SOS` (sound only into `Music/BattleTime SOS`);
+- texts each emergency contact a map link to where the phone is, or says it could not find out;
+- calls for help: the emergency contacts one after another, or the emergency number.
+
+**Settings**, under **Safety**, opens **SOS**: the contacts and their order, whom to call, the
+emergency number (911 unless changed), switches for the texts and the recording, and the
+permissions it still lacks. The same screen shows a running SOS, a log of each step, and
+**Stop SOS**. Stopping it on the watch, on the SOS screen or here ends the calling and the
+recording. Stopped on the phone, the watch is told too, by the app message `{"on":0}` on the `sos`
+topic, and stops its light, screen and vibration: at once while it is connected, else when it next
+connects.
+
+Android sets the limits:
+
+- No app may call an emergency number itself. Choosing it opens the dialer with the number typed in,
+  and someone must tap Call.
+- The phone cannot tell whether an outgoing call was answered. A call to a contact that ends within
+  30 seconds counts as unanswered and the next contact is called; a longer one, voicemail included,
+  ends the calling. The list is called through once.
+- The camera and microphone start only from a visible screen, so the SOS needs **Display over other
+  apps** to open its screen while the app is closed. Without it the phone shows a notification that
+  starts the recording when tapped, and calls to contacts are refused.
+- A call takes the microphone, so the recording is silent while the call lasts.
+
+The desktop app keeps the settings but runs no SOS.
 
 ## Navigation
 

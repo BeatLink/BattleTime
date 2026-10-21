@@ -15,11 +15,13 @@ import PluginsScreen from '@/screens/plugins';
 import QrCodeScreen from '@/screens/qr-code';
 import QuickAppsScreen from '@/screens/quick-apps';
 import RemoteScreen from '@/screens/remote';
+import SosScreen from '@/screens/sos';
 import ScanScreen from '@/screens/scan';
 import SettingsScreen from '@/screens/settings';
 import SetupScreen from '@/screens/setup';
 import StepsScreen from '@/screens/steps';
 import StoreScreen from '@/screens/store';
+import SurvivalScreen from '@/screens/survival';
 import WatchScreen from '@/screens/watch';
 import WatchSettingsScreen from '@/screens/watch-settings';
 import { isTabRoute, STACK_TITLES, type Route, type TabRoute } from '@/state/routes';
@@ -43,7 +45,9 @@ const SCREENS: Record<Route, ComponentType> = {
   '/files': FilesScreen,
   '/notes': NotesScreen,
   '/qr-code': QrCodeScreen,
+  '/survival': SurvivalScreen,
   '/remote': RemoteScreen,
+  '/sos': SosScreen,
   '/quick-apps': QuickAppsScreen,
   '/backup': BackupScreen,
   '/apps': AppsScreen,

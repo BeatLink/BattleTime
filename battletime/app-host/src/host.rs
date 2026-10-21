@@ -14,7 +14,7 @@ use battletime_runtime::{
     },
     paging::{cache_bytes, CodeCache},
     state::SaveBufferFull,
-    subscriptions::{Subscription, SubscriptionKind},
+    subscriptions::{Subscription, SubscriptionKind, MESSAGE_KEYS},
     widgets::{screen_table, Property, PropertyValue as ValueKind, ScreenEntry, ScreenWindow, MOST_WIDGETS},
     AppImage, AppKind, AppState, Bindings, EffectKind, Failure, HandlerOutcome, ImageError, Inputs,
     Interpreter, PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
@@ -1825,6 +1825,45 @@ impl<'image> AppHost<'image> {
         let changed_system_values = event.changed_system_values();
         if changed_system_values != 0 {
             self.after_change(0, changed_system_values, now, system);
+        }
+        result
+    }
+
+    /// Hands the app a message from the phone: each message subscription reads the numbers and text under the keys it names.
+    ///
+    /// A key the message lacks reads as 0, or as empty text.
+    pub fn deliver_message(
+        &mut self,
+        numbers: &[(&str, Value)],
+        text: Option<(&str, &str)>,
+        now: Value,
+        system: &mut impl System,
+    ) -> EventResult {
+        self.note_time(now, system);
+        let mut result = EventResult::NotHandled;
+        for index in 0..self.subscriptions.len() {
+            let subscription = self.subscriptions[index].subscription;
+            if subscription.kind != SubscriptionKind::Message {
+                continue;
+            }
+            let mut fields: [Value; MESSAGE_KEYS] = [0; MESSAGE_KEYS];
+            let mut message_text = "";
+            for (position, key) in subscription.message_keys().into_iter().enumerate() {
+                let Some(name) = self.image.string(key) else {
+                    continue;
+                };
+                if position == 0 {
+                    message_text = text
+                        .filter(|(text_key, _)| *text_key == name)
+                        .map_or("", |(_, text)| text);
+                } else if let Some((_, value)) = numbers.iter().find(|(number_key, _)| *number_key == name) {
+                    fields[position] = *value;
+                }
+            }
+            result = combine(
+                result,
+                self.run_subscription(index, &fields, &[message_text], now, system),
+            );
         }
         result
     }

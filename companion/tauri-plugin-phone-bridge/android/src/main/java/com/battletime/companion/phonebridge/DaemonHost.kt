@@ -75,7 +75,20 @@ object DaemonHost {
   fun request(action: String, argument: String): String {
     val context = context ?: throw PhoneActionException("The phone bridge has not started")
     val input = JSONObject(argument)
-    val answer: Any? = when (action) {
+    val answer: Any? = try {
+      answer(context, action, input)
+    } catch (e: Exception) {
+      Log.w(TAG, "The daemon's $action request failed", e)
+      throw e
+    }
+    return when (answer) {
+      is Boolean, is JSONObject -> answer.toString()
+      else -> "null"
+    }
+  }
+
+  private fun answer(context: Context, action: String, input: JSONObject): Any? =
+    when (action) {
       "doNotDisturb" -> PhoneActions.isDoNotDisturb(context)
       "media" -> PhoneActions.mediaCommand(context, input.getString("command"))
       "answerCall" -> PhoneActions.answerCall(context)
@@ -90,13 +103,12 @@ object DaemonHost {
         null
       }
       "intent" -> startIntent(context, input.getJSONObject("intent"))
+      "sosScreen" -> SosActivity.show(context, input.getBoolean("on"), input.getBoolean("record"))
+      "callNumber" -> PhoneActions.callNumber(context, input.getString("number"))
+      "dialNumber" -> PhoneActions.dialNumber(context, input.getString("number"))
+      "sendText" -> PhoneActions.sendText(context, input.getString("number"), input.getString("text"))
       else -> throw PhoneActionException("The phone does not know how to $action")
     }
-    return when (answer) {
-      is Boolean, is JSONObject -> answer.toString()
-      else -> "null"
-    }
-  }
 
   private fun readFile(context: Context, uri: String): ByteArray {
     try {

@@ -51,11 +51,18 @@ object WatchCompanion {
 class WatchPresenceService : CompanionDeviceService() {
   @Deprecated("Android 13 calls the AssociationInfo form, which reaches this one")
   override fun onDeviceAppeared(address: String) {
+    Log.i(TAG, "Android saw the companion watch come into range")
     if (BootReceiver.remembersWatch(this)) {
       KeepAliveService.start(this)
     }
   }
 
   @Deprecated("Android 13 calls the AssociationInfo form, which reaches this one")
-  override fun onDeviceDisappeared(address: String) {}
+  override fun onDeviceDisappeared(address: String) {
+    Log.i(TAG, "Android saw the companion watch go out of range")
+  }
+
+  private companion object {
+    const val TAG = "PhoneBridge"
+  }
 }

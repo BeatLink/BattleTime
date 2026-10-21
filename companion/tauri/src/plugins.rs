@@ -172,6 +172,13 @@ mod tests {
 
     impl HostOutput for Silent {
         fn write_to_watch(&self, _line: String) {}
+        fn send_app_message(
+            &self,
+            _plugin: &str,
+            _message: battletime_companion_core::protocol::app_message::AppMessage,
+        ) -> Result<(), String> {
+            Ok(())
+        }
         fn send_to_ui(&self, _plugin: &str, _message: Value) {}
         fn log(&self, _plugin: &str, _line: &str) {}
     }

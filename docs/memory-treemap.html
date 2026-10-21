@@ -189,7 +189,7 @@ function hex(value, digits) {
 // ===== Measured figures =====
 // tools/measure_memory.py rewrites the line between these markers; sizes are in bytes.
 // measure_memory:treemap
-const MEASURED = {"file_system": {"file_sectors": 512, "file_sectors_in_use": 35, "images": [["shell", 2012], ["shell", 1451], ["digital", 1296], ["launcher", 1037], ["alarm", 3067], ["timer", 1839], ["stopwatch", 1288], ["settings", 7233], ["weather", 1776], ["steps", 2314], ["heart", 1092], ["flashlight", 739], ["music", 1326], ["calculator", 3376]], "log_sectors": 192, "record_bytes_in_use": 1372, "record_sectors": 64, "sector_size": 4096, "settings_bytes": 117, "system_bytes": 75404, "system_sectors": 23}, "firmware": {"full": {"App host (with `battletime-ui`)": 101072, "App runtime": 32612, "BLEFS file service": 9718, "Bluetooth (controller and TrouBLE)": 32433, "Display, graphics and drivers": 8580, "Embassy, allocator and Cortex-M": 8152, "Firmware (start-up, shell, tasks)": 153908, "Other constants and padding": 26009, "Packages": 8612, "Settings, companion and notifications (with serde)": 18318, "Storage (flash store)": 17834, "Updates (DFU)": 3390, "core, alloc and compiler builtins": 31058}, "recovery": {"BLEFS file service": 3214, "Bluetooth (controller and TrouBLE)": 42343, "Display, graphics and drivers": 3340, "Embassy, allocator and Cortex-M": 5104, "Firmware (start-up, shell, tasks)": 50428, "Other constants and padding": 14539, "Packages": 1396, "Settings, companion and notifications (with serde)": 2592, "Storage (flash store)": 13992, "Updates (DFU)": 2848, "core, alloc and compiler builtins": 16928}}, "library_bytes": 1770, "ram": {"full": {"App host (with `battletime-ui`)": 620, "Bluetooth (controller and TrouBLE)": 2618, "Display, graphics and drivers": 372, "Firmware (start-up, shell, tasks)": 21287, "Heap": 30976, "Other constants and padding": 5}, "recovery_stack": 40744, "recovery_static_ram": 24776, "stack": 9560, "static_ram": 55960}};
+const MEASURED = {"file_system": {"file_sectors": 512, "file_sectors_in_use": 12, "images": [["digital", 1296], ["launcher", 1037], ["alarm", 3067], ["timer", 1839], ["stopwatch", 1288], ["settings", 7233], ["weather", 1776], ["steps", 2314], ["heart", 1092], ["flashlight", 739], ["music", 1326], ["calculator", 3376]], "log_sectors": 192, "record_bytes_in_use": 968, "record_sectors": 64, "sector_size": 4096, "settings_bytes": 117}, "firmware": {"full": {"App host (with `battletime-ui`)": 93812, "App runtime": 34922, "BLEFS file service": 9778, "Bluetooth (controller and TrouBLE)": 32433, "Display, graphics and drivers": 5642, "Embassy, allocator and Cortex-M": 8358, "Firmware (start-up, shell, tasks)": 147782, "Other constants and padding": 26399, "Packages": 8036, "Settings, companion and notifications (with serde)": 19774, "Storage (flash store)": 17588, "Updates (DFU)": 3488, "core, alloc and compiler builtins": 29192}, "recovery": {"BLEFS file service": 3216, "Bluetooth (controller and TrouBLE)": 42291, "Display, graphics and drivers": 3340, "Embassy, allocator and Cortex-M": 5144, "Firmware (start-up, shell, tasks)": 49728, "Other constants and padding": 14589, "Packages": 1316, "Settings, companion and notifications (with serde)": 2488, "Storage (flash store)": 13908, "Updates (DFU)": 2966, "core, alloc and compiler builtins": 16342}}, "library_bytes": 49467, "ram": {"full": {"App host (with `battletime-ui`)": 396, "Bluetooth (controller and TrouBLE)": 2618, "Display, graphics and drivers": 372, "Firmware (start-up, shell, tasks)": 21271, "Heap": 30976, "Other constants and padding": 5}, "recovery_stack": 40868, "recovery_static_ram": 24652, "stack": 9816, "static_ram": 55704}};
 // /measure_memory:treemap
 
 // ===== The memory tree =====
@@ -241,10 +241,14 @@ function firmwareBuild(name, start, regionSize, sizes, holds, libraryBytes) {
 
 // The shared library, right after the code on a word boundary, where the image header says.
 function sharedLibrary(libraryBytes) {
-  const fonts = 4945;
-  return { name: "Shared library", size: libraryBytes, kind: "data", holds: `What apps share, ${libraryBytes.toLocaleString("en")} B, carried inside the firmware image and updated with it. Its icons and the accelerometers' configuration live in /system on the external flash instead. No apps are kept here; they live in /apps on the external flash.`, children: [
+  const fonts = 2289, configuration = 6144;
+  return { name: "Shared library", size: libraryBytes, kind: "data", holds: `What apps share, ${libraryBytes.toLocaleString("en")} B, carried inside the firmware image and updated with it. Apps name its icons rather than copying them. No apps are kept here; they live in /apps on the external flash.`, children: [
     { name: "Text font", size: fonts, kind: "data", holds: "The app host's text font: lines, arcs and dots that every text size scales." },
-    { name: "Functions and tables", rest: true, kind: "data", holds: "Common functions, compiled to bytecode, and the image's own tables." },
+    { name: "Accelerometer configs", kind: "data", holds: "Bosch's configuration file for each accelerometer, which the firmware uploads to the chip.", children: [
+      { name: "BMA421", size: configuration, kind: "data", holds: "The BMA421's configuration file." },
+      { name: "BMA425", size: configuration, kind: "data", holds: "The BMA425's configuration file; this watch has a BMA425." },
+    ] },
+    { name: "Icons, components and themes", rest: true, kind: "data", holds: "Images, shared components, common functions and the preset themes." },
   ] };
 }
 
@@ -275,7 +279,7 @@ function ramTree() {
       { name: "Unattributed", rest: true, kind: "spare", holds: "Static bytes the measurement gives no owner, alignment among them." },
     ] },
     { name: "Stack", size: MEASURED.ram.stack, kind: "boot", holds: `What static RAM leaves, ${MEASURED.ram.recovery_stack.toLocaleString("en")} B in the recovery build. Keep at least 2 KB spare; tools/measure_stack.py measures the deepest path again.`, children: [
-      { name: "Deepest path", size: 6616, kind: "boot", holds: "Opening an app, painted in the emulator with a typical install: 6,616 B. Start-up reaches 3,816 B." },
+      { name: "Deepest path", size: 6616, kind: "boot", holds: "Opening an app, painted in the emulator with a typical install: 6,616 B. Start-up reaches 3,816 B, and running a closed app for a message from the phone 6,404 B." },
       { name: "Spare", rest: true, kind: "spare", holds: "What the deepest path leaves, its lowest bytes the stack guard (up to 360 B) that the memory protection unit forbids." },
     ] },
     { name: "Alive marker", size: 16, kind: "boot", holds: "The last 16 bytes: the alive marker, the boot count, the bootloader's note to the firmware and the bootloader updater's note. The bootloader keeps its stack below it." },
@@ -287,12 +291,9 @@ function fileSystemTree() {
   const images = [...store.images].sort((first, second) => first[1] - second[1]);
   const imageBytes = images.reduce((sum, image) => sum + image[1], 0);
   const smallest = images[0], largest = images[images.length - 1];
-  const systemSectors = store.system_sectors || 0;
-  const imageSectors = store.file_sectors_in_use - systemSectors;
   return [
     { name: "Files", size: store.file_sectors * store.sector_size, kind: "data", holds: `${store.file_sectors} sectors of ${sizeText(store.sector_size)}, one erase sector each. A file over 1 KB takes whole sectors, the first beginning with a 224-byte header.`, children: [
-      { name: "System files", size: systemSectors * store.sector_size, kind: "data", holds: `${systemSectors} sectors for the files the companion puts on every watch: the accelerometers' configuration and the shared library's icons, ${(store.system_bytes || 0).toLocaleString("en")} B in all.` },
-      { name: "App images", size: imageSectors * store.sector_size, kind: "data", holds: `${imageSectors} sectors for ${images.length} app images, ${smallest[1].toLocaleString("en")} B (${smallest[0]}) to ${largest[1].toLocaleString("en")} B (${largest[0]}); ${imageBytes.toLocaleString("en")} B in all. Those of 1 KB or less are records instead.` },
+      { name: "App images", size: store.file_sectors_in_use * store.sector_size, kind: "data", holds: `${store.file_sectors_in_use} sectors for ${images.length} app images, ${smallest[1].toLocaleString("en")} B (${smallest[0]}) to ${largest[1].toLocaleString("en")} B (${largest[0]}); ${imageBytes.toLocaleString("en")} B in all. Those of 1 KB or less are records instead.` },
       { name: "Free sectors", rest: true, kind: "spare", holds: "Room for more apps, saved state and resources." },
     ] },
     { name: "Records ring", size: store.record_sectors * store.sector_size, kind: "runtime", holds: "Files of 1 KB or less, which cost no sector: the settings, the theme, saved app state, and a day of each log: steps (up to 480 B), heart rate and battery (up to 240 B each), 90 days of each, about 90 KB at most.", children: [

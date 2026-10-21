@@ -17,6 +17,17 @@
   <uses-permission android:name="android.permission.READ_CONTACTS" />
   <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
 
+  <!-- SOS: calling and texting the emergency contacts, recording, and opening its screen from the background. -->
+  <uses-permission android:name="android.permission.CALL_PHONE" />
+  <uses-permission android:name="android.permission.SEND_SMS" />
+  <uses-permission android:name="android.permission.CAMERA" />
+  <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+  <uses-feature android:name="android.hardware.camera" android:required="false" />
+  <uses-feature android:name="android.hardware.telephony" android:required="false" />
+
   <!-- The service that hosts the daemon, so the watch stays linked in the background. -->
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
@@ -54,6 +65,19 @@
       android:name="com.battletime.companion.phonebridge.KeepAliveService"
       android:exported="false"
       android:foregroundServiceType="connectedDevice" />
+
+    <activity
+      android:name="com.battletime.companion.phonebridge.SosActivity"
+      android:exported="false"
+      android:excludeFromRecents="true"
+      android:launchMode="singleTop"
+      android:taskAffinity="com.battletime.companion.sos"
+      android:theme="@android:style/Theme.DeviceDefault.NoActionBar" />
+
+    <service
+      android:name="com.battletime.companion.phonebridge.SosRecordingService"
+      android:exported="false"
+      android:foregroundServiceType="camera|microphone" />
 
     <service
       android:name="com.battletime.companion.phonebridge.WatchPresenceService"

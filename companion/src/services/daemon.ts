@@ -10,6 +10,7 @@ import type { PhoneEvent } from '@/services/phone';
 import type { RemoteLogEntry } from '@/services/remote-actions';
 import type { NoteStatus } from '@/state/note-sync';
 import type { RemoteStatus } from '@/state/remote-sync';
+import type { SosStatus } from '@/state/sos';
 
 // ============================================================================
 // What the daemon reports
@@ -28,7 +29,7 @@ export type DaemonState = {
   lastError: string | null;
   // True while the daemon is getting the remembered watch back on its own.
   reconnecting: boolean;
-  features: { noteStatus?: NoteStatus; remoteStatus?: RemoteStatus; remoteLog?: RemoteLogEntry[] };
+  features: { noteStatus?: NoteStatus; remoteStatus?: RemoteStatus; remoteLog?: RemoteLogEntry[]; sosStatus?: SosStatus };
 };
 
 // ============================================================================
@@ -53,6 +54,7 @@ export type DaemonBridge = {
   sendRemoteLayout(): Promise<BridgeResult<void>>;
   testRemoteButton(index: number): Promise<BridgeResult<void>>;
   clearRemoteLog(): Promise<BridgeResult<void>>;
+  stopSos(): Promise<BridgeResult<void>>;
   onState(listener: (state: DaemonState) => void): () => void;
   onSettings(listener: (settings: Record<string, unknown>) => void): () => void;
   onSent(listener: (line: string) => void): () => void;

@@ -46,6 +46,7 @@ own.
 |---|---|
 | `/notes/note.txt` and `/notes/font` | the note, and the font to show it in |
 | `/qr/list` and `/qr/<slot>` | the QR codes' captions, and each code as a 1-bit bitmap |
+| `/survival/list` and `/survival/<slot>` | the survival guides' titles, and each guide's text |
 | `/remote/buttons` | the remote app's buttons |
 
 Their formats are in [companion-protocol.md](companion-protocol.md#files-the-companion-writes).

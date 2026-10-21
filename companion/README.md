@@ -8,7 +8,7 @@ firmware beyond sending a watch the reloader that moves it onto BattleTime.
 How to install and use it is in the user guide, [docs/companion](../docs/companion/index.md):
 [connecting a watch](../docs/companion/connecting.md), [apps and the store](../docs/companion/apps-and-store.md),
 [phone features](../docs/companion/phone-features.md), [the watch's data](../docs/companion/watch-data.md),
-[firmware updates](../docs/companion/firmware-updates.md), [notes, QR codes, remote and tools](../docs/companion/tools.md)
+[firmware updates](../docs/companion/firmware-updates.md), [notes, QR codes, survival guides, remote and tools](../docs/companion/tools.md)
 and [the command line](../docs/companion/command-line.md). This file is for working on the app.
 
 ## Status
@@ -176,8 +176,8 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
   (location before Android 12) and, on Android 13 and later, notifications for the keep-alive.
 - **The phone's part** comes from [tauri-plugin-phone-bridge](tauri-plugin-phone-bridge), a Tauri
   plugin whose Kotlin answers the window directly: the notification listener, call monitor, media
-  tracker and keep-alive service, the phone's location for the weather and the remote buttons'
-  intents. Its `build.rs` copies in btleplug's Java. `bridge.js` gives the window
+  tracker and keep-alive service, the phone's location for the weather, the remote buttons'
+  intents, and the SOS screen and recording (`SosActivity`, `SosRecordingService`). Its `build.rs` copies in btleplug's Java. `bridge.js` gives the window
   `window.battletime.phone` in place of the desktop's `desktop` and `remote`, and
   `src/services/phone/tauri-android.ts` turns it into the `phoneBridge`.
 - **The daemon outlives the window.** There is one per process, made by whichever comes first: the
@@ -198,6 +198,9 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
   through Tauri's fs plugin; a note is read again on each check rather than watched.
 - **Plugin pages** are served at `http://plugin.localhost/<id>/`, since Android's webview reaches
   the app's own schemes that way.
+- **Finding the watch** before a connect scans only for the DFU and UART services the watch
+  advertises, since Android pauses a scan with no filter while the screen is off. The scan stops
+  if the watch is not found, because Android refuses new scans while old ones are left running.
 - **Not on Android**: D-Bus, note file watching and shell commands for remote buttons, which are
   compiled out.
 
@@ -206,6 +209,11 @@ The window, the core's Bluetooth, sync and plugins are the desktop app's; what d
 Each `v*` tag publishes `BattleTime-Companion-<version>.apk` with the watch images and the store
 ([release.yml](../.github/workflows/release.yml)). It is one APK for all four phone processors,
 built by `npm run tauri-android:release`, with the version taken from the tag.
+
+Every push to `master` also builds the APK, kept as the `companion-android` artifact of its
+[Companion](../.github/workflows/companion.yml) run. It is numbered one patch above the newest `v*`
+tag (0.2.2 after v0.2.1), so it installs over that release with its data kept, and the next release
+installs over it in turn.
 
 It is signed with the release key, which the repository keeps in its secrets:
 `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_PASSWORD` and
@@ -221,6 +229,24 @@ the last one. Its version is the next patch after the newest `v*` tag, so it ins
 release, and the release after it installs over every dev build. The watch's and companion's
 checks run on `dev` pushes as they do on `master`, but only `master` measures the memory map back
 into the docs.
+
+## Logs
+
+`core/src/logging.rs` keeps one log for the core, the app and the window. It covers each step of
+connecting and its failures, every GATT read, write and subscribe with its characteristic, links
+dropping, the daemon bringing the watch back, sync passes and plugin lines. It also logs Rust
+panics. Each time the watch connects it logs why the watch last restarted and the crash before
+that, read from its diagnostics, so a restart loop shows as one such line per connection.
+
+- **On Android** it goes to the system log under the `BattleTime` tag, and the Kotlin half uses
+  `PhoneBridge`: `adb logcat -s BattleTime PhoneBridge`.
+- **On the desktop** it goes to the terminal.
+- **On both**, it is also written to `logs/companion.log` in the app's data folder. Past 2 MB the
+  file becomes `companion.old.log` and a new one starts.
+
+The companion's own lines are kept down to debug, btleplug's down to info, and other libraries'
+warnings only. The window's `console.warn`, `console.error` and uncaught errors reach the same log
+through the `app_log` command.
 
 ## Layout
 
@@ -240,7 +266,9 @@ src/screens/             One file per screen
   plugins.tsx            Installed plugins, their watch apps and their settings pages
   notes.tsx              The note the watch's Notes app shows (typed, a file or a URL), and its font
   qr-code.tsx            QR codes for text, links or Wi-Fi networks, and the list the watch's qr-code app keeps
+  survival.tsx           A checklist of the emergency guides the watch's survival app carries
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
+  sos.tsx                The watch's SOS: emergency contacts, whom to call, recording, and a running SOS
   launcher.tsx           The launcher's style, view and groups, and which group each app is in
   quick-apps.tsx         The apps a swipe left or right on the watch face steps through
   files.tsx              The watch's file system: browse, send, read, delete, free space
@@ -333,6 +361,12 @@ the same name, which [src/protocol/requests.ts](src/protocol/requests.ts) matche
 waiting for it. A watch app asks for a page with `{"t":"http","url":..,"id":..}` and gets
 `GB({"t":"http","id":..,"resp":..})` back, but only from the hosts listed in Settings.
 
+App messages, `{"t":"app","ch":<topic>,"d":{...}}` both ways, carry a few numbers and a text to and
+from one watch app. [src/protocol/app-message.ts](src/protocol/app-message.ts) and
+[core/src/protocol/app_message.rs](core/src/protocol/app_message.rs) are the only code that writes
+or reads that line; the daemon's [topic router](core/src/daemon/topics.rs) hands each one from the
+watch to the job (`remote`, `sos`) or plugin that hears its topic.
+
 ## The file service
 
 [src/protocol/file-service.ts](src/protocol/file-service.ts) speaks Adafruit's BLE file transfer
@@ -398,6 +432,18 @@ code over 120 modules is refused, and one over 74 is sent with a warning that it
 `battletime qr <text>|wifi <ssid> [password]` adds a code from a terminal, and
 `battletime qr list|rename <n> <label>|move <n> up|down|remove <n>|remove all` manages the list by
 the numbers `list` shows.
+
+## Survival
+
+The Survival screen is a checklist of the emergency guides in
+[src/bundles/survival-guides.ts](src/bundles/survival-guides.ts), grouped into the topics the watch
+lists them under (first aid, wilderness, disasters and personal safety), each readable on the phone first. Its switches start as the watch's `/survival/list`
+says, read when it connects, and sending puts exactly the ticked guides on the watch.
+[src/protocol/survival.ts](src/protocol/survival.ts) writes each guide's text to `/survival/<slot>`
+unless the watch already holds it at the same length, then the list, then deletes the guides left
+out (the layout is in [companion-protocol.md](../docs/companion-protocol.md)). Each guide keeps its
+slot for good, and a new one takes the next free slot up to 23. `battletime survival` lists the
+guides from a terminal, and `battletime survival set|add|remove <guide>...|all` changes them.
 
 ## Remote
 

@@ -5,6 +5,7 @@
 // companion's settings, so a tap can never carry a command, a URL or an intent from the watch.
 
 import { LIBRARY_ICON_NAMES, type LibraryIconName } from '@/bundles/icon-names';
+import { appMessageNumber, readAppMessage } from '@/protocol/app-message';
 import type { FileService } from '@/protocol/file-service';
 import type { WatchToPhoneMessage } from '@/protocol/gadgetbridge';
 import { fingerprint } from '@/protocol/notes';
@@ -231,13 +232,10 @@ export const REMOTE_CHANNEL = 'remote';
 
 // The index of the tapped button, or null when the message is not a well-formed remote tap.
 export function remoteTapIndex(message: WatchToPhoneMessage): number | null {
-  if (message.t !== 'app' || message.ch !== REMOTE_CHANNEL) {
+  const tap = readAppMessage(message);
+  if (!tap || tap.topic !== REMOTE_CHANNEL) {
     return null;
   }
-  const data = message.d;
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
-  const button = (data as { button?: unknown }).button;
-  return typeof button === 'number' && Number.isInteger(button) && button >= 0 ? button : null;
+  const button = appMessageNumber(tap, 'button');
+  return button !== undefined && button >= 0 ? button : null;
 }

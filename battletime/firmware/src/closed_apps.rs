@@ -10,14 +10,23 @@
 //! end, and a save waits with the hold, dropped if the phone writes and written if it does not. A handler that calls
 //! `wake_screen` opens its app over what is open, on the screen its `go` named, and lights the
 //! screen, as InfiniTime opens its alarm.
+//!
+//! A message from the phone for an app goes to it at once when it is open. For a closed app it waits
+//! in one slot, a newer message for any app replacing it, until the store is free; then the app is
+//! loaded and its message handlers run as a due timer's would, with the same memory check and the
+//! same hold. A message the shell cannot run then, for want of room or because the phone holds
+//! the app's state, or for an app that is missing or hears no messages while closed, is dropped.
 
 extern crate alloc;
 
-use alloc::{string::String, vec};
+use alloc::{boxed::Box, string::String, vec};
 
-use battletime_app_host::closed_apps::{run_while_closed, RunsClosedApps, WakeRequest};
+use battletime_app_host::closed_apps::{
+    deliver_message_while_closed, hears_messages_while_closed, run_while_closed, RunsClosedApps, WakeRequest,
+};
 use battletime_app_host::{AppHost, Transition};
-use battletime_runtime::{SystemValue, Value};
+use battletime_companion::AppMessage;
+use battletime_runtime::{memory_need::closed_run_bytes, AppImage, SystemValue, Value};
 use embassy_time::Instant;
 
 use super::{app_name_of, state_path, Shell, Showing};
@@ -180,7 +189,13 @@ impl Shell {
                 break;
             }
         }
-        if closed_for_room && !woke {
+        self.finish_closed_runs(closed_for_room && !woke, alarm_before, now);
+        ran_any
+    }
+
+    /// Opens again what was closed for room, and tells the open app when the closed alarm's next ring moved.
+    fn finish_closed_runs(&mut self, reopen: bool, alarm_before: Value, now: Value) {
+        if reopen {
             self.keeps_vibration_on_open = true;
             self.open(self.showing, Transition::None);
             self.keeps_vibration_on_open = false;
@@ -191,12 +206,16 @@ impl Shell {
                 host.system_values_changed(SystemValue::NextAlarm.bit(), now, &mut self.system);
             }
         }
-        ran_any
     }
 
     /// Closes the open app when the heap lacks room to run `id` beside it; true when it did.
     fn make_room_for(&mut self, id: &str, now: Value) -> bool {
         let need = self.system.closed_apps.run_bytes(id).unwrap_or(0) as usize + ROOM_TO_SPARE_BYTES;
+        self.make_room(need, now)
+    }
+
+    /// Closes the open app when the heap has less than `need` bytes free; true when it did.
+    fn make_room(&mut self, need: usize, now: Value) -> bool {
         if self.host.is_none() || crate::free_heap_bytes() >= need {
             return false;
         }
@@ -249,6 +268,17 @@ impl Shell {
         slot: &mut Option<AppHost<'static>>,
     ) -> Option<Lent<[u8]>> {
         let image = apps::read_image(self.files, battletime_packages::APPS_DIRECTORY, id)?;
+        self.open_closed_image(id, image, now, slot)
+    }
+
+    /// Opens an image already read without a screen into `slot`, as `load_closed_app` does.
+    fn open_closed_image(
+        &mut self,
+        id: &str,
+        image: Lent<[u8]>,
+        now: Value,
+        slot: &mut Option<AppHost<'static>>,
+    ) -> Option<Lent<[u8]>> {
         // One not verified yet waits until it is, when it opens; the heap beside an open app has no room for the verifier.
         if !self.is_verified(image.get()) {
             image.release();
@@ -308,5 +338,119 @@ impl Shell {
         }
         self.system.screen_request = Some(true);
         true
+    }
+}
+
+// ============================================================================
+// Messages from the phone
+// ============================================================================
+
+/// The heap a closed run of the image needs, or 0 when it hears no messages while closed.
+// Out of line, so the parsed image is off the stack while the app runs.
+#[inline(never)]
+fn message_run_bytes(image: &[u8]) -> usize {
+    match AppImage::parse(image) {
+        Ok(parsed) if hears_messages_while_closed(&parsed) => closed_run_bytes(&parsed) as usize,
+        _ => 0,
+    }
+}
+
+/// The id of the app a host runs.
+fn app_id_of<'host>(host: &'host AppHost<'static>) -> Option<&'host str> {
+    host.image().string(host.image().id_string)
+}
+
+impl Shell {
+    /// Hands a message from the phone to the open app it names, or keeps it to run that app while closed.
+    pub(super) fn app_message_arrived(&mut self, message: Box<AppMessage>, now: Value) {
+        let topic = message.topic.as_str();
+        match self.host.as_mut().filter(|host| app_id_of(host) == Some(topic)) {
+            Some(host) => {
+                host.deliver_message(
+                    &message.number_fields(),
+                    message.text_field(),
+                    now,
+                    &mut self.system,
+                );
+            }
+            None => self.waiting_app_message = Some(message),
+        }
+    }
+
+    /// Runs the waiting message's closed app, closing the open app first if the heap needs it; true when anything ran.
+    #[inline(never)]
+    pub(super) fn run_waiting_app_message(&mut self) -> bool {
+        let Some(message) = self.waiting_app_message.take() else {
+            return false;
+        };
+        let now = clock::utc_now();
+        let id = message.topic.as_str();
+        // The app may have opened since the message came.
+        if self.host.as_ref().is_some_and(|host| app_id_of(host) == Some(id)) {
+            self.app_message_arrived(message, now);
+            return true;
+        }
+        let ticks_now = Instant::now().as_ticks();
+        let is_held = app_events::with_state_hold(|hold| hold.held(ticks_now) == Some(id));
+        if is_held || self.system.installed.place_of(id).is_none() {
+            return false;
+        }
+        let Some(image) = apps::read_image(self.files, battletime_packages::APPS_DIRECTORY, id) else {
+            return false;
+        };
+        let run_bytes = message_run_bytes(image.get());
+        if run_bytes == 0 {
+            image.release();
+            return false;
+        }
+        // The image is on the heap already, so only the rest of the run needs room.
+        let need = run_bytes.saturating_sub(image.get().len()) + ROOM_TO_SPARE_BYTES;
+        let alarm_before = self.system.closed_apps.next_alarm(&self.system.open_app_id);
+        let closed_for_room = self.make_room(need, now);
+        let wake = match crate::free_heap_bytes() >= need {
+            true => self.run_message_while_closed(id, image, &message, now),
+            false => {
+                image.release();
+                None
+            }
+        };
+        if let Some(wake) = wake {
+            if self.open_woken_app(id, wake, now) {
+                self.finish_closed_runs(false, alarm_before, now);
+                return true;
+            }
+        }
+        self.finish_closed_runs(closed_for_room, alarm_before, now);
+        true
+    }
+
+    /// Loads a closed app, runs its message handlers, saves its state and notes it again.
+    #[inline(never)]
+    fn run_message_while_closed(
+        &mut self,
+        id: &str,
+        image: Lent<[u8]>,
+        message: &AppMessage,
+        now: Value,
+    ) -> Option<WakeRequest> {
+        let mut slot = None;
+        let image = self.open_closed_image(id, image, now, &mut slot)?;
+        let wake = match &mut slot {
+            Some(host) => {
+                // A notification the app makes shows its own name as the source.
+                let open_name = core::mem::replace(&mut self.system.open_app_name, app_name_of(image.get()));
+                let numbers = message.number_fields();
+                let wake =
+                    deliver_message_while_closed(host, &numbers, message.text_field(), now, &mut self.system);
+                self.system.open_app_name = open_name;
+                self.save_closed_state(id, host);
+                self.system.closed_apps.record(id, host, now);
+                wake
+            }
+            None => None,
+        };
+        drop(slot);
+        image.release();
+        wake
     }
 }

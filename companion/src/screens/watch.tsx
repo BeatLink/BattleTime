@@ -284,6 +284,7 @@ export default function WatchScreen() {
             <>
               <Row label="Notes" detail="Show a text file on the watch, kept up to date" onClick={() => router.push('/notes')} />
               <Row label="QR code" detail="Show a link, some text or a Wi-Fi network as a code" onClick={() => router.push('/qr-code')} />
+              <Row label="Survival" detail="Choose the emergency guides the watch carries" onClick={() => router.push('/survival')} />
               <Row label="Launcher" detail="Group the apps and choose how the launcher shows them" onClick={() => router.push('/launcher')} />
               <Row label="Remote" detail="Buttons on the watch that run actions here" onClick={() => router.push('/remote')} />
               <Row label="Files" detail="Browse, send and delete files, and check free space" onClick={() => router.push('/files')} />

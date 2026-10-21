@@ -1,8 +1,8 @@
 // Every installed plugin, kept running and joined to the watch.
 //
-// Text from the watch's UART comes in as it arrives; an app message on a plugin's channel goes to that
-// plugin, and the plugins hear when the watch connects and disconnects. What they send goes out as
-// GB lines.
+// An app message on a plugin's topic, its id, goes to that plugin, and the plugins hear when the watch
+// connects and disconnects. What they send goes out as GB lines, and their app messages to their own
+// watch app only.
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,7 +13,8 @@ use serde_json::{Map, Value};
 use super::package::Package;
 use super::runtime::{DataWrite, Event, FetchRequest, FetchResponse, PluginServices, RunningPlugin};
 use super::store::{InstalledPlugin, PluginStore};
-use crate::gadgetbridge::{decode_watch_line, encode_for_watch, LineBuffer};
+use crate::gadgetbridge::encode_for_watch;
+use crate::protocol::app_message::AppMessage;
 
 // ============================================================================
 // What the shell provides
@@ -22,6 +23,8 @@ use crate::gadgetbridge::{decode_watch_line, encode_for_watch, LineBuffer};
 // Where the host's output goes: the watch link, the window showing a plugin's settings page, the log.
 pub trait HostOutput: Send + Sync + 'static {
     fn write_to_watch(&self, line: String);
+    // Sends a checked app message, or says why it cannot go now.
+    fn send_app_message(&self, plugin: &str, message: AppMessage) -> Result<(), String>;
     fn send_to_ui(&self, plugin: &str, message: Value);
     fn log(&self, plugin: &str, line: &str);
 }
@@ -43,11 +46,18 @@ struct Services {
     output: Arc<dyn HostOutput>,
     fetcher: Fetcher,
     data: OnceLock<Arc<dyn WatchData>>,
+    connected: AtomicBool,
 }
 
 impl PluginServices for Services {
     fn send_to_watch(&self, _plugin: &str, message: Value) {
         self.output.write_to_watch(encode_for_watch(&message));
+    }
+    fn send_to_app(&self, plugin: &str, message: AppMessage) -> Result<(), String> {
+        if !self.connected.load(Ordering::SeqCst) {
+            return Err("The watch is not connected.".into());
+        }
+        self.output.send_app_message(plugin, message)
     }
     fn send_to_ui(&self, plugin: &str, message: Value) {
         self.output.send_to_ui(plugin, message);
@@ -91,8 +101,6 @@ pub struct PluginHost {
     store: Arc<PluginStore>,
     services: Arc<Services>,
     running: Mutex<BTreeMap<String, RunningPlugin>>,
-    lines: Mutex<LineBuffer>,
-    connected: AtomicBool,
 }
 
 // An installed plugin as the window lists it, with whether its logic is running.
@@ -113,11 +121,10 @@ impl PluginHost {
                 output,
                 fetcher,
                 data: OnceLock::new(),
+                connected: AtomicBool::new(false),
             }),
             store,
             running: Mutex::new(BTreeMap::new()),
-            lines: Mutex::new(LineBuffer::default()),
-            connected: AtomicBool::new(false),
         }
     }
 
@@ -171,7 +178,7 @@ impl PluginHost {
         };
         let settings = self.store.settings(id)?;
         let plugin = RunningPlugin::start(package.manifest, source, settings, self.services.clone())?;
-        if self.connected.load(Ordering::SeqCst) {
+        if self.services.connected.load(Ordering::SeqCst) {
             plugin.send(Event::Connected);
         }
         self.running.lock().unwrap().insert(id.to_string(), plugin);
@@ -244,33 +251,16 @@ impl PluginHost {
     // Traffic
     // ========================================================================
 
-    // Text from the watch's UART, in whatever pieces it arrives.
-    pub fn on_watch_text(&self, chunk: &str) {
-        let lines = self.lines.lock().unwrap().push(chunk);
-        for line in lines {
-            let Some(message) = decode_watch_line(&line) else {
-                continue;
-            };
-            if message["t"] != "app" {
-                continue;
-            }
-            let Some(channel) = message["ch"].as_str() else {
-                continue;
-            };
-            if let Some(plugin) = self.running.lock().unwrap().get(channel) {
-                plugin.send(Event::Message(
-                    message.get("d").cloned().unwrap_or(Value::Object(Map::new())),
-                ));
-            }
+    // An app message from the watch, which goes to the plugin whose id is its topic.
+    pub fn on_app_message(&self, message: &AppMessage) {
+        if let Some(plugin) = self.running.lock().unwrap().get(&message.topic) {
+            plugin.send(Event::Message(message.data()));
         }
     }
 
     pub fn on_connection(&self, connected: bool) {
-        if self.connected.swap(connected, Ordering::SeqCst) == connected {
+        if self.services.connected.swap(connected, Ordering::SeqCst) == connected {
             return;
-        }
-        if !connected {
-            self.lines.lock().unwrap().reset();
         }
         let event = if connected {
             Event::Connected
@@ -314,6 +304,7 @@ mod tests {
     #[derive(Default)]
     struct Shell {
         watch: Mutex<Vec<String>>,
+        app_messages: Mutex<Vec<(String, AppMessage)>>,
         ui: Mutex<Vec<(String, Value)>>,
         log: Mutex<Vec<String>>,
     }
@@ -321,6 +312,13 @@ mod tests {
     impl HostOutput for Shell {
         fn write_to_watch(&self, line: String) {
             self.watch.lock().unwrap().push(line);
+        }
+        fn send_app_message(&self, plugin: &str, message: AppMessage) -> Result<(), String> {
+            self.app_messages
+                .lock()
+                .unwrap()
+                .push((plugin.to_string(), message));
+            Ok(())
         }
         fn send_to_ui(&self, plugin: &str, message: Value) {
             self.ui.lock().unwrap().push((plugin.to_string(), message));
@@ -365,12 +363,35 @@ mod tests {
     fn an_app_message_reaches_its_plugin_and_the_answer_goes_out_as_a_gb_line() {
         let (host, shell, _folder) = host();
         assert!(host.install(&package("echo", ECHO)).unwrap().running);
-        host.on_watch_text("{\"t\":\"app\",\"ch\":\"echo\",");
-        host.on_watch_text("\"d\":{\"button\":2}}\n{\"t\":\"app\",\"ch\":\"other\",\"d\":{}}\nconsole\n");
+        host.on_app_message(&AppMessage::new("echo").with_number("button", 2));
+        host.on_app_message(&AppMessage::new("other"));
         wait_for(|| shell.watch.lock().unwrap().len() == 1);
         assert_eq!(
             shell.watch.lock().unwrap()[0],
             "GB({\"n\":3,\"t\":\"vibrate\"})\n"
+        );
+    }
+
+    #[test]
+    fn a_plugin_sends_to_its_own_app_only_while_the_watch_is_connected() {
+        let (host, shell, _folder) = host();
+        let main = "battletime.on('ui', (m) => { try { battletime.sendToApp(m); } catch (e) { console.log(e.message); } });";
+        host.install(&package("echo", main)).unwrap();
+        host.on_ui_message("echo", json!({ "on": 1 })).unwrap();
+        wait_for(|| shell.log.lock().unwrap().len() == 1);
+        assert_eq!(shell.log.lock().unwrap()[0], "echo: The watch is not connected.");
+        host.on_connection(true);
+        host.on_ui_message("echo", json!({ "on": 1, "note": "hi" }))
+            .unwrap();
+        wait_for(|| shell.app_messages.lock().unwrap().len() == 1);
+        assert_eq!(
+            shell.app_messages.lock().unwrap()[0],
+            (
+                "echo".to_string(),
+                AppMessage::new("echo")
+                    .with_number("on", 1)
+                    .with_text("note", "hi")
+            )
         );
     }
 

@@ -44,6 +44,7 @@ These need the phone or computer connected through the companion app.
 | [Notes](apps/notes.md) | A read-only text note sent from the companion, such as a shopping list. |
 | [QR code](apps/qr-code.md) | Up to eight QR codes made in the companion, shown for another phone to scan. |
 | [Prompt](apps/prompt.md) | A yes or no question from the companion, answered on the watch. |
+| [SOS](apps/sos.md) | Hold the red button for five seconds to send the phone an SOS, while the light, screen and motor flash SOS. |
 
 ## Health
 
@@ -77,6 +78,7 @@ These need the phone or computer connected through the companion app.
 | [Motion](apps/motion.md) | Charts the accelerometer's readings on each axis. |
 | [Metronome](apps/metronome.md) | Beats on the vibration motor, with tap tempo. |
 | [Morse](apps/morse.md) | A notepad you type in Morse code with swipes. |
+| [Survival](apps/survival.md) | Emergency guides by topic, such as CPR, being lost in the wild or protesting safely, chosen in the companion and read offline. |
 | [Haiku](apps/haiku.md) | A new short verse each time it opens. |
 | [Hello](apps/hello.md) | The smallest app, a starting point for reading app code. |
 | [Template](apps/template.md) | A starting point for a new app that answers every kind of input. |

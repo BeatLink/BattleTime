@@ -46,6 +46,9 @@ pub enum EventKind {
     ScreenOff,
     /// A derive subscription's handler rebuilding its array.
     Derive,
+    /// A message from the phone for this app: its text at position 0 and its numbers at 1 to 4,
+    /// each under a key its subscription names, so its fields have no fixed names here.
+    Message,
 }
 
 impl EventKind {
@@ -95,7 +98,7 @@ impl EventKind {
             Notification => &["id", "app", "title", "body", "time"],
             Call => &["kind", "caller"],
             SettingsChange => &["key"],
-            PhoneData | Open | Close | ScreenOn | ScreenOff | Derive => &[],
+            PhoneData | Open | Close | ScreenOn | ScreenOff | Derive | Message => &[],
         }
     }
 
@@ -104,7 +107,7 @@ impl EventKind {
         use EventKind::*;
         matches!(
             (self, field),
-            (Notification, 1..=3) | (Call, 1) | (SettingsChange, 0)
+            (Notification, 1..=3) | (Call, 1) | (SettingsChange, 0) | (Message, 0)
         )
     }
 

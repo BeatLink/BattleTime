@@ -18,6 +18,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 
 use super::manifest::Manifest;
+use crate::protocol::app_message::{encode_app_message, AppMessage};
 
 // ============================================================================
 // Limits
@@ -73,6 +74,8 @@ pub enum DataWrite {
 pub trait PluginServices: Send + Sync + 'static {
     // A message for the watch, already checked against the manifest.
     fn send_to_watch(&self, plugin: &str, message: Value);
+    // An app message for the plugin's own watch app, already checked; refused while no watch can take it.
+    fn send_to_app(&self, plugin: &str, message: AppMessage) -> Result<(), String>;
     fn send_to_ui(&self, plugin: &str, message: Value);
     fn log(&self, plugin: &str, line: &str);
     fn save_settings(&self, plugin: &str, settings: &Map<String, Value>);
@@ -179,6 +182,10 @@ const PRELUDE: &str = r#"
       const refusal = host.send(JSON.stringify(message));
       if (refusal) throw new Error(refusal);
     },
+    sendToApp(data) {
+      const refusal = host.sendToApp(JSON.stringify(data === undefined ? {} : data));
+      if (refusal) throw new Error(refusal);
+    },
     ui: Object.freeze({ send: (message) => host.ui(JSON.stringify(message)) }),
     data: Object.freeze({
       get(source) {
@@ -257,6 +264,13 @@ pub fn refuse_message(manifest: &Manifest, message: &Value) -> Option<String> {
             "This plugin may not send \"{message_type}\" messages; add it to permissions.messages."
         ))
     }
+}
+
+// The app message for the plugin's own watch app, whose topic is the plugin's id, or why the data cannot go.
+pub fn app_message_for(manifest: &Manifest, data: &Value) -> Result<AppMessage, String> {
+    let message = AppMessage::from_data(&manifest.id, data)?;
+    encode_app_message(&message)?;
+    Ok(message)
 }
 
 // Why the script may not fetch this address, or None when it may.
@@ -451,6 +465,21 @@ impl Script {
                 }
                 services.send_to_watch(&id, message);
                 String::new()
+            })?,
+        )?;
+
+        let (services, id, checked) = (self.services.clone(), self.id.clone(), manifest.clone());
+        host.set(
+            "sendToApp",
+            Function::new(ctx.clone(), move |text: String| -> String {
+                let Ok(data) = serde_json::from_str::<Value>(&text) else {
+                    return "The message is not JSON.".into();
+                };
+                match app_message_for(&checked, &data).and_then(|message| services.send_to_app(&id, message))
+                {
+                    Ok(()) => String::new(),
+                    Err(refusal) => refusal,
+                }
             })?,
         )?;
 
@@ -762,6 +791,7 @@ pub(crate) mod tests {
     #[derive(Default)]
     pub struct Recorder {
         pub watch: Mutex<Vec<Value>>,
+        pub app_messages: Mutex<Vec<AppMessage>>,
         pub ui: Mutex<Vec<Value>>,
         pub log: Mutex<Vec<String>>,
         pub settings: Mutex<Vec<Map<String, Value>>>,
@@ -774,6 +804,13 @@ pub(crate) mod tests {
     impl PluginServices for Recorder {
         fn send_to_watch(&self, _plugin: &str, message: Value) {
             self.watch.lock().unwrap().push(message);
+        }
+        fn send_to_app(&self, _plugin: &str, message: AppMessage) -> Result<(), String> {
+            if message.number("refuse").is_some() {
+                return Err("The watch is not connected.".into());
+            }
+            self.app_messages.lock().unwrap().push(message);
+            Ok(())
         }
         fn send_to_ui(&self, _plugin: &str, message: Value) {
             self.ui.lock().unwrap().push(message);
@@ -867,6 +904,31 @@ pub(crate) mod tests {
             recorder.watch.lock().unwrap()[0],
             json!({ "t": "vibrate", "n": 2 })
         );
+    }
+
+    #[test]
+    fn a_plugin_sends_app_messages_to_its_own_app_and_bad_ones_throw() {
+        let (plugin, recorder) = start(
+            "battletime.on('ui', (m) => { try { battletime.sendToApp(m); } catch (e) { console.log(e.message); } });",
+            &[],
+            &[],
+        );
+        plugin.send(Event::Ui(json!({ "count": 3, "loud": true, "note": "hi" })));
+        plugin.send(Event::Ui(json!({ "half": 1.5 })));
+        plugin.send(Event::Ui(json!({ "a": "x", "b": "y" })));
+        plugin.send(Event::Ui(json!({ "refuse": 1 })));
+        wait_for(|| recorder.log.lock().unwrap().len() == 3);
+        assert_eq!(
+            recorder.app_messages.lock().unwrap().as_slice(),
+            [AppMessage::new("demo")
+                .with_number("count", 3)
+                .with_number("loud", 1)
+                .with_text("note", "hi")]
+        );
+        let log = recorder.log.lock().unwrap();
+        assert!(log[0].contains("whole number"));
+        assert!(log[1].contains("at most 1 text"));
+        assert_eq!(log[2], "The watch is not connected.");
     }
 
     #[test]

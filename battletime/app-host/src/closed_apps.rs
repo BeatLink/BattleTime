@@ -3,13 +3,16 @@
 //! The embedder keeps one small entry for each such app: when its next subscription is due and the
 //! heap a run needs, and nothing else of it in RAM. When an entry comes due, the embedder loads the
 //! app without a screen (`AppHost::open_in_background`), `run_while_closed` fires what is due, and
-//! the app is recorded again. A handler that calls `wake_screen` asks for its app to be opened and
+//! the app is recorded again. A message from the phone for a closed app runs its message handlers
+//! the same way (`deliver_message_while_closed`). A handler that calls `wake_screen` asks for its app to be opened and
 //! the screen lit, on the screen its `go` named, as InfiniTime opens its alarm and timer. The alarm
 //! app's next ring is `next_alarm`, the bell watch faces show.
 
 use alloc::{string::String, vec::Vec};
 
-use battletime_runtime::{memory_need::closed_run_bytes, EffectKind, Value, NONE};
+use battletime_runtime::{
+    memory_need::closed_run_bytes, subscriptions::SubscriptionKind, AppImage, EffectKind, Value, NONE,
+};
 
 use crate::host::AppHost;
 use crate::system::{AppEffect, System};
@@ -177,8 +180,35 @@ pub fn run_while_closed<Embedder: RunsClosedApps>(
     *system.closed_run() = Some(ClosedRun::default());
     host.check_timers_from(checked_at);
     host.tick(now, system);
+    take_wake_request(system)
+}
+
+/// Hands a closed app a message from the phone, as `deliver_message` does, and says whether a handler asked to wake the screen.
+///
+/// Only its message subscriptions without `while_open` run, since the app is closed.
+pub fn deliver_message_while_closed<Embedder: RunsClosedApps>(
+    host: &mut AppHost,
+    numbers: &[(&str, Value)],
+    text: Option<(&str, &str)>,
+    now: Value,
+    system: &mut Embedder,
+) -> Option<WakeRequest> {
+    *system.closed_run() = Some(ClosedRun::default());
+    host.deliver_message(numbers, text, now, system);
+    take_wake_request(system)
+}
+
+/// Ends a closed run, with the wake request its handlers made, if any.
+fn take_wake_request<Embedder: RunsClosedApps>(system: &mut Embedder) -> Option<WakeRequest> {
     let run = system.closed_run().take()?;
     run.wakes.then_some(WakeRequest { screen: run.screen })
+}
+
+/// Whether a closed app's image hears messages from the phone, so a message for it is worth loading it for.
+pub fn hears_messages_while_closed(image: &AppImage) -> bool {
+    (0..image.subscription_count())
+        .filter_map(|index| image.subscription(index))
+        .any(|subscription| subscription.kind == SubscriptionKind::Message && !subscription.only_while_open)
 }
 
 // ============================================================================

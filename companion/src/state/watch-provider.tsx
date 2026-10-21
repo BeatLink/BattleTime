@@ -59,6 +59,7 @@ import { currentWeather, weatherPlace } from '@/services/weather';
 import { watchClockChanges } from '@/state/clock-changes';
 import { NoteSync, type NoteStatus } from '@/state/note-sync';
 import { RemoteSync, type RemoteStatus } from '@/state/remote-sync';
+import { IDLE_SOS, type SosStatus } from '@/state/sos';
 import { defaultSettings, loadSettings, readSettings, saveSettings, type Settings } from '@/state/settings';
 
 export type ConsoleEntry = {
@@ -139,6 +140,10 @@ type WatchContextValue = {
   remoteUnavailable: (action: RemoteAction) => string | null;
   // Delivers a tap as the mock watch, or is null with a real watch.
   simulateRemoteTap: ((index: number) => void) | null;
+  // The SOS the watch last sent, as the daemon runs it; idle without a daemon.
+  sosStatus: SosStatus;
+  // Stops the SOS: the recording, the calling and the phone's SOS screen.
+  stopSos: () => Promise<void>;
 };
 
 export type NowPlaying = Extract<PhoneEvent, { type: 'media' }>;
@@ -812,6 +817,12 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
     setRemoteLog([]);
   }, [daemon]);
 
+  const stopSos = useCallback(async () => {
+    if (daemon) {
+      await daemonValue(daemon.stopSos());
+    }
+  }, [daemon]);
+
   const simulateRemoteTap = useMemo(
     () =>
       transportKind === 'mock'
@@ -844,6 +855,7 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
     noteStatus: daemonState ? (daemonState.features.noteStatus ?? { kind: 'idle' as const }) : noteStatus,
     remoteStatus: daemonState ? (daemonState.features.remoteStatus ?? { kind: 'idle' as const }) : remoteStatus,
     remoteLog: daemonState ? (daemonState.features.remoteLog ?? []) : remoteLog,
+    sosStatus: daemonState?.features.sosStatus ?? IDLE_SOS,
   };
 
   const value = useMemo<WatchContextValue>(
@@ -891,6 +903,8 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       testRemoteButton,
       remoteUnavailable,
       simulateRemoteTap,
+      sosStatus: shown.sosStatus,
+      stopSos,
     }),
     [
       shownConnection,
@@ -910,6 +924,8 @@ export function WatchProvider({ children }: { children: ComponentChildren }) {
       testRemoteButton,
       remoteUnavailable,
       simulateRemoteTap,
+      shown.sosStatus,
+      stopSos,
       noteFiles,
       syncNote,
       forgetNote,

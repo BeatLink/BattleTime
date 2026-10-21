@@ -289,6 +289,19 @@ button.row:active {
   border-top: 1px solid var(--background-selected);
 }
 
+.guide-text summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.guide-text pre {
+  margin: 8px 0 0;
+  font: inherit;
+  font-size: 0.875rem;
+  white-space: pre-wrap;
+}
+
 .split {
   display: flex;
   align-items: center;

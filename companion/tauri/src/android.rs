@@ -84,6 +84,7 @@ pub extern "system" fn Java_com_battletime_companion_phonebridge_NativeDaemon_at
     mut unowned_env: EnvUnowned<'caller>,
     _class: JClass<'caller>,
 ) {
+    battletime_companion_core::logging::start();
     unowned_env
         .with_env(|env| -> jni::errors::Result<()> { remember_host(env) })
         .resolve::<ThrowRuntimeExAndDefault>()

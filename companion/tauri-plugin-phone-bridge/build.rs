@@ -20,6 +20,9 @@ const COMMANDS: &[&str] = &[
     "open_uri",
     "start_activity",
     "send_broadcast",
+    "sos_permissions",
+    "request_sos_permissions",
+    "open_overlay_settings",
     "register_listener",
     "remove_listener",
 ];

@@ -157,6 +157,7 @@ Messages travel over the Nordic UART service, as Gadgetbridge's Bangle.js driver
 | `music`, `call`, `findPhone`, `request`, `app` | watch | [Lines the watch sends](#lines-the-watch-sends) |
 | `slots` | phone, and the watch's reply | [Slots](#slots-served) |
 | `state` | phone | [App state](#app-state-served) |
+| `app` | phone | [App messages](#app-messages-served) |
 | `error` | watch | the answer to a line it cannot read |
 | `alarm`, `steps`, `http`, `info` | | [Not served yet](#other-messages-not-served-yet) |
 
@@ -279,13 +280,49 @@ Watch to phone, sent as apps ask:
 In an `app` line the channel and keys are 1 to 32 letters, digits, `_` or `-`, written out in the
 app; `d` holds up to 4 whole numbers, in the order the app wrote them, or is `{}`. For example the
 remote app's third button sends `{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no
-reply to these, but `request`.
+reply to these, but `request`; [App messages](#app-messages-served) has both directions.
+
+The companion app reads the `sos` channel itself, from the watch's SOS app.
+`{"t":"app","ch":"sos","d":{"on":1}}` starts an SOS on the phone and `{"on":0}` stops it; see
+[SOS](companion/phone-features.md#sos). An SOS stopped on the phone reaches the watch as the app
+message `{"t":"app","ch":"sos","d":{"on":0}}` on the `sos` topic.
 
 Bangle.js has no message asking the phone again, and Gadgetbridge logs `request` as one it does not
 know and sends nothing; it sends the music and navigation whenever they change. The companion app
 answers `{"t":"request","n":"music"}` with `musicinfo` and `musicstate` for what the phone plays,
 when it forwards music and knows of a track, and `{"t":"request","n":"nav"}` with `{"t":"nav"}`,
 since it follows no navigation, which tells the watch there is none.
+
+### App messages (served)
+
+An app message is a few values for one watch app, sent on its topic, which is the app's id: 1 to
+32 letters, digits, `_` or `-`. It goes both ways on the same line shape.
+
+| Direction | Line | `d` |
+|---|---|---|
+| Watch to phone | `{"t":"app","ch":"<topic>","d":{...}}` | up to 4 whole numbers, from the app's `send_to_phone(topic, data)` |
+| Phone to watch | `GB({"t":"app","ch":"<topic>","d":{...}})` | up to 4 whole numbers and at most 1 text |
+
+- Keys in `d` are 1 to 32 letters, digits, `_` or `-`. A number is a whole number that fits in a
+  signed 32-bit integer; `true` and `false` are read as `1` and `0`. A text is a string, of which
+  the watch keeps the first 120 bytes.
+- The whole line, `GB(` and `)` included but not the newline, is at most 640 bytes of ASCII, with
+  any other character written as `\uXXXX`. The phone refuses to send a longer one.
+- The watch hands a message to the app named by its topic. An open app gets it at once. A closed
+  one is started in the background just long enough to run its message handlers that are not
+  `while_open`, without showing it. One message waits for that run at a time, so a newer message
+  for any closed app replaces one not yet taken.
+- The message is dropped when the app is not installed or is turned off, has no handler that runs
+  while closed, has its state held by the phone ([App state](#app-state-served)), or cannot be
+  started because the heap is too full.
+- The watch skips top-level keys other than `t`, `ch` and `d`, and answers a phone-to-watch line it
+  cannot read, such as one with five numbers, with `{"t":"error","msg":"could not read that message"}`.
+  Otherwise neither side replies, so the sender never learns whether the app heard it. A message the
+  app must not miss is sent again when it matters, as the companion does for SOS on each connection.
+
+For example `GB({"t":"app","ch":"sos","d":{"on":0}})` stops the SOS app's signalling, and
+`GB({"t":"app","ch":"buzz-back","d":{"count":3,"note":"From the phone"}})` reaches the
+`buzz-back` app with a number and a text.
 
 ### Slots (served)
 
@@ -418,6 +455,7 @@ whole with the file transfer above; the watch only reads them.
 |---|---|---|
 | `/notes/note.txt`, `/notes/font` | the notes app | [Notes](#notes) |
 | `/qr/list`, `/qr/<slot>` | the `qr-code` app | [QR code](#qr-code) |
+| `/survival/list`, `/survival/<slot>` | the `survival` app | [Survival](#survival) |
 | `/settings/launcher` | the launcher | [Launcher](#launcher) |
 | `/settings/quick_apps` | the watch face's swipes | [Quick apps](#quick-apps) |
 | `/remote/buttons` | the remote app | [Remote](#remote) |
@@ -499,6 +537,29 @@ watch paints the white margin itself.
 
 The watch refuses a code over 120 by 120 modules. Above 74 modules a module is under 3 pixels on
 the 240 pixel screen and may not scan, so the companion warns but still sends it.
+
+### Survival
+
+The `survival` app lists the topics of the emergency guides in `/survival/list`, then a topic's
+guides, and shows the guide tapped from `/survival/<slot>`, reading only the lines in view. The guides' texts live in the companion app,
+each keeping one slot for good. Sending a choice writes each chosen guide the watch lacks or holds
+at another length, then the list, then deletes the guides left out, so the list never names a
+missing file.
+
+`/survival/list` holds up to 24 guides, in the order the watch lists them within each topic:
+
+| Bytes | Holds |
+|---|---|
+| 0 | format version, 2 |
+| 1 | how many guides, 0 to 24 |
+| 2.. | 26 bytes for each guide: its slot (0 to 23), its topic, its title's length (1 to 23), then the title padded with zeros to 23 bytes |
+
+The topics are numbered 0 first aid, 1 wilderness, 2 disasters and 3 personal safety; the watch
+lists only those with a guide.
+
+A list in another version, such as the first one without topics, shows no guides, and deleting `/survival/list` brings back the app's
+hint. `/survival/<slot>`, such as `/survival/9`, is the guide's text, in plain ASCII; a listed
+guide whose file is missing or empty shows a reminder to send it again.
 
 ### Launcher
 
@@ -626,6 +687,10 @@ the packages characteristic. Each command is a JSON line written to it, of at mo
 each answer a JSON line notified on it, in pieces of up to 20 bytes; a failure answers with the
 command and `"err":"..."`. The recovery firmware has no apps, so it refuses every command with an
 error.
+
+Send a command only while no file service operation is in flight. A command that overlaps file
+service traffic can hang the watch until its watchdog resets it ([todo](todo.md)), so the companion
+sends each one in its own turn on the file service.
 
 | Command | Answer |
 |---|---|

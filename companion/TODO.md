@@ -87,6 +87,25 @@ messages are the ones it lists as not served yet.
 - **The command line's buttons file.** `battletime remote` reads its own JSON file; the desktop app
   could export its buttons there.
 
+## SOS
+
+- **Untried on a phone.** The SOS screen, the recording, the calls and the texts have run only
+  against a fake phone in the core's tests. On Android 14 or later, with a second phone as the only
+  contact and the call set to contacts, check each of these:
+  - the SOS screen opens over the lock screen with the app closed, once **Display over other apps**
+    is allowed, and without it the notification appears and starts the recording when tapped;
+  - a phone that lists a front and back pair in `getConcurrentCameraIds` records both, one that does
+    not records the back camera, and both files play from `Movies/BattleTime SOS`;
+  - the contact gets the text with a map link that opens at the right place;
+  - the contact is called, an unanswered call moves to the next contact, and an answered one longer
+    than 30 seconds ends the calling;
+  - with the call set to the emergency number, the dialer opens with it typed in (cancel it there);
+  - **Stop SOS** on the SOS screen and in the companion both end the recording and keep the files,
+    and the watch hears `{"on":0}` on the `sos` topic and its SOS app goes back to its hold button,
+    at once when connected and on the next connection when not.
+- **A lost phone loses the recording.** Each file is kept only once the SOS stops; short pieces, or an
+  upload as it records, would keep the part made before the phone was taken.
+
 ## Quick apps
 
 - **Untried with a watch.** Reading and writing `/settings/quick_apps` has run only against the

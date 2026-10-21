@@ -127,6 +127,22 @@ impl Device for PhoneDevice {
         let started = self.ask_later("intent", json!({ "intent": action["intent"] }), ANSWER_TIMEOUT);
         Box::pin(async move { started.await.map(|_| json!({})) })
     }
+
+    fn sos_screen(&self, on: bool, record: bool) -> DeviceAnswer<()> {
+        self.ask_for_nothing("sosScreen", json!({ "on": on, "record": record }))
+    }
+
+    fn call_number(&self, number: &str) -> DeviceAnswer<()> {
+        self.ask_for_nothing("callNumber", json!({ "number": number }))
+    }
+
+    fn dial_number(&self, number: &str) -> DeviceAnswer<()> {
+        self.ask_for_nothing("dialNumber", json!({ "number": number }))
+    }
+
+    fn send_text(&self, number: &str, text: &str) -> DeviceAnswer<()> {
+        self.ask_for_nothing("sendText", json!({ "number": number, "text": text }))
+    }
 }
 
 // ============================================================================
@@ -246,6 +262,29 @@ mod tests {
         assert_eq!(
             heard.lock().unwrap().clone(),
             [("intent".to_string(), json!({ "intent": intent }))]
+        );
+    }
+
+    #[tokio::test]
+    async fn the_sos_steps_reach_the_phone_by_name() {
+        let (device, heard) = phone(json!({}));
+
+        device.sos_screen(true, false).await.unwrap();
+        device.call_number("555 0101").await.unwrap();
+        device.dial_number("911").await.unwrap();
+        device.send_text("555 0101", "Help").await.unwrap();
+
+        assert_eq!(
+            heard.lock().unwrap().clone(),
+            [
+                ("sosScreen".to_string(), json!({ "on": true, "record": false })),
+                ("callNumber".to_string(), json!({ "number": "555 0101" })),
+                ("dialNumber".to_string(), json!({ "number": "911" })),
+                (
+                    "sendText".to_string(),
+                    json!({ "number": "555 0101", "text": "Help" })
+                ),
+            ]
         );
     }
 

@@ -27,6 +27,12 @@ const MILLISECONDS_PER_MINUTE: Value = 60_000;
 const MILLISECONDS_PER_DAY: Value = 86_400_000;
 const ALL_DAYS: u16 = 0b111_1111;
 
+/// How many keys a message subscription names: its text first, then its numbers.
+pub const MESSAGE_KEYS: usize = 5;
+
+/// A message key that names no field.
+pub const NO_MESSAGE_KEY: u16 = u16::MAX;
+
 // ============================================================================
 // Kinds
 // ============================================================================
@@ -69,10 +75,13 @@ pub enum SubscriptionKind {
     /// Rebuilds a hidden array, such as a `computed` array a widget shows. The runtime runs the
     /// handler when the app opens and whenever anything the handler reads changes.
     Derive,
+    /// A message from the phone for this app. `days` names the string of its text key and `value`
+    /// holds the strings of up to four number keys, as `message_keys` reads them.
+    Message,
 }
 
 impl SubscriptionKind {
-    const ALL: [SubscriptionKind; 22] = {
+    const ALL: [SubscriptionKind; 23] = {
         use SubscriptionKind::*;
         [
             Open,
@@ -97,6 +106,7 @@ impl SubscriptionKind {
             Navigation,
             SettingsChange,
             Derive,
+            Message,
         ]
     };
 
@@ -124,6 +134,7 @@ impl SubscriptionKind {
             Music | Weather | Navigation => EventKind::PhoneData,
             SettingsChange => EventKind::SettingsChange,
             Derive => EventKind::Derive,
+            Message => EventKind::Message,
         }
     }
 
@@ -207,6 +218,35 @@ impl Subscription {
         bytes
     }
 
+    /// A message subscription made from the strings of its keys: its text first, then its numbers, `NO_MESSAGE_KEY` for none.
+    pub fn for_message(handler: u16, only_while_open: bool, keys: [u16; MESSAGE_KEYS]) -> Subscription {
+        let mut value = [0u8; 8];
+        for (place, key) in keys[1..].iter().enumerate() {
+            value[place * 2..place * 2 + 2].copy_from_slice(&key.to_le_bytes());
+        }
+        Subscription {
+            kind: SubscriptionKind::Message,
+            only_while_open,
+            handler,
+            detail: 0,
+            days: keys[0],
+            value: SubscriptionValue::Constant(i64::from_le_bytes(value)),
+        }
+    }
+
+    /// The strings of a message subscription's keys, in the order of the event's fields: its text, then its numbers.
+    pub fn message_keys(&self) -> [u16; MESSAGE_KEYS] {
+        let mut keys = [NO_MESSAGE_KEY; MESSAGE_KEYS];
+        keys[0] = self.days;
+        if let SubscriptionValue::Constant(value) = self.value {
+            let bytes = value.to_le_bytes();
+            for (place, key) in keys[1..].iter_mut().enumerate() {
+                *key = u16::from_le_bytes([bytes[place * 2], bytes[place * 2 + 1]]);
+            }
+        }
+        keys
+    }
+
     /// The subscription's value now: its constant, or what its state variable holds.
     pub fn current_value(&self, state: &AppState) -> Option<Value> {
         match self.value {
@@ -288,6 +328,8 @@ pub enum SubscriptionProblem {
     PeriodTooShort,
     MustBeOnlyWhileOpen,
     BadTimeOfDay,
+    /// A message key that names no string, or the same string twice.
+    BadMessageKey,
 }
 
 /// Checks every subscription in the image.
@@ -317,6 +359,9 @@ fn check_subscription(image: &AppImage, subscription: &Subscription) -> Result<(
     if subscription.kind == Daily && (subscription.days == 0 || subscription.days > ALL_DAYS) {
         return Err(SubscriptionProblem::BadDays);
     }
+    if subscription.kind == Message {
+        check_message_keys(image, subscription)?;
+    }
 
     match subscription.value {
         SubscriptionValue::Variable(variable) => {
@@ -345,6 +390,20 @@ fn check_subscription(image: &AppImage, subscription: &Subscription) -> Result<(
             if needs_open && !subscription.only_while_open {
                 return Err(SubscriptionProblem::MustBeOnlyWhileOpen);
             }
+        }
+    }
+    Ok(())
+}
+
+/// Every key of a message subscription names a string, and no two the same one.
+fn check_message_keys(image: &AppImage, subscription: &Subscription) -> Result<(), SubscriptionProblem> {
+    let keys = subscription.message_keys();
+    for (place, &key) in keys.iter().enumerate() {
+        if key == NO_MESSAGE_KEY {
+            continue;
+        }
+        if image.string(key).is_none() || keys[..place].contains(&key) {
+            return Err(SubscriptionProblem::BadMessageKey);
         }
     }
     Ok(())

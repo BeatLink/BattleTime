@@ -1,6 +1,8 @@
 //! Tests for the events an app connects to with `on`, read back from the compiled image.
 
-use battletime_runtime::subscriptions::{Subscription, SubscriptionKind, SubscriptionValue};
+use battletime_runtime::subscriptions::{
+    Subscription, SubscriptionKind, SubscriptionValue, MESSAGE_KEYS, NO_MESSAGE_KEY,
+};
 use battletime_runtime::{AppImage, AppState, Interpreter, SystemValue, SystemValues, Value, NONE};
 
 use super::EVENTS;
@@ -123,11 +125,11 @@ fn an_event_name_that_is_not_text_is_refused() {
 }
 
 #[test]
-fn the_message_event_is_not_in_the_image_format_yet() {
-    let message = first_error(&listening("", r#"on("message", tick)"#));
+fn the_http_response_event_is_not_in_the_image_format_yet() {
+    let message = first_error(&listening("", r#"on("http_response", tick)"#));
 
     assert!(
-        message.starts_with("the `message` event is not in the image format yet"),
+        message.starts_with("the `http_response` event is not in the image format yet"),
         "{message}"
     );
 }
@@ -814,6 +816,129 @@ fn at_most_every_takes_a_period_too() {
     let source = listening("", r#"on("shake", tick, { at_most_every: { seconds: 2 } })"#);
 
     assert_eq!(only_subscription(&source).kind, SubscriptionKind::Motion);
+}
+
+// ============================================================================
+// Messages from the phone
+// ============================================================================
+
+/// The strings a compiled message subscription names, text first, `None` for an unused key.
+fn message_key_names(source: &str) -> (Subscription, Vec<Option<String>>) {
+    let output = compile_source(source);
+    let errors: Vec<String> = output.errors().map(|error| error.message.clone()).collect();
+    assert!(errors.is_empty(), "{}", errors.join("\n"));
+    let bytes = output.image.expect("an image");
+    let image = AppImage::parse(&bytes).unwrap();
+    let subscription = (0..image.subscription_count())
+        .filter_map(|index| image.subscription(index))
+        .find(|subscription| subscription.kind == SubscriptionKind::Message)
+        .expect("a message subscription");
+    let names = subscription
+        .message_keys()
+        .iter()
+        .map(|&key| (key != NO_MESSAGE_KEY).then(|| image.string(key).unwrap().to_string()))
+        .collect();
+    (subscription, names)
+}
+
+#[test]
+fn a_message_handler_names_its_text_and_number_keys_in_the_image() {
+    let (subscription, names) = message_key_names(&listening(
+        "function heard(message: { on: number; label: string; loud: boolean }) { count.value = message.on; }",
+        r#"on("message", heard)"#,
+    ));
+
+    assert_eq!(subscription.kind, SubscriptionKind::Message);
+    assert!(!subscription.only_while_open);
+    let expected = [Some("label"), Some("on"), Some("loud"), None, None];
+    assert_eq!(names.len(), MESSAGE_KEYS);
+    for (name, expected) in names.iter().zip(expected) {
+        assert_eq!(name.as_deref(), expected);
+    }
+}
+
+#[test]
+fn a_message_handler_reads_each_number_by_its_position() {
+    let output = compile_source(&listening(
+        "type Heard = { on: number; loud: boolean };\nfunction heard({ on, loud }: Heard) { count.value = on + (loud ? 10 : 0); }",
+        r#"on("message", heard, { while_open: true })"#,
+    ));
+    let bytes = output.image.expect("an image");
+    let image = AppImage::parse(&bytes).unwrap();
+    let mut state = AppState::new(&image).unwrap();
+    let handler = image.subscription(0).unwrap().handler;
+    let count_slot = (0..image.state_count())
+        .find(|slot| image.string(image.state_variable(*slot).unwrap().key_string) == Some("count"))
+        .unwrap();
+
+    Interpreter::new()
+        .run_handler(&image, handler, &mut state, &[0, 7, 1, 0, 0], &Clock { now: 0 })
+        .unwrap();
+
+    assert_eq!(state.get(count_slot as u8), Some(17));
+}
+
+#[test]
+fn a_message_handler_without_a_parameter_reads_nothing() {
+    let (_, names) = message_key_names(&listening("", r#"on("message", tick)"#));
+
+    assert!(names.iter().all(Option::is_none), "{names:?}");
+}
+
+#[test]
+fn a_message_type_past_the_limits_or_without_fields_is_refused() {
+    let cases = [
+        (
+            "function heard(message: { a: number; b: number; c: number; d: number; e: number }) {}",
+            "at most 4 numbers, so `e` is one too many",
+        ),
+        (
+            "function heard(message: { a: string; b: string }) {}",
+            "at most 1 text, so `b` is one too many",
+        ),
+        (
+            "function heard(message) {}",
+            "give the message's parameter a type",
+        ),
+        (
+            "function heard(message: number) {}",
+            "a message's type lists its fields",
+        ),
+        (
+            "function heard(message: { list: number[] }) {}",
+            "the message field `list` must be a number, a boolean or a string",
+        ),
+        (
+            r#"function heard(message: { "two words": number }) {}"#,
+            "a message field's name is 1 to 32 letters",
+        ),
+    ];
+    for (declaration, advice) in cases {
+        let message = first_error(&listening(declaration, r#"on("message", heard)"#));
+        assert!(message.contains(advice), "expected `{advice}` in: {message}");
+    }
+}
+
+#[test]
+fn a_message_handler_must_be_a_function() {
+    let message = first_error(&listening("", r#"on("message", 3)"#));
+
+    assert!(
+        message.starts_with("the `message` event needs a function"),
+        "{message}"
+    );
+}
+
+#[test]
+fn messages_need_phone_messages_and_background_unless_only_while_open() {
+    let closed = compile_source(&listening("", r#"on("message", tick)"#));
+    let open = compile_source(&listening("", r#"on("message", tick, { while_open: true })"#));
+
+    assert_eq!(
+        closed.permissions,
+        [Permission::PhoneMessages, Permission::Background]
+    );
+    assert_eq!(open.permissions, [Permission::PhoneMessages]);
 }
 
 // ============================================================================

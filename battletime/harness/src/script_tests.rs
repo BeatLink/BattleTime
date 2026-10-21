@@ -20,6 +20,7 @@ const taps = signal(0);
 const holds = signal(0);
 const double_taps = signal(0);
 const drags = signal(0);
+const fingers_down = signal(0);
 const notifications = signal(0);
 const divisor = signal(1);
 
@@ -43,10 +44,13 @@ function Scripted() {
         onLongPress={() => { holds.value = holds.value + 1; }}
         onDoubleClick={() => { double_taps.value = double_taps.value + 1; }}
         onDrag={() => { drags.value = drags.value + 1; }}
+        onPress={() => { fingers_down.value = fingers_down.value + 1; }}
+        onRelease={() => { fingers_down.value = fingers_down.value - 1; }}
       >
         Count
       </Button>
       <Button onClick={fail}>Fail</Button>
+      <Label>{`Down ${fingers_down.value}`}</Label>
     </Screen>
   );
 }
@@ -465,6 +469,22 @@ expect no text "Drags 0"
 }
 
 #[test]
+fn a_press_stays_down_through_a_wait_until_released() {
+    let run = run_on_scripted_app(
+        r#"
+press "Count"
+wait 3s
+expect text "Down 1"
+release "Count"
+expect text "Down 0"
+expect text "Taps 0 Holds 0"
+"#,
+    );
+
+    assert_eq!(run.failure, None);
+}
+
+#[test]
 fn a_touch_on_text_that_is_not_shown_fails_listing_the_shown_texts() {
     let run = run_on_scripted_app("tap \"Start\"\n");
 
@@ -714,5 +734,19 @@ fn a_phone_line_reaches_the_app_and_a_line_the_watch_refuses_fails() {
     );
     let failure = run_on_scripted_app("phone \"GB(oops)\"\n").failure.unwrap();
     assert_eq!(failure.expected, "a line the watch takes");
+    assert!(failure.found.contains("cannot read"), "{}", failure.found);
+}
+
+#[test]
+fn a_message_writes_an_app_line_for_its_topic() {
+    let script = parse_script("message sos \"{\\\"on\\\":0}\"\n").unwrap();
+    assert_eq!(
+        script.steps[0].command,
+        ScriptCommand::Phone(r#"{"t":"app","ch":"sos","d":{"on":0}}"#.to_string())
+    );
+
+    assert!(parse_script("message \"{}\"\n").is_err());
+    assert_eq!(run_on_scripted_app("message nobody \"{}\"\n").failure, None);
+    let failure = run_on_scripted_app("message nobody \"[1]\"\n").failure.unwrap();
     assert!(failure.found.contains("cannot read"), "{}", failure.found);
 }

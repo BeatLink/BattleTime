@@ -21,7 +21,11 @@ function loadBridge(onAndroid: boolean) {
   const addPluginListener = jest.fn(async (_plugin: string, _event: string, listener: (payload: unknown) => void) => {
     pluginListener = listener;
   });
+  const windowListeners = new Map<string, (event: unknown) => void>();
+  const printed = { warn: jest.fn(), error: jest.fn() };
   const fakeWindow: Record<string, unknown> = {
+    console: { ...printed },
+    addEventListener: (name: string, listener: (event: unknown) => void) => windowListeners.set(name, listener),
     __BATTLETIME_ANDROID__: onAndroid,
     __TAURI_INTERNALS__: { invoke },
     __TAURI__: { core: { addPluginListener }, event: { listen: jest.fn() } },
@@ -31,6 +35,9 @@ function loadBridge(onAndroid: boolean) {
   return {
     bridge: fakeWindow.battletime as Bridge,
     invoke,
+    console: fakeWindow.console as typeof printed,
+    printed,
+    fireWindowEvent: (name: string, event: unknown) => windowListeners.get(name)?.(event),
     addPluginListener,
     sendPhoneEvent: (payload: unknown) => pluginListener(payload),
   };
@@ -110,5 +117,34 @@ describe('bridge.js', () => {
     sendPhoneEvent({ type: 'call', state: 'start' });
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(2);
+  });
+
+  it("sends the window's errors to the companion's log with their stack, and still prints them", () => {
+    const { console, printed, invoke } = loadBridge(false);
+    const error = new Error('the watch said no');
+    console.error('Could not read:', error);
+    expect(printed.error).toHaveBeenCalledWith('Could not read:', error);
+    const [command, args] = invoke.mock.calls[0];
+    expect(command).toBe('app_log');
+    expect(args).toMatchObject({ level: 'error' });
+    expect((args as { message: string }).message).toMatch(/^Could not read: the watch said no\n/);
+  });
+
+  it('sends warnings, writing objects as JSON and any that cannot be as text', () => {
+    const { console, invoke } = loadBridge(true);
+    const loop: { self?: unknown } = {};
+    loop.self = loop;
+    console.warn('slow', { step: 'read' });
+    console.warn(loop);
+    expect(invoke).toHaveBeenCalledWith('app_log', { level: 'warn', message: 'slow {"step":"read"}' });
+    expect(invoke).toHaveBeenCalledWith('app_log', { level: 'warn', message: '[object Object]' });
+  });
+
+  it('logs uncaught errors and rejections nothing handled', () => {
+    const { fireWindowEvent, invoke } = loadBridge(false);
+    fireWindowEvent('error', { message: 'Script error.' });
+    fireWindowEvent('unhandledrejection', { reason: 'no link' });
+    expect(invoke).toHaveBeenCalledWith('app_log', { level: 'error', message: 'Script error.' });
+    expect(invoke).toHaveBeenCalledWith('app_log', { level: 'error', message: 'Unhandled rejection: no link' });
   });
 });

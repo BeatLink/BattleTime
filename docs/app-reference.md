@@ -248,9 +248,34 @@ on("shake", roll, { while_open: true, at_most_every: SECOND });
 | `call` | `kind`, `caller` | A call is `incoming`, `answered` or `ended`. |
 | `music`, `weather`, `navigation` | none | The phone's player, forecast or navigation changes; read the new values from `current_music`, `current_weather` or `current_navigation`. |
 | `settings_change` | `key` | A setting changes, from the watch or the phone. `key` is its name as `set_setting` takes it, or `do_not_disturb`. |
+| `message` | the fields its parameter's type names | The phone sends this app a message, `{"t":"app","ch":"<app id>","d":{...}}`. |
 
 When several of the same event are waiting, only the latest is delivered. A closed app hears only
-its timers: `tick`, `time`, `daily`, the clock changes and `heart_rate`. A handler run in the
+its timers, `tick`, `time`, `daily`, the clock changes and `heart_rate`, and `message`.
+
+#### Messages from the phone
+
+The phone's companion app or one of its plugins can send a watch app a message on the app's own id.
+The handler's parameter type names the fields the app reads, written out or as a `type`, so the
+compiler knows each one's place: up to 4 numbers or booleans and 1 string. A field the phone left
+out reads as 0, `false` or empty text.
+
+```tsx
+type Stop = { on: number; reason: string };
+
+function heard(message: Stop) {
+  if (message.on === 0) is_active.value = false;
+}
+
+on("message", heard);
+```
+
+The text is up to 120 bytes and, like a notification's title, cannot be kept in state; show it
+with `show_toast` or `notify`, or compare it. Without `while_open: true` the handler also runs
+while the app is closed: the watch loads the app without a screen, runs it and saves its state, as
+for a timer, so a background run may vibrate, notify or `wake_screen`. A message that comes while
+the watch lacks the memory, or while the phone holds the app's saved state, is dropped. Reading
+messages needs the `phone_messages` permission, and `background` without `while_open`. A handler run in the
 background may vibrate and notify; `wake_screen` brings the app to the front on the screen its `go`
 named.
 
@@ -657,7 +682,7 @@ uses, and reports them; the image does not hold them yet.
 | `motion` | The motion events, such as `shake`, and `acceleration`. |
 | `notifications` | Reading `notifications`, the `notification` event and the notification effects. |
 | `phone` | `call_control`, `music_control`, `find_phone`, `request_music_state`, `request_navigation_state`, reading `current_call`, `current_music` and `current_navigation`, and the `call`, `music` and `navigation` events. |
-| `phone_messages` | `send_to_phone`. |
+| `phone_messages` | `send_to_phone` and the `message` event. |
 | `internet` | Web requests, which the bytecode does not carry yet. |
 | `settings` | `set_setting`, `set_do_not_disturb`, `set_bluetooth`, `set_app_enabled`, `set_clock`, `choose_watch_face`, `confirm_firmware` and `roll_back_firmware`. |
 | `wake` | `wake_screen`. |
@@ -668,5 +693,4 @@ Reading other system values and files, the screen, haptics and navigation need n
 ## Not in the bytecode yet
 
 `vibrate_sequence` and `http_request` are in the SDK, but the compiler refuses them, because they
-need an array or object argument. The `message` and `http_response` events are not in the image
-format.
+need an array or object argument. The `http_response` event is not in the image format.

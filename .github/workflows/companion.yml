@@ -85,7 +85,7 @@ jobs:
           workspaces: companion -> target
       - name: Install the dependencies
         run: nix develop ..#companion-android --command npm ci
-      # Signs with the release key when the secrets are there, so a master build installs over a release.
+      # Signs with the release key when the secrets are there, so a master build can replace a release.
       - name: Write the signing key
         if: github.event_name != 'pull_request'
         working-directory: companion/tauri/gen/android
@@ -102,9 +102,16 @@ jobs:
             echo "keyPassword=$KEY_PASSWORD"
             echo "keyAlias=$KEY_ALIAS"
           } > keystore.properties
+      # One patch above the newest release, so this build installs over that release and the next release installs over it.
+      - name: Number the build
+        id: version
+        run: |
+          newest=$(git ls-remote --tags --refs origin 'v*' | sed 's|.*refs/tags/v||' | sort -V | tail -n 1)
+          IFS=. read -r major minor patch <<< "${newest:-0.0.0}"
+          echo "version=$major.$minor.$((patch + 1))" >> "$GITHUB_OUTPUT"
       - name: Build the app for every phone processor
         run: |
-          nix develop ..#companion-android --command npm run tauri-android:release
+          nix develop ..#companion-android --command npm run tauri-android:release -- --config '{"version":"${{ steps.version.outputs.version }}"}'
           mkdir -p ../apk
           cp tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release*.apk \
             "../apk/BattleTime-Companion-${GITHUB_SHA::8}.apk"

@@ -39,6 +39,7 @@ class KeepAliveService : Service() {
       return START_NOT_STICKY
     }
     val kept = DaemonHost.startDaemon(this)
+    Log.i(TAG, "Keep-alive service started; it keeps ${kept ?: asked ?: "no watch"}")
     if (asked == null && kept == null) {
       Log.i(TAG, "No watch to keep, so the service stops")
       stopSelf()
@@ -49,6 +50,7 @@ class KeepAliveService : Service() {
   }
 
   override fun onDestroy() {
+    Log.i(TAG, "Keep-alive service stopped")
     if (running === this) {
       running = null
     }

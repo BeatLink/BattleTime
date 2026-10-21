@@ -18,7 +18,9 @@ pub mod replies;
 pub mod settings;
 #[cfg(unix)]
 pub mod socket;
+pub mod sos;
 pub mod state;
+pub mod topics;
 pub mod weather;
 
 use std::path::PathBuf;
@@ -36,10 +38,12 @@ use crate::plugins::host::{HostOutput, PluginHost, WatchData};
 use crate::plugins::http;
 use crate::plugins::runtime::DataWrite;
 use crate::plugins::store::PluginStore;
+use crate::protocol::app_message::{encode_app_message, read_app_message, AppMessage};
 use crate::protocol::battletime::{
-    read_battery_level, read_capabilities, set_watch_time, Capabilities, FILE_TRANSFER, FILE_TRANSFER_SERVICE,
+    describe_last_restart, read_battery_level, read_capabilities, set_watch_time, Capabilities,
+    BATTLETIME_DIAGNOSTICS, BATTLETIME_SERVICE, FILE_TRANSFER, FILE_TRANSFER_SERVICE,
 };
-use crate::protocol::link::WriteMode;
+use crate::protocol::link::{GattLink, WriteMode};
 use crate::sync::files::{FileClient, FileTransport};
 use crate::sync::store::{SyncSettings, SyncStore, LONGEST_INTERVAL, SHORTEST_INTERVAL};
 use crate::sync::system_files::put_missing_system_files;
@@ -53,6 +57,7 @@ use link::{Link, SharedLink};
 use replies::{ReplyRouter, REPLY_TIMEOUT};
 use settings::{CoreSettings, SettingsStore};
 use state::{DaemonState, WatchRef};
+use topics::TopicRouter;
 
 // ============================================================================
 // Timing
@@ -122,6 +127,7 @@ pub struct Daemon {
     settings: SettingsStore,
     state: Mutex<DaemonState>,
     router: ReplyRouter,
+    topics: TopicRouter,
     lines: Mutex<LineBuffer>,
     forwarder: Mutex<Forwarder>,
     holds: Mutex<KeeperHolds>,
@@ -144,6 +150,7 @@ pub struct Features {
     pub http_proxy: Arc<http_proxy::HttpProxy>,
     pub notes: Arc<notes::NoteKeeper>,
     pub remote: Arc<remote::Remote>,
+    pub sos: Arc<sos::Sos>,
 }
 
 impl Daemon {
@@ -164,6 +171,7 @@ impl Daemon {
             http_proxy: http_proxy::HttpProxy::start(&daemon),
             notes: notes::NoteKeeper::start(&daemon),
             remote: remote::Remote::start(&daemon),
+            sos: sos::Sos::start(&daemon),
         };
         let _ = daemon.features.set(features);
         daemon
@@ -202,6 +210,7 @@ impl Daemon {
             settings: SettingsStore::open(setup.data_dir.join("companion").join("settings.json")),
             state: Mutex::new(DaemonState::default()),
             router: ReplyRouter::default(),
+            topics: TopicRouter::default(),
             lines: Mutex::new(LineBuffer::default()),
             forwarder: Mutex::new(Forwarder::default()),
             holds: Mutex::new(KeeperHolds::default()),
@@ -377,6 +386,7 @@ impl Daemon {
                 name: name.into(),
             })
         });
+        log::info!("connecting to {name} ({id}) as the user asked");
         self.link.connect(id.to_string()).await?;
         self.update_settings(&json!({ "lastWatchId": id, "lastWatchName": name }))?;
         Ok(())
@@ -384,6 +394,7 @@ impl Daemon {
 
     // Disconnects, and keeps the watch away until the user connects again.
     pub async fn disconnect(&self) -> Result<(), String> {
+        log::info!("disconnecting as the user asked; the watch is not brought back until they connect again");
         self.holds.lock().unwrap().user_disconnected = true;
         self.keeper_wake.notify_one();
         self.refresh_keeping();
@@ -392,6 +403,14 @@ impl Daemon {
 
     // Holds the keeper back while a firmware update moves the link itself.
     pub fn hold(&self, held: bool) {
+        log::info!(
+            "keeping the watch {}",
+            if held {
+                "held for a firmware update"
+            } else {
+                "released"
+            }
+        );
         self.holds.lock().unwrap().held = held;
         self.keeper_wake.notify_one();
     }
@@ -434,9 +453,13 @@ impl Daemon {
                     name,
                 })
             });
-            match self.link.connect(address).await {
+            log::info!("bringing back the remembered watch {address} after {failures} failed tries");
+            match self.link.connect(address.clone()).await {
                 Ok(()) => failures = 0,
-                Err(_) => failures += 1,
+                Err(error) => {
+                    failures += 1;
+                    log::warn!("bringing back {address} failed ({failures} in a row): {error}");
+                }
             }
         }
     }
@@ -508,6 +531,7 @@ impl Daemon {
             )
         };
         self.publish();
+        log::info!("the watch is connected in {mode} mode");
         let epoch = self.next_epoch(watch_id);
         self.plugins.on_connection(true);
         self.syncer.on_connection(true);
@@ -520,6 +544,7 @@ impl Daemon {
     }
 
     fn on_disconnected(&self) {
+        log::info!("the watch is disconnected");
         self.change(|state| {
             state.connection = "disconnected".into();
             state.mode = "application".into();
@@ -563,6 +588,10 @@ impl Daemon {
         }
         let link = self.shared_link();
         let capabilities = read_capabilities(&link);
+        log::info!("the watch offers {capabilities:?}");
+        if capabilities.diagnostics {
+            self.log_last_restart(&link).await;
+        }
         self.change(|state| state.capabilities = capabilities);
         self.readiness.send_modify(|readiness| {
             if readiness.epoch == epoch {
@@ -588,9 +617,21 @@ impl Daemon {
         }
     }
 
+    // Logs why the watch last restarted and the crash before it, which is how a restart loop shows itself.
+    async fn log_last_restart(&self, link: &SharedLink) {
+        match link.read(BATTLETIME_SERVICE, BATTLETIME_DIAGNOSTICS).await {
+            Ok(bytes) => match describe_last_restart(&bytes) {
+                Some(line) => log::info!("the watch's {line}"),
+                None => log::info!("the watch's firmware does not say why it last restarted"),
+            },
+            Err(error) => log::warn!("reading the watch's diagnostics failed: {error}"),
+        }
+    }
+
     async fn set_clock(&self) {
-        if let Err(error) = set_watch_time(&self.shared_link(), &chrono::Local::now()).await {
-            self.change(|state| state.last_error = Some(error));
+        match set_watch_time(&self.shared_link(), &chrono::Local::now()).await {
+            Ok(()) => log::info!("set the watch's clock"),
+            Err(error) => self.report_error(error),
         }
     }
 
@@ -662,7 +703,6 @@ impl Daemon {
     }
 
     fn on_watch_text(&self, text: &str) {
-        self.plugins.on_watch_text(text);
         self.syncer.on_watch_text(text);
         let lines = self.lines.lock().unwrap().push(text);
         for message in lines.iter().filter_map(|line| decode_watch_line(line)) {
@@ -670,11 +710,31 @@ impl Daemon {
         }
     }
 
+    // A receiver of every app message the watch sends on this topic.
+    pub fn subscribe_topic(&self, topic: &str) -> mpsc::UnboundedReceiver<AppMessage> {
+        self.topics.subscribe(topic)
+    }
+
+    // Sends one app message to the watch app its topic names; refused when it is invalid or no watch with the message channel is connected.
+    pub async fn send_app_message(&self, message: &AppMessage) -> Result<(), String> {
+        let line = encode_app_message(message)?;
+        if !self.readiness.borrow().uart() {
+            return Err("Connect to a watch with the message channel first.".into());
+        }
+        self.emit("daemon:sent", json!(line.trim_end()));
+        self.link.write_text(line).await
+    }
+
     fn on_watch_message(&self, message: Value) {
         if self.router.push(&message) {
             return;
         }
         let _ = self.messages.send(message.clone());
+        if let Some(app_message) = read_app_message(&message) {
+            self.topics.deliver(&app_message);
+            self.plugins.on_app_message(&app_message);
+            return;
+        }
         let settings: CoreSettings = self.settings.view();
         match message["t"].as_str().unwrap_or_default() {
             "findPhone" => {
@@ -703,6 +763,7 @@ impl Daemon {
             }
             "error" => {
                 let text = message["msg"].as_str().unwrap_or_default().to_string();
+                log::warn!("the watch reported an error: {text}");
                 self.change(|state| state.last_error = Some(text));
             }
             _ => {}
@@ -750,6 +811,11 @@ impl Daemon {
                 let media = media.clone();
                 self.change(|state| state.now_playing = Some(media));
             }
+            match (&event, self.features()) {
+                (PhoneEvent::Call { state, .. }, Some(features)) => features.sos.on_call(*state),
+                (PhoneEvent::SosStopped, Some(features)) => features.sos.end_from_phone(),
+                _ => {}
+            }
             let settings: CoreSettings = self.settings.view();
             let quiet = Forwarder::needs_quiet(&event, &settings) && self.device.is_do_not_disturb().await;
             let ready = self.readiness.borrow().uart();
@@ -778,6 +844,7 @@ impl Daemon {
     // Shows a background job's failure to the window as the last error.
     pub fn report_error(&self, text: impl Into<String>) {
         let text = text.into();
+        log::warn!("{text}");
         self.change(|state| state.last_error = Some(text));
     }
 
@@ -844,6 +911,24 @@ impl HostOutput for DaemonOutput {
         self.write_line(line);
     }
 
+    fn send_app_message(&self, plugin: &str, message: AppMessage) -> Result<(), String> {
+        let daemon = self.daemon.upgrade().ok_or("The companion is shutting down.")?;
+        if !daemon.readiness.borrow().uart() {
+            return Err("The watch is not connected.".into());
+        }
+        let plugin = plugin.to_string();
+        let runtime = daemon.runtime.clone();
+        runtime.spawn(async move {
+            if let Err(error) = daemon.send_app_message(&message).await {
+                daemon.emit(
+                    "plugins:log",
+                    json!({ "id": plugin, "line": format!("error: {error}") }),
+                );
+            }
+        });
+        Ok(())
+    }
+
     fn send_to_ui(&self, plugin: &str, message: Value) {
         if let Some(daemon) = self.daemon.upgrade() {
             daemon.emit("plugins:ui", json!({ "id": plugin, "message": message }));
@@ -851,7 +936,7 @@ impl HostOutput for DaemonOutput {
     }
 
     fn log(&self, plugin: &str, line: &str) {
-        eprintln!("plugin {plugin}: {line}");
+        log::info!("plugin {plugin}: {line}");
         if let Some(daemon) = self.daemon.upgrade() {
             daemon.emit("plugins:log", json!({ "id": plugin, "line": line }));
         }
@@ -864,6 +949,10 @@ impl SyncOutput for DaemonOutput {
     }
 
     fn synced(&self, report: &SyncReport) {
+        log::info!("sync pass finished: {} changed", report.changed.len());
+        for error in &report.errors {
+            log::warn!("sync: {error}");
+        }
         if let Some(daemon) = self.daemon.upgrade() {
             daemon.plugins.on_synced(&report.changed);
             daemon.emit("sync:report", serde_json::to_value(report).unwrap_or_default());

@@ -44,7 +44,9 @@ The manifest:
 ```
 
 - `id` is 1 to 32 lowercase letters, digits and hyphens. It is also the watch app's id and the
-  channel the app speaks on, so `send_to_phone("buzz-back", ...)` on the watch reaches this plugin.
+  topic the app speaks on, so `send_to_phone("buzz-back", ...)` on the watch reaches this plugin,
+  and `battletime.sendToApp(...)` here reaches that app. A plugin needs no permission to talk to
+  its own app, and can address no other.
 - `permissions.messages` lists the messages the plugin may send the watch, from `notify`, `call`,
   `musicinfo`, `musicstate`, `weather`, `find` and `vibrate`. Settings, slots and the rest change
   the watch itself, so only the core sends those.
@@ -126,6 +128,7 @@ build script bundle it. It sees:
 | `battletime.on("connect", () => ...)`, `battletime.on("disconnect", ...)` | The watch connected or went away. A plugin started while it is connected hears `connect` at once. |
 | `battletime.on("ui", (message) => ...)` | The settings page sent a message. |
 | `battletime.send({ t: "vibrate", n: 2 })` | Sends the watch a message from `permissions.messages`, as [companion-protocol.md](companion-protocol.md) describes it; throws on any other. |
+| `battletime.sendToApp({ count: 3, note: "Hi" })` | Sends the plugin's own watch app an [app message](companion-protocol.md#app-messages-served) on its id: up to 4 whole numbers (`true` and `false` count as 1 and 0) and at most one text, of which the watch keeps 120 bytes. The watch hands it to the app, open or not, and does not answer. Throws when the data breaks those limits or no watch is connected. |
 | `battletime.ui.send(message)` | Sends the settings page a message, when it is open. |
 | `battletime.settings.get(key)`, `battletime.settings.set(key, value)` | The plugin's own settings, kept as JSON and saved after each event. |
 | `battletime.data.get(source)`, `battletime.data.list(prefix)` | Synced watch data, as described below. |

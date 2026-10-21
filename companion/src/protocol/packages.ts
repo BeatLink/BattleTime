@@ -178,7 +178,13 @@ export class PackagesClient {
     await this.command({ c: 'stop' });
   }
 
-  private async command(message: { c: string } & Record<string, unknown>): Promise<Reply> {
+  // The watch hangs when a command overlaps the core's file service traffic, so each one waits its turn for that.
+  private command(message: { c: string } & Record<string, unknown>): Promise<Reply> {
+    const send = () => this.sendCommand(message);
+    return this.link.exclusive ? this.link.exclusive(send) : send();
+  }
+
+  private async sendCommand(message: { c: string } & Record<string, unknown>): Promise<Reply> {
     const bytes = new TextEncoder().encode(`${JSON.stringify(message)}\n`);
     for (let offset = 0; offset < bytes.length; offset += WRITE_BYTES) {
       await this.link.write(BATTLETIME_SERVICE, BATTLETIME_PACKAGES, bytes.subarray(offset, offset + WRITE_BYTES), 'request');

@@ -619,6 +619,13 @@ export interface HttpResponseEvent {
   body: string;
 }
 
+/**
+ * A message from the phone for this app, whose fields the handler's parameter type names: up to 4
+ * numbers or booleans and 1 string, such as `{ on: number; label: string }`. A field the phone left
+ * out reads as 0, false or empty text.
+ */
+export type MessageFields = Record<string, number | boolean | string>;
+
 export interface SettingsEvent {
   /** The name of the setting that changed, as `set_setting` takes it. */
   key: string;
@@ -669,7 +676,7 @@ export type Subscription = { only_while_open: boolean } & (
   | { kind: "music"; handler: Handler<MusicEvent> }
   | { kind: "weather"; handler: Handler<WeatherEvent> }
   | { kind: "navigation"; handler: Handler<NavigationEvent> }
-  | { kind: "message"; channel: string; handler: Handler<Record<string, unknown>> }
+  | { kind: "message"; handler: Handler<MessageFields> }
   | { kind: "http_response"; handler: Handler<HttpResponseEvent> }
   | { kind: "settings_change"; handler: Handler<SettingsEvent> }
 );
@@ -774,17 +781,32 @@ function at_most_every<Event>(pause: Duration | Period, handler: Handler<Event>)
   };
 }
 
-/** Connects a handler to an event, at the top of the file and before `define_app`. */
-export function on<Name extends EventName>(event: Name, handler: Handler<EventMap[Name]>, options: ListenerOptions = {}) {
+/**
+ * Connects a handler to an event, at the top of the file and before `define_app`.
+ *
+ * `message` hears the phone's messages for this app, `{"t":"app","ch":"<app id>","d":{...}}`; its
+ * handler's parameter type names the fields it reads, which the compiler needs written out.
+ */
+export function on<Fields extends MessageFields>(
+  event: "message",
+  handler: (message: Fields) => void,
+  options?: ListenerOptions,
+): void;
+export function on<Name extends EventName>(event: Name, handler: Handler<EventMap[Name]>, options?: ListenerOptions): void;
+// The overloads above give each event its handler's type, which this body cannot see through `event`.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function on(event: EventName | "message", handler: Handler<any>, options: ListenerOptions = {}) {
   const run = options.at_most_every === undefined ? handler : at_most_every(options.at_most_every, handler);
   if (event === "open" || event === "close" || event === "screen_on" || event === "screen_off") {
     waiting_lifecycle.push({ event, handler: run as () => void });
     return;
   }
   const only_while_open = options.while_open ?? false;
-  // Each subscription's handler type follows from its kind, which TypeScript cannot see through `event`.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handle = run as Handler<any>;
+  const handle = run;
+  if (event === "message") {
+    waiting_subscriptions.push({ kind: "message", handler: handle, only_while_open });
+    return;
+  }
   const motion_kind = MOTION_EVENTS[event];
   const battery_kind = BATTERY_EVENTS[event];
   let subscription: Subscription;

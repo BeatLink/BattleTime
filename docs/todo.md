@@ -12,6 +12,17 @@ document for its part instead.
   file by its size alone, so a new verifier module of the same length as the old one would stay
   unsent, and the watch would check apps by the older rules. Compare a checksum, such as a module
   file's CRC in its header, or the store's own.
+
+- [ ] **The SOS app on the PineTime.** The `sos` app has run only in the simulator and harness.
+  Check that holding the button for five seconds keeps reporting the finger until it lifts, so the
+  hold completes and an early release cancels; that a swipe to the Signals page while holding
+  cancels the hold; that the light, screen and vibration flash "... --- ..." in step; and that an SOS
+  stopped from the phone, by its `{"on":0}` message, takes the open app back to its hold button. The phone's half is in
+  [the companion's TODO](../companion/TODO.md#sos).
+
+- [ ] **A message from the phone run in the background on the PineTime.** Start an SOS, leave the app,
+  send `{"t":"app","ch":"sos","d":{"on":0}}` and check the SOS app opens at its hold button with no `on` 0 sent back.
+
 - [ ] **A firmware upload through `SlotFlash` on the PineTime.** The update and recovery slots are
   now erased and written through `SlotFlash`, which waits on the timer instead of spinning. Moving
   the recovery slot over the Nordic UART is proven in the emulator (`tools/check_slot_move.py`),
@@ -299,6 +310,17 @@ document for its part instead.
   - after `battletime qr remove all`, it shows "No QR codes yet. Make them in the BattleTime companion
     app."
   When these pass, also remove the QR item under "Untried with a watch" in companion/TODO.md.
+- [ ] **The survival app on the PineTime.** It has run only in the test harness and the
+  companion's tests. With the companion app's Survival screen or `battletime survival`, check that:
+  - `battletime survival set cpr bleeding lost` writes `/survival/list` and the three guides, and the
+    app lists the topics "First aid" and "Wilderness" the next time it opens, "First aid" lists "CPR"
+    and "Severe bleeding", and the side button goes back through the topic to the topics;
+  - with `battletime survival set all`, "Personal safety" lists its last guides, which come from the
+    list's third part;
+  - a tapped guide shows its title and text, and the longest guide scrolls smoothly to its end;
+  - `battletime survival remove lost` takes "Lost in the wild" off the list and deletes `/survival/9`;
+  - after `battletime survival remove all`, it shows "No guides yet. Choose them in the BattleTime
+    companion app."
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
   run only in the emulator and against a model of the panel; none of it is on the watch yet. Flash
   the bootloader first, then a firmware built from master at e78fc7a or later. On the watch, check
@@ -446,7 +468,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   transaction instead of many small reads.
 - [ ] **The remaining companion messages.** [companion-protocol.md](companion-protocol.md) lists
   them under "not served yet". `call`, `musicinfo`, `musicstate`, `weather`, `nav`, `find`, `vibrate`,
-  `status` and the `music`, `call`, `findPhone`, `request` and `app` lines are served (`services/companion/src/phone.rs`).
+  `status`, the phone's `app` messages for one watch app (`services/companion/src/app_message.rs`) and
+  the `music`, `call`, `findPhone`, `request` and `app` lines are served (`services/companion/src/phone.rs`).
   - `alarm` (set or report the alarms), `steps` (a day in 240 six-minute slots, read from the
     step log with `battletime_steps::log`) and `http` (answers to an app's request, and the watch's `http`
     line).
@@ -755,6 +778,12 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   that a watch updated from day files keeps its history on the watch and in the companion, and that
   the record keys the old day files held come free as they age out.
 - [ ] **A checkpoint of the store's tables,** so mounting need not read every ring record.
+- [ ] **A packages command during file service traffic hangs the watch.** On the PineTime (origin/dev
+  8b272b31, 2026-10-21), `{"c":"apps"}` sent while the companion's sync pass was listing and reading
+  files stopped the watch about 14 s later, and the watchdog reset it with no crash recorded. That
+  happened on every connect until the companion made its packages commands wait for the file
+  service. The same command alone answered normally. Find what the two wait on together, likely the
+  store or the flash chip, so that neither ordering can stop the main loop.
 
 - [ ] **Use the file system:** save the BLE bond there.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE, with a list of

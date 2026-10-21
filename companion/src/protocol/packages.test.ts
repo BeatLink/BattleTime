@@ -4,6 +4,7 @@ import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 import { testImage } from '@/test-support/app-images';
 
 import { AppImageError, readImageHeader } from './app-image';
+import { BATTLETIME_PACKAGES } from './battletime';
 import { FileService } from './file-service';
 import { MOCK_ROOM } from './mock-packages-service';
 import {
@@ -120,6 +121,45 @@ describe('the packages client', () => {
     expect(appDetail({ ...listing.apps[0], kind: 'face', enabled: false, need: null })).toMatch(/^Watch face, hidden · [0-9.]+ kB$/);
     expect(await client.enable('timer', false)).toEqual({ need: listing.apps[0].need, room: MOCK_ROOM });
     expect(memoryText(33792)).toBe('33.0 kB');
+  });
+
+  it('sends each command in a turn of its own on the file service, since the watch hangs when the two overlap', async () => {
+    const target = watch();
+    let turns = 0;
+    let inTurn = false;
+    let writesOutsideTurn = 0;
+    const link = new Proxy(target, {
+      get(watchTarget, key) {
+        if (key === 'exclusive') {
+          return async <T,>(work: () => Promise<T>) => {
+            turns += 1;
+            inTurn = true;
+            try {
+              return await work();
+            } finally {
+              inTurn = false;
+            }
+          };
+        }
+        const value = Reflect.get(watchTarget, key, watchTarget) as unknown;
+        if (key === 'write' && typeof value === 'function') {
+          return (service: string, characteristic: string, ...rest: unknown[]) => {
+            if (characteristic === BATTLETIME_PACKAGES && !inTurn) {
+              writesOutsideTurn += 1;
+            }
+            return (value as (...args: unknown[]) => unknown).call(watchTarget, service, characteristic, ...rest);
+          };
+        }
+        return typeof value === 'function' ? (value as (...args: unknown[]) => unknown).bind(watchTarget) : value;
+      },
+    });
+    const client = await PackagesClient.open(link);
+
+    await client.apps();
+    await client.stop();
+
+    expect(turns).toBe(2);
+    expect(writesOutsideTurn).toBe(0);
   });
 
   it('passes on the watch\'s refusals with their number and the memory', async () => {

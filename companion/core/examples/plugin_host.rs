@@ -3,12 +3,14 @@
 // cargo run -p battletime-companion-core --example plugin_host -- install <file.ntplugin> <folder>
 // cargo run -p battletime-companion-core --example plugin_host -- run <folder> <watch address>
 
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 use battletime_companion_core::ble::WatchBle;
+use battletime_companion_core::gadgetbridge::LineBuffer;
 use battletime_companion_core::plugins::host::{Fetcher, HostOutput, PluginHost};
 use battletime_companion_core::plugins::http;
 use battletime_companion_core::plugins::store::PluginStore;
+use battletime_companion_core::protocol::app_message::{decode_app_line, encode_app_message, AppMessage};
 use serde_json::Value;
 
 struct Terminal {
@@ -27,6 +29,10 @@ impl HostOutput for Terminal {
                 }
             });
         }
+    }
+    fn send_app_message(&self, _plugin: &str, message: AppMessage) -> Result<(), String> {
+        self.write_to_watch(encode_app_message(&message)?);
+        Ok(())
     }
     fn send_to_ui(&self, plugin: &str, message: Value) {
         println!("{plugin} to its page: {message}");
@@ -64,8 +70,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let host = Arc::new(PluginHost::new(PluginStore::new(folder), terminal, fetcher));
             host.start_all();
             let followed = host.clone();
+            let lines = Mutex::new(LineBuffer::default());
             let ble = WatchBle::new(Arc::new(move |name, payload| match (name, payload.as_str()) {
-                ("line", Some(text)) => followed.on_watch_text(text),
+                ("line", Some(text)) => {
+                    for line in lines.lock().unwrap().push(text) {
+                        if let Some(message) = decode_app_line(&line) {
+                            followed.on_app_message(&message);
+                        }
+                    }
+                }
                 ("state", Some(state)) => {
                     println!("watch {state}");
                     followed.on_connection(state == "connected");

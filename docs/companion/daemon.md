@@ -25,6 +25,8 @@ window does the same jobs itself against the mock watch.
 | Fetches web pages for watch apps, from the hosts allowed in Settings | `http_proxy.rs` |
 | Keeps the watch's note matching its source | `notes.rs`, `protocol/notes.rs` |
 | Keeps the remote layout on the watch and runs its button taps | `remote.rs`, `protocol/remote.rs` |
+| Runs the watch's SOS: the phone's SOS screen and recording, texts and calls | `sos.rs` |
+| Hands each watch app message to the job or plugin that hears its topic, and sends app messages to the watch | `topics.rs`, `protocol/app_message.rs` |
 
 ### Reconnecting
 

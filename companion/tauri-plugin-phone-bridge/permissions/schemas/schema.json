@@ -391,6 +391,18 @@
           "markdownDescription": "Denies the open_notification_access_settings command without any pre-configured scope."
         },
         {
+          "description": "Enables the open_overlay_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-open-overlay-settings",
+          "markdownDescription": "Enables the open_overlay_settings command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the open_overlay_settings command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-open-overlay-settings",
+          "markdownDescription": "Denies the open_overlay_settings command without any pre-configured scope."
+        },
+        {
           "description": "Enables the open_uri command without any pre-configured scope.",
           "type": "string",
           "const": "allow-open-uri",
@@ -463,6 +475,18 @@
           "markdownDescription": "Denies the request_ignore_battery_optimizations command without any pre-configured scope."
         },
         {
+          "description": "Enables the request_sos_permissions command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-request-sos-permissions",
+          "markdownDescription": "Enables the request_sos_permissions command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the request_sos_permissions command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-request-sos-permissions",
+          "markdownDescription": "Denies the request_sos_permissions command without any pre-configured scope."
+        },
+        {
           "description": "Enables the send_broadcast command without any pre-configured scope.",
           "type": "string",
           "const": "allow-send-broadcast",
@@ -487,6 +511,18 @@
           "markdownDescription": "Denies the silence_call command without any pre-configured scope."
         },
         {
+          "description": "Enables the sos_permissions command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-sos-permissions",
+          "markdownDescription": "Enables the sos_permissions command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the sos_permissions command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-sos-permissions",
+          "markdownDescription": "Denies the sos_permissions command without any pre-configured scope."
+        },
+        {
           "description": "Enables the start_activity command without any pre-configured scope.",
           "type": "string",
           "const": "allow-start-activity",
@@ -499,10 +535,10 @@
           "markdownDescription": "Denies the start_activity command without any pre-configured scope."
         },
         {
-          "description": "Lets the companion's window use every part of the phone bridge.\n#### This default permission set includes:\n\n- `allow-has-notification-access`\n- `allow-open-notification-access-settings`\n- `allow-request-call-permissions`\n- `allow-is-do-not-disturb`\n- `allow-answer-call`\n- `allow-reject-call`\n- `allow-silence-call`\n- `allow-media-command`\n- `allow-is-ignoring-battery-optimizations`\n- `allow-request-ignore-battery-optimizations`\n- `allow-associate-watch`\n- `allow-locate`\n- `allow-open-uri`\n- `allow-start-activity`\n- `allow-send-broadcast`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Lets the companion's window use every part of the phone bridge.\n#### This default permission set includes:\n\n- `allow-has-notification-access`\n- `allow-open-notification-access-settings`\n- `allow-request-call-permissions`\n- `allow-is-do-not-disturb`\n- `allow-answer-call`\n- `allow-reject-call`\n- `allow-silence-call`\n- `allow-media-command`\n- `allow-is-ignoring-battery-optimizations`\n- `allow-request-ignore-battery-optimizations`\n- `allow-associate-watch`\n- `allow-locate`\n- `allow-open-uri`\n- `allow-start-activity`\n- `allow-send-broadcast`\n- `allow-sos-permissions`\n- `allow-request-sos-permissions`\n- `allow-open-overlay-settings`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Lets the companion's window use every part of the phone bridge.\n#### This default permission set includes:\n\n- `allow-has-notification-access`\n- `allow-open-notification-access-settings`\n- `allow-request-call-permissions`\n- `allow-is-do-not-disturb`\n- `allow-answer-call`\n- `allow-reject-call`\n- `allow-silence-call`\n- `allow-media-command`\n- `allow-is-ignoring-battery-optimizations`\n- `allow-request-ignore-battery-optimizations`\n- `allow-associate-watch`\n- `allow-locate`\n- `allow-open-uri`\n- `allow-start-activity`\n- `allow-send-broadcast`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Lets the companion's window use every part of the phone bridge.\n#### This default permission set includes:\n\n- `allow-has-notification-access`\n- `allow-open-notification-access-settings`\n- `allow-request-call-permissions`\n- `allow-is-do-not-disturb`\n- `allow-answer-call`\n- `allow-reject-call`\n- `allow-silence-call`\n- `allow-media-command`\n- `allow-is-ignoring-battery-optimizations`\n- `allow-request-ignore-battery-optimizations`\n- `allow-associate-watch`\n- `allow-locate`\n- `allow-open-uri`\n- `allow-start-activity`\n- `allow-send-broadcast`\n- `allow-sos-permissions`\n- `allow-request-sos-permissions`\n- `allow-open-overlay-settings`\n- `allow-register-listener`\n- `allow-remove-listener`"
         }
       ]
     }

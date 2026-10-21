@@ -3,6 +3,7 @@ package com.battletime.companion.phonebridge
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.NotificationManager
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -11,6 +12,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
+import android.provider.Settings
+import android.telephony.SmsManager
 import android.telecom.TelecomManager
 import androidx.core.content.ContextCompat
 
@@ -74,6 +77,60 @@ object PhoneActions {
     }
     return context.getSystemService(TelecomManager::class.java)
       ?: throw PhoneActionException("This device has no telecom service")
+  }
+
+  // ==========================================================================
+  // SOS calls and texts
+  // ==========================================================================
+
+  // Starts a call straight away; Android turns a call to an emergency number into the dialer instead.
+  fun callNumber(context: Context, number: String) {
+    if (!granted(context, Manifest.permission.CALL_PHONE)) {
+      throw PhoneActionException("Allow the app to make calls first")
+    }
+    mayStartFromBackground(context)
+    launch(context, Intent(Intent.ACTION_CALL, Uri.fromParts("tel", number, null)))
+  }
+
+  // Opens the dialer with the number typed in, waiting for a tap on Call.
+  fun dialNumber(context: Context, number: String) {
+    mayStartFromBackground(context)
+    launch(context, Intent(Intent.ACTION_DIAL, Uri.fromParts("tel", number, null)))
+  }
+
+  // Sends a text, split into parts when it is longer than one message.
+  fun sendText(context: Context, number: String, text: String) {
+    if (!granted(context, Manifest.permission.SEND_SMS)) {
+      throw PhoneActionException("Allow the app to send texts first")
+    }
+    val sms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      context.getSystemService(SmsManager::class.java)
+    } else {
+      @Suppress("DEPRECATION")
+      SmsManager.getDefault()
+    } ?: throw PhoneActionException("This phone cannot send texts")
+    try {
+      sms.sendMultipartTextMessage(number, null, sms.divideMessage(text), null, null)
+    } catch (e: Exception) {
+      throw PhoneActionException("The text could not be sent: ${e.message}")
+    }
+  }
+
+  // Android silently drops an activity started from the background unless the app may draw over other apps.
+  private fun mayStartFromBackground(context: Context) {
+    if (!mayStartActivities(context)) {
+      throw PhoneActionException("Allow the app to display over other apps, or Android keeps the call from starting")
+    }
+  }
+
+  // Whether Android lets the app open a screen now: it is in front, or it may draw over other apps.
+  fun mayStartActivities(context: Context): Boolean {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(context)) {
+      return true
+    }
+    val state = ActivityManager.RunningAppProcessInfo()
+    ActivityManager.getMyMemoryState(state)
+    return state.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
   }
 
   // ==========================================================================

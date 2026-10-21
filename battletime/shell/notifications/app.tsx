@@ -199,7 +199,7 @@ function Preview() {
                   {notifications.value.length > 0 ? notifications.value[0].app : ""}
                 </Label>
               </Row>
-              <Label font="medium" long_mode="clip">{notifications.value.length > 0 ? notifications.value[0].title : ""}</Label>
+              <Label font="medium">{notifications.value.length > 0 ? notifications.value[0].title : ""}</Label>
               <Label>{notifications.value.length > 0 ? notifications.value[0].body : ""}</Label>
             </Column>
           </Button>
