@@ -552,7 +552,9 @@ Expressions, the code behind every bound value, are paged too and go through the
 screen's own expressions stay in it while it shows, so a refresh reads from the flash only those
 the cache dropped. The verifier refuses a resident image, and a paged app takes no library after
 it opens, since the bindings are worked out from the whole image. Closed apps that run in the
-background and the simulator open images whole.
+background and the simulator open images whole. Strings stay in the resident image: paging them was
+built and measured, and costs more than it saves for today's apps, as
+[external-flash-architecture.md](external-flash-architecture.md#paging-strings) explains.
 
 ### Events
 

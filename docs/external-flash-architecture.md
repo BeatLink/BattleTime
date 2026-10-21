@@ -217,14 +217,71 @@ Docs and comments the code contradicts, as of e30358e4:
    worked out from the whole image while it opens. Closed apps are left whole: they are loaded only
    for a moment, and opening paged holds both images then anyway.
 
-   Strings were paged too and measured on 2026-10-20, then left out. Keeping the app's id, name,
-   variable keys and screen names resident and reading the rest through a string cache, fetched by
-   the interpreter's text work and staged before layout for the text arrays a screen shows, paged
-   strings in only 3 of 66 apps, since a cache that holds a screen's text arrays at once costs about
-   as much as the strings it moves out. `settings` then held 108 B more heap, not less, and it cost
-   6,320 B of code and 792 B of stack. The work is on the branch `worktree-string-paging` should an
-   app with far more text ever need it. Glyph subsets remain.
+   Strings stay in the resident image: paging them was built and measured, then left out, as
+   [Paging strings](#paging-strings) explains. Glyph subsets remain.
 8. **Native code compiled from bytecode**, if an app needs the speed.
+
+## Paging strings
+
+Strings are the last part of an app's image a paged app still keeps in RAM: 14.6 KB across the 66
+apps and faces, at most 1.3 KB in one (`settings`). Paging them was built and measured on
+2026-10-20 and is not on `dev`; the work is commit 1a1495b2 on the branch `worktree-string-paging`.
+
+### How it was built
+
+- **Which strings stay.** A resident image keeps the app's id, name and launcher group, its
+  variables' keys and its screens' names, since saving state and finding a screen by name read them
+  with no image file at hand. The rest stay in the file: in the resident strings table each such
+  entry has the top bit of its length set and its offset into the whole image's strings
+  (`paging::strings_kept`, `AppImage::string_place`).
+- **The string cache.** A `StringCache`, packed and dropping the least recently used like the code
+  cache, reads a string the first time it is needed, with the same CRC check of the image file.
+- **The interpreter.** Its text work (joins, slices, lengths, patterns, file paths) copies a paged
+  string out of the cache before using it, since the cache may drop it while the code goes on. Once
+  a run ends, it reads any paged string its result or its effects' arguments name, so the host and
+  the shell find them by number with no file reader at hand.
+- **Before layout and painting.** Text arrays, such as a `Roller`'s options or a `Dropdown`'s, hold
+  strings by number and are drawn while painting, which never waits on the flash. The host reads
+  every string the nodes' text arrays name into the cache before layout, as it reads library icons.
+- **Only where it saves.** The cache must hold every string a screen's text arrays could name at
+  once, so it is sized to those arrays and twice the longest string, at least 256 B, up to all the
+  strings it pages. An app pages its strings only when they take more than that cache and its
+  160 B of bookkeeping (`paging::pages_strings`).
+
+It passed every test and every harness snapshot, and `settings` worked in the emulator.
+
+### Why it is not on dev
+
+Measured with `settings`, the app it helps most:
+
+| | Without | With |
+|---|---:|---:|
+| Firmware code | 448,368 B | 454,688 B (+6,320 B) |
+| Peak stack, opening `settings` | 6,340 B | 7,132 B (2,324 B spare) |
+| Heap with `settings` open, measured | 14,128 B | 14,236 B (+108 B) |
+
+- **Little to move.** `settings` leaves 642 B of strings in its file, and the cache that reads them
+  back must hold a screen's text arrays at once, 288 B for it. With the cache's own bookkeeping only
+  3 of the 66 apps and faces would page strings at all, and the one measured held more heap.
+- **Stack.** Each paged string is copied into a 256-byte buffer on the stack before use, inside the
+  interpreter's deepest frame.
+- **Code.** The string cache, its generic reads and the staging pass cost 6.3 KB of internal flash.
+
+### How it could pay later
+
+1. **When an app has a lot of text**, such as a reader, a help app or one translated into several
+   languages, with several kilobytes of strings. `pages_strings` already pages only then.
+2. **One reader, less code.** Share one image file reader between the code and string caches, and
+   read through `dyn SystemValues` rather than one copy of the read for each kind of system.
+3. **No stack copies.** Copy a paged string straight into the interpreter's text buffer, or read it
+   into the cache in a step before the instruction runs, rather than into a 256-byte stack buffer.
+4. **Strings grouped by screen.** If the compiler wrote each screen's strings together, list labels
+   especially, a screen's strings would load in one read, as its widget records do, and the cache
+   would hold only the open screen's text instead of every text array at once.
+
+With 2 and 3 it should cost a couple of kilobytes of code and no stack, and with 4 its cache
+shrinks to one screen's text; it is worth bringing back once an app's strings reach several
+kilobytes.
 
 ## Open questions
 
