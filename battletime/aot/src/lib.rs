@@ -11,6 +11,7 @@
 
 extern crate alloc;
 
+pub mod native_file;
 #[cfg(any(test, feature = "simulator"))]
 pub mod simulator;
 pub mod thumb;

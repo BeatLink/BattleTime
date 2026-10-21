@@ -73,6 +73,15 @@ longer fit stays interpreted.
   in the context, so the code needs no relocation and runs from the RAM's code alias wherever the
   heap puts it.
 
+## The native file
+
+`battletime_aot::native_file` writes what the module keeps at `/apps/<id>/native`: a header naming
+the image it was made from by its header's CRC field and its length, a table giving each unit's
+kind, number and code, and the code, each unit's on a 4-byte boundary. Only units with a loop are
+in it. Game of Life's two looping handlers, 346 bytes of bytecode, take 3,276 bytes of native code,
+about nine and a half times as much, since every instruction loads its operands from their stack
+slots and stores its result; keeping the top of the stack in registers would cut that.
+
 ## The runtime's side
 
 `battletime_runtime::native` holds the `Context` the code reads and the `NativeCode` trait. An

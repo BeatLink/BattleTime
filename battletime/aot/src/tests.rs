@@ -5,7 +5,7 @@ use std::string::String;
 use std::vec;
 use std::vec::Vec;
 
-use battletime_runtime::instruction::{Instruction, StackEffect};
+use battletime_runtime::instruction::Instruction;
 use battletime_runtime::interpreter::{MOST_LOCALS, MOST_STEPS, STACK_DEPTH};
 use battletime_runtime::native::{NativeCode, NativeFrame};
 use battletime_runtime::paging::CodeUnit;
@@ -165,22 +165,9 @@ impl NativeCode for SimulatedNative {
     }
 }
 
-/// Every function's stack effect, for translating the image's calls.
-fn call_effects(image: &AppImage) -> Vec<StackEffect> {
-    (0..image.function_count())
-        .map(|index| {
-            let function = image.function(index).unwrap();
-            StackEffect {
-                taken: function.argument_count as usize,
-                left: function.result_count as usize,
-            }
-        })
-        .collect()
-}
-
 /// Translates every unit of an image that translates, with what each unit refused.
 fn translate_image(image: &AppImage) -> (SimulatedNative, usize) {
-    let effects = call_effects(image);
+    let effects = crate::native_file::call_effects(image);
     let mut units = Vec::new();
     let mut refused = 0;
     let mut add =
@@ -801,4 +788,49 @@ fn every_app_runs_natively_as_in_the_interpreter() {
         "{finished} runs finished, {handed_over} handed over"
     );
     assert_eq!(refused, 0, "{refused} units were refused");
+}
+
+// ============================================================================
+// The native file
+// ============================================================================
+
+fn game_of_life() -> Vec<u8> {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../apps/game-of-life/app.tsx");
+    battletime_compiler::compile_file(&path).unwrap().1.image.unwrap()
+}
+
+#[test]
+fn a_native_file_holds_the_units_with_loops() {
+    let image_bytes = game_of_life();
+    let image = AppImage::parse(&image_bytes).unwrap();
+
+    let file_bytes = crate::native_file::write(&image_bytes, &image);
+    let file = crate::native_file::NativeFile::parse(&file_bytes, &image_bytes).unwrap();
+
+    assert!(file.unit_count() > 0);
+    let effects = crate::native_file::call_effects(&image);
+    for (unit, code) in file.units() {
+        assert_eq!(code.as_ptr() as usize % 4, file_bytes.as_ptr() as usize % 4);
+        let (bytecode, local_count) = match unit {
+            CodeUnit::Expression(index) => (image.expression_code(index).unwrap(), MOST_LOCALS),
+            CodeUnit::Handler(index) => (image.handler_code(index).unwrap(), MOST_LOCALS),
+            CodeUnit::Function(index) => {
+                let function = image.function(index as u16).unwrap();
+                (function.code, function.local_count as usize)
+            }
+        };
+        assert_eq!(code, translate(bytecode, local_count, &effects).unwrap());
+    }
+}
+
+#[test]
+fn a_native_file_belongs_to_one_image() {
+    let image_bytes = game_of_life();
+    let image = AppImage::parse(&image_bytes).unwrap();
+    let file_bytes = crate::native_file::write(&image_bytes, &image);
+
+    let mut other_image = image_bytes.clone();
+    other_image[12] ^= 1;
+    assert!(crate::native_file::NativeFile::parse(&file_bytes, &other_image).is_none());
+    assert!(crate::native_file::NativeFile::parse(&file_bytes[..20], &image_bytes).is_none());
 }
