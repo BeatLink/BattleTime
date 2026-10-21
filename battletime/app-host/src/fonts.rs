@@ -1,7 +1,8 @@
 //! The fonts an app picks with its `font` property, drawn with soft edges.
 //!
 //! Every text size is one font drawn from lines, arcs and dots, made from `fonts/geometric.txt` by
-//! `tools/generate_fonts.py` and read in place from flash. Each size scales it and moves its straight
+//! `tools/generate_fonts.py`. On the watch it lives on the external flash and the sizes draw from
+//! the copy of its glyphs in use that `font_file` keeps in RAM; tests and the simulator carry it whole. Each size scales it and moves its straight
 //! strokes and the edges of its arcs onto whole pixels, so stems stay sharp and bowls stay even. The
 //! dot-matrix display font is a second such font, made of rows of dots, which an app that uses it
 //! carries in its own image. docs/app-runtime.md lists the sizes.
@@ -56,6 +57,8 @@ pub struct GeometricFont {
     glyph_count: AtomicUsize,
     /// One bit for each character from `FIRST_ASCII` up, set where the font has a glyph for it.
     ascii: [AtomicU32; ASCII_WORDS],
+    /// Whether lookups tell `font_file` what they found and missed, for the text font copied from the external flash.
+    notes_lookups: bool,
 }
 
 const UNCHECKED: u8 = 0;
@@ -111,14 +114,15 @@ fn read_u16(bytes: &[u8], at: usize) -> u16 {
 }
 
 impl GeometricFont {
-    /// A font with no glyphs yet; `install_from_library` fills it.
-    pub const fn empty() -> Self {
+    /// A font with no glyphs yet, which an install fills; with `notes_lookups`, lookups tell `font_file` what they found and missed.
+    pub const fn empty(notes_lookups: bool) -> Self {
         GeometricFont {
             start: AtomicPtr::new(core::ptr::null_mut()),
             length: AtomicUsize::new(0),
             state: AtomicU8::new(UNCHECKED),
             glyph_count: AtomicUsize::new(0),
             ascii: [const { AtomicU32::new(0) }; ASCII_WORDS],
+            notes_lookups,
         }
     }
 
@@ -131,6 +135,7 @@ impl GeometricFont {
             state: AtomicU8::new(UNCHECKED),
             glyph_count: AtomicUsize::new(0),
             ascii: [const { AtomicU32::new(0) }; ASCII_WORDS],
+            notes_lookups: false,
         }
     }
 
@@ -174,6 +179,7 @@ impl GeometricFont {
             CHECKED => Some(FontData {
                 bytes: self.bytes(),
                 glyph_count: self.glyph_count.load(Ordering::Acquire),
+                notes_lookups: self.notes_lookups,
             }),
             NOT_A_FONT => None,
             _ => self.check(),
@@ -193,6 +199,7 @@ impl GeometricFont {
         let data = FontData {
             bytes,
             glyph_count: read_u16(bytes, 6) as usize,
+            notes_lookups: self.notes_lookups,
         };
         let mut ascii = [0u32; ASCII_WORDS];
         for index in 0..data.glyph_count {
@@ -217,13 +224,23 @@ impl GeometricFont {
         let bit = (character as u32).wrapping_sub(FIRST_ASCII);
         let is_ascii = (bit as usize) < ASCII_WORDS * 32;
         if is_ascii && self.state.load(Ordering::Acquire) == CHECKED {
-            return self.ascii[bit as usize / 32].load(Ordering::Acquire) & (1 << (bit % 32)) != 0;
+            let held = self.ascii[bit as usize / 32].load(Ordering::Acquire) & (1 << (bit % 32)) != 0;
+            if !held && self.notes_lookups {
+                crate::font_file::note_missing(character);
+            }
+            return held;
         }
         let Some(data) = self.data() else {
             return false;
         };
         match is_ascii {
-            true => self.ascii[bit as usize / 32].load(Ordering::Acquire) & (1 << (bit % 32)) != 0,
+            true => {
+                let held = self.ascii[bit as usize / 32].load(Ordering::Acquire) & (1 << (bit % 32)) != 0;
+                if !held && self.notes_lookups {
+                    crate::font_file::note_missing(character);
+                }
+                held
+            }
             false => data.glyph(character).is_some(),
         }
     }
@@ -261,6 +278,7 @@ impl GeometricFont {
 struct FontData {
     bytes: &'static [u8],
     glyph_count: usize,
+    notes_lookups: bool,
 }
 
 impl FontData {
@@ -295,14 +313,29 @@ impl FontData {
         ))
     }
 
+    /// The glyph for `character`, telling `font_file` it was found or missed when this font notes lookups.
     fn glyph(&self, character: char) -> Option<GlyphEntry> {
+        let found = self.find(character);
+        if self.notes_lookups {
+            match found {
+                Some((index, _)) => crate::font_file::note_used(index),
+                None => crate::font_file::note_missing(character),
+            }
+        }
+        found.map(|(_, entry)| entry)
+    }
+
+    /// Where `character`'s glyph is in the table, and its entry.
+    fn find(&self, character: char) -> Option<(usize, GlyphEntry)> {
         let wanted = u16::try_from(character as u32).ok()?;
         // The font holds printable ASCII without gaps from its first glyph, so most characters are found at once.
         let (first, _) = self.entry_at(0)?;
         let guess = wanted.checked_sub(first).map(usize::from);
-        if let Some((found, entry)) = guess.and_then(|index| self.entry_at(index)) {
-            if found == wanted {
-                return Some(entry);
+        if let Some(index) = guess {
+            if let Some((found, entry)) = self.entry_at(index) {
+                if found == wanted {
+                    return Some((index, entry));
+                }
             }
         }
         let mut low = 0;
@@ -311,7 +344,7 @@ impl FontData {
             let middle = (low + high) / 2;
             let (found, entry) = self.entry_at(middle)?;
             match found.cmp(&wanted) {
-                core::cmp::Ordering::Equal => return Some(entry),
+                core::cmp::Ordering::Equal => return Some((middle, entry)),
                 core::cmp::Ordering::Less => low = middle + 1,
                 core::cmp::Ordering::Greater => high = middle,
             }
@@ -402,15 +435,16 @@ static FONT: GeometricFont = font_slot();
 /// The dot-matrix font, taken from the image of the app that uses it while that app is loaded.
 static DOT_MATRIX_FONT: GeometricFont = dot_matrix_slot();
 
-// The watch carries no font: they come from the shared library and the apps. Tests and the simulator carry them.
+// The watch carries no font: the text font comes from the external flash and the dot-matrix one from the apps.
+// Tests and the simulator carry them.
 #[cfg(not(any(test, feature = "built-in-fonts")))]
 const fn font_slot() -> GeometricFont {
-    GeometricFont::empty()
+    GeometricFont::empty(true)
 }
 
 #[cfg(not(any(test, feature = "built-in-fonts")))]
 const fn dot_matrix_slot() -> GeometricFont {
-    GeometricFont::empty()
+    GeometricFont::empty(false)
 }
 
 #[cfg(any(test, feature = "built-in-fonts"))]
@@ -1361,14 +1395,9 @@ fn cover_row(shapes: &[Placed], half: f32, y: f32, left: i32, coverage: &mut [u8
 // Font numbers
 // ============================================================================
 
-/// Takes the text font from the shared library, which must stay where it is, such as in internal flash.
-///
-/// Until then text takes no room and draws nothing; returns how many fonts the library had.
-pub fn install_from_library(library: &AppImage<'static>) -> usize {
-    // A library without the font empties it, so it never points into an older library.
-    let bytes = library.font(0).unwrap_or(&[]);
+/// Makes `bytes`, a whole font file or the copy `font_file` built, the text font every size draws with.
+pub fn install_text_font(bytes: &'static [u8]) {
     FONT.install(bytes);
-    usize::from(!bytes.is_empty())
 }
 
 /// Takes the dot-matrix font from an app's image, if the image carries it, as the font the

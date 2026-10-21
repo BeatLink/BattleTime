@@ -20,7 +20,7 @@ the watch.
 - **RAM can run code.** The MPU has one region, the stack guard, with the default map on
   (`firmware/src/stack_guard.rs`), so code copied to RAM runs, best through the 0x0080_0000 code
   alias. Nothing does so today, and nothing is built position-independent.
-- **RAM is the real limit, not flash.** The heap is 30,976 B, the app budget 26,880 B
+- **RAM is the real limit, not flash.** The heap is 30,976 B, the app budget 25,344 B
   (`runtime/src/memory_need.rs`), the largest app needs about 24.5 KB, and the stack has 2.3 to
   3.9 KB spare. Less than 4 KB is unused. Loaded code and resources have to share the app's room.
 
@@ -161,7 +161,7 @@ Docs and comments the code contradicts, as of e30358e4:
   fills zeros without an error. The shell's waits keep this from happening today: the watch
   counted no busy store call (see [Order of work](#order-of-work)).
 - "About 12 KB of RAM per app" (CLAUDE.md, `docs/app-runtime.md`) appears in code only as a test
-  constant (`harness/tests/quality.rs`); the firmware's limit is 26,880 B.
+  constant (`harness/tests/quality.rs`); the firmware's limit is 25,344 B.
 - [architecture-assessment.md](architecture-assessment.md)'s launcher figure, 40 ms on the bus
   down to 3 ms, has no measurement behind it in code or tests.
 
@@ -261,8 +261,16 @@ Docs and comments the code contradicts, as of e30358e4:
    Strings stay in the resident image: paging them was built and measured, then left out, as
    [Paging strings](#paging-strings) explains. The shell's notifications and quick settings left
    the firmware for `/system/shell`, which saved 3.5 KB; the shell opens and verifies them like any
-   app, so with stages 4 to 6 the firmware ends 0.7 KB smaller than before the loader. Glyph
-   subsets remain.
+   app, so with stages 4 to 6 the firmware ends 0.7 KB smaller than before the loader.
+
+   Fonts went last, all of them, with no copy kept: the text font left the shared library for
+   `/system/font` (4,945 B), and `app-host/src/font_file.rs` keeps only the glyphs drawn lately in
+   the heap, at most 1,536 B, which the system's share of the memory need now counts (the app budget
+   fell from 26,880 B to 25,344 B; every app still fits). The loader costs 3.9 KB of firmware code,
+   so the region gains about 1 KB net. The firmware's own pages draw without text while the font
+   cannot be read, the status page as coloured update steps and a progress bar, the help screen as a
+   clock of bars; Bluetooth, updates and diagnostics never needed it. The dot-matrix font was
+   already in the images of the apps that use it.
 8. **Native code compiled from bytecode**, if an app needs the speed.
 
 ## Paging strings

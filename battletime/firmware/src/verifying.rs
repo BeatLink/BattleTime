@@ -68,7 +68,9 @@ impl Shell {
             .unwrap_or("");
         let page = Page::Checking { app_name, installing };
         self.display.lock(|display| {
-            let _ = screen::draw(&mut *display.borrow_mut(), &page);
+            crate::status_font::draw_with_glyphs(|| {
+                let _ = screen::draw(&mut *display.borrow_mut(), &page);
+            });
         });
     }
 

@@ -50,6 +50,8 @@ SYSTEM_FOLDER = "system"
 SYSTEM_FILES = {
     "/system/accelerometer/bma421": BATTLETIME / "drivers" / "accelerometer" / "src" / "configuration" / "bma421.bin",
     "/system/accelerometer/bma425": BATTLETIME / "drivers" / "accelerometer" / "src" / "configuration" / "bma425.bin",
+    # The text font, which the firmware reads glyph by glyph as screens draw them.
+    "/system/font": BATTLETIME / "app-host" / "fonts" / "geometric.ntfont",
 }
 
 # Folders under apps/ that hold no app of their own: the starting point for new apps.

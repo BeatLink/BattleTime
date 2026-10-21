@@ -175,6 +175,85 @@ fn clear<Target: DrawTarget<Color = Rgb565>>(
 }
 
 // ============================================================================
+// Without a font
+// ============================================================================
+
+/// An update's progress, for the page drawn without text.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UpdateProgress {
+    /// The step reached, from 1 for starting to `UPDATE_STEPS` for installing.
+    pub step: usize,
+    pub failed: bool,
+    pub bytes_received: u32,
+    pub bytes_in_total: u32,
+}
+
+/// Starting, receiving, checking and installing.
+pub const UPDATE_STEPS: usize = 4;
+
+const STEP_SIZE: i32 = 40;
+const STEP_GAP: i32 = 12;
+const STEPS_TOP: i32 = 80;
+const BAR_TOP: i32 = 148;
+const BAR_HEIGHT: i32 = 14;
+const BAR_EDGE: i32 = 2;
+const STEP_LIT: Rgb565 = Rgb565::WHITE;
+const STEP_FAILED: Rgb565 = Rgb565::new(31, 8, 4);
+const STEP_TO_COME: Rgb565 = Rgb565::new(10, 20, 10);
+
+/// The left edge of the row of steps, which the bar below shares.
+const fn steps_left() -> i32 {
+    let width = UPDATE_STEPS as i32 * STEP_SIZE + (UPDATE_STEPS as i32 - 1) * STEP_GAP;
+    (SCREEN_SIZE as i32 - width) / 2
+}
+
+/// The page for a firmware that cannot read its font: the mode's colour, and during an update a
+/// square for each step, lit once reached and all red if it failed, over a bar of how much has arrived.
+pub fn draw_without_text<Target: DrawTarget<Color = Rgb565>>(
+    target: &mut Target,
+    background: Rgb565,
+    update: Option<UpdateProgress>,
+) -> Result<(), Target::Error> {
+    target.clear(background)?;
+    let Some(update) = update else {
+        return Ok(());
+    };
+    let left = steps_left();
+    for step in 0..UPDATE_STEPS {
+        let colour = match (update.failed, step < update.step) {
+            (true, _) => STEP_FAILED,
+            (false, true) => STEP_LIT,
+            (false, false) => STEP_TO_COME,
+        };
+        let square = Rectangle::new(
+            Point::new(left + step as i32 * (STEP_SIZE + STEP_GAP), STEPS_TOP),
+            Size::new(STEP_SIZE as u32, STEP_SIZE as u32),
+        );
+        target.fill_solid(&square, colour)?;
+    }
+    let width = SCREEN_SIZE as i32 - 2 * left;
+    target.fill_solid(
+        &Rectangle::new(
+            Point::new(left, BAR_TOP),
+            Size::new(width as u32, BAR_HEIGHT as u32),
+        ),
+        STEP_TO_COME,
+    )?;
+    let inner = width - 2 * BAR_EDGE;
+    let filled = match update.bytes_in_total {
+        0 => 0,
+        total => (inner as u64 * update.bytes_received.min(total) as u64 / total as u64) as i32,
+    };
+    target.fill_solid(
+        &Rectangle::new(
+            Point::new(left + BAR_EDGE, BAR_TOP + BAR_EDGE),
+            Size::new(filled as u32, (BAR_HEIGHT - 2 * BAR_EDGE) as u32),
+        ),
+        STEP_LIT,
+    )
+}
+
+// ============================================================================
 // The bitmap font
 // ============================================================================
 

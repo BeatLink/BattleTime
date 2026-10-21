@@ -1,13 +1,13 @@
 //! Builds the external flash of a typical install and reports what each file costs in the flash store.
 //!
-//! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] [--no-accelerometer] [--no-icons] [--no-modules] ID=FILE... /PATH=FILE...`
+//! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] [--no-accelerometer] [--no-icons] [--no-modules] [--no-font] ID=FILE... /PATH=FILE...`
 //! or `... -- --read IMAGE /PATH`
 //!
 //! `ID=FILE` installs an app or face image; `/PATH=FILE` copies any other file, such as a saved state.
 //! `--no-theme` leaves out the all-black theme, so the built-in colours show. Both accelerometers'
-//! configuration files, the shared library's icons, the shell's notifications and quick settings
-//! and the native modules go in, as the companion
-//! app puts them, unless `--no-accelerometer`, `--no-icons` or `--no-modules` leaves them out to
+//! configuration files, the shared library's icons, the text font, the shell's notifications and
+//! quick settings and the native modules go in, as the companion
+//! app puts them, unless `--no-accelerometer`, `--no-icons`, `--no-font` or `--no-modules` leaves them out to
 //! show a watch without them. The modules are built first with `tools/build_modules.sh`, which needs
 //! `nix develop`; without the verifier module the watch opens no app.
 //!
@@ -26,6 +26,9 @@ use embassy_futures::block_on;
 // ============================================================================
 // The store, as the watch builds it
 // ============================================================================
+
+/// Where the text font goes, as `battletime_app_host::font_file::TEXT_FONT_PATH` says.
+const TEXT_FONT_PATH: &str = "/system/font";
 
 /// The theme file holds one RGB565 colour per theme colour.
 const THEME_FILE_BYTES: usize = 2 * battletime_runtime::ThemeColor::COUNT;
@@ -91,6 +94,8 @@ struct Options {
     without_icons: bool,
     /// Leaves out the native modules, the verifier among them, so the watch opens no app.
     without_modules: bool,
+    /// Leaves out the text font, so the firmware's pages draw without text.
+    without_font: bool,
     entries: Vec<Entry>,
     /// `--read IMAGE /PATH`: the image to mount and the file to print from it.
     read: Option<(String, String)>,
@@ -106,6 +111,7 @@ fn read_options(arguments: impl IntoIterator<Item = String>) -> Result<Options, 
             "--no-accelerometer" => options.without_accelerometer = true,
             "--no-icons" => options.without_icons = true,
             "--no-modules" => options.without_modules = true,
+            "--no-font" => options.without_font = true,
             "--read" => {
                 let image = arguments.next().ok_or("--read wants an image")?;
                 let path = arguments.next().ok_or("--read wants a path")?;
@@ -179,10 +185,18 @@ fn main() {
         );
     }
 
+    if !options.without_font {
+        let font = include_bytes!("../../../app-host/fonts/geometric.ntfont");
+        write_measured(&mut store, &mut steps, TEXT_FONT_PATH, font);
+    }
     // The shell's notifications and quick settings, which the firmware opens from the flash like any app.
     for screen in battletime_packages::SHELL_SCREENS {
         let image = shell_screen(screen);
-        let path = battletime_packages::file_in(battletime_packages::SHELL_SCREENS_DIRECTORY, screen, battletime_packages::IMAGE_FILE);
+        let path = battletime_packages::file_in(
+            battletime_packages::SHELL_SCREENS_DIRECTORY,
+            screen,
+            battletime_packages::IMAGE_FILE,
+        );
         write_measured(&mut store, &mut steps, &path, &image);
     }
     if !options.without_modules {
@@ -225,9 +239,15 @@ fn main() {
 
 /// The shell's screen `id`, compiled from `shell/<id>/app.tsx`.
 fn shell_screen(id: &str) -> Vec<u8> {
-    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell").join(id).join("app.tsx");
-    let (_, output) = battletime_compiler::compile_file(&source).unwrap_or_else(|problem| panic!("{id}: {problem}"));
-    output.image.unwrap_or_else(|| panic!("shell/{id} does not compile"))
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../shell")
+        .join(id)
+        .join("app.tsx");
+    let (_, output) =
+        battletime_compiler::compile_file(&source).unwrap_or_else(|problem| panic!("{id}: {problem}"));
+    output
+        .image
+        .unwrap_or_else(|| panic!("shell/{id} does not compile"))
 }
 
 /// Each native module by name, built for the watch by `tools/build_modules.sh`.
@@ -298,6 +318,7 @@ mod tests {
                 without_accelerometer: true,
                 without_icons: true,
                 without_modules: true,
+                without_font: false,
                 entries: vec![
                     Entry::App {
                         id: "launcher".into(),

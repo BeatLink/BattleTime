@@ -162,16 +162,18 @@ pub fn icons_file() -> &'static [u8] {
     ICONS.get_or_init(|| battletime_compiler::library::build_icons_file().expect("the icons file builds"))
 }
 
-/// The shared library, built once for every test in the process, with its fonts given to the app host as the watch does.
+/// The shared library, built once for every test in the process, with the whole text font given to the app host.
+///
+/// The watch reads the font's glyphs from the external flash as screens draw them; drawing from the whole font gives the same pixels.
 pub fn shared_library() -> Result<&'static [u8], OpenFailure> {
     static LIBRARY: OnceLock<Result<Vec<u8>, String>> = OnceLock::new();
     static FONTS: std::sync::Once = std::sync::Once::new();
     match LIBRARY.get_or_init(battletime_compiler::library::build_library) {
         Ok(bytes) => {
             FONTS.call_once(|| {
-                if let Ok(image) = battletime_runtime::AppImage::parse(bytes) {
-                    battletime_app_host::fonts::install_from_library(&image);
-                }
+                battletime_app_host::fonts::install_text_font(include_bytes!(
+                    "../../app-host/fonts/geometric.ntfont"
+                ));
             });
             Ok(bytes)
         }

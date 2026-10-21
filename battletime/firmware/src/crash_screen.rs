@@ -46,7 +46,9 @@ impl ShownPage {
     pub fn draw_if_needed(&mut self, display: &mut ScreenDisplay, installed: &InstalledApps) {
         if !self.drawn {
             with_page(&self.page, installed, |page| {
-                let _ = screen::draw(display, page);
+                crate::status_font::draw_with_glyphs(|| {
+                    let _ = screen::draw(&mut *display, page);
+                });
             });
             self.drawn = true;
         }

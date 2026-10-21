@@ -1,5 +1,5 @@
-//! The shared library image, which holds the shared functions and the text font, and the icons file:
-//! every icon in `ICON_NAMES`, in that order, as a mask of one size. The icons file and the
+//! The shared library image, which holds the shared functions, and the icons file: every icon in
+//! `ICON_NAMES`, in that order, as a mask of one size. The icons file, the text font and the
 //! accelerometer's configuration files live on the external flash, so the firmware region keeps their room.
 //!
 //! The icons are drawn from free icon fonts and one picture kept in `third_party/`, whose README
@@ -304,21 +304,16 @@ pub fn draw_every_icon() -> Result<Vec<Picture>, String> {
     ICON_NAMES.iter().map(|name| fonts.draw(name)).collect()
 }
 
-/// The text font `tools/generate_fonts.py` made, drawn from lines and arcs, which every text size scales.
-pub const LIBRARY_FONTS: [&[u8]; 1] = [include_bytes!("../../app-host/fonts/geometric.ntfont")];
-
 /// The dot-matrix font, drawn from rows of dots, which each app that uses `dot_matrix` carries as its font 0.
 pub const DOT_MATRIX_FONT: &[u8] = include_bytes!("../../app-host/fonts/dot-matrix.ntfont");
 
 /// Writes the shared library image, which the runtime's install checks accept.
 ///
-/// Its icons are not in it: they go in the icons file `build_icons_file` writes, on the external flash.
+/// Its icons and the text font are not in it: they go on the external flash, the icons in the file
+/// `build_icons_file` writes and the font as `app-host/fonts/geometric.ntfont` is.
 pub fn build_library() -> Result<Vec<u8>, String> {
     let writer = ImageWriter::new(LIBRARY_ID, LIBRARY_NAME, AppKind::Library, SHARED_LIBRARY_VERSION);
-    let (mut writer, _) = crate::shared_functions::compile_library_functions(writer)?;
-    for font in LIBRARY_FONTS {
-        writer.font(font);
-    }
+    let (writer, _) = crate::shared_functions::compile_library_functions(writer)?;
     let image = writer.build();
     crate::check_image(&image)?;
     Ok(image)

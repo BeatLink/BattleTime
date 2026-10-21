@@ -14,6 +14,7 @@ mod bitmap_file;
 pub mod closed_apps;
 mod drawing;
 pub mod folder;
+pub mod font_file;
 pub mod fonts;
 pub mod haptics;
 mod host;

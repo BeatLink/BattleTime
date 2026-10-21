@@ -124,8 +124,11 @@ pub const ASSUMED_ROWS: u32 = 8;
 /// The heap the firmware has: 10 KB for the system and 20.25 KB for the UI; the flash store keeps its tables outside it.
 pub const HEAP_BYTES: u32 = 30_976;
 
-/// What the system holds on the heap while an app is open: notifications, file transfers and the shell.
-pub const SYSTEM_BYTES: u32 = 4_096;
+/// The most the text font's glyphs in use take on the heap, read from the external flash as screens draw them.
+pub const TEXT_FONT_BYTES: u32 = 1_536;
+
+/// What the system holds on the heap while an app is open: notifications, file transfers, the shell and the text font's glyphs.
+pub const SYSTEM_BYTES: u32 = 4_096 + TEXT_FONT_BYTES;
 
 /// The most an open app may need, leaving the system its share.
 pub const APP_HEAP_BUDGET_BYTES: u32 = HEAP_BYTES - SYSTEM_BYTES;

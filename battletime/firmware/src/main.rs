@@ -103,7 +103,7 @@ mod phone;
 #[cfg(with_shell)]
 mod phone_services;
 mod status;
-#[cfg(with_shell)]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod status_font;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod system_values;
@@ -233,9 +233,6 @@ async fn main(spawner: Spawner) {
         },
     ))));
 
-    // The status page draws with the shared library's text font, so the font comes first.
-    #[cfg(with_shell)]
-    status_font::start(apps::shared_library());
     let mut screen = start_screen(
         spi_bus,
         Output::new(chip.P0_18, Level::Low, OutputDrive::Standard),
@@ -274,6 +271,14 @@ async fn main(spawner: Spawner) {
     else {
         return;
     };
+    // The status page's text font is on the external flash, so it reads once the store is up.
+    #[cfg(with_shell)]
+    {
+        status_font::start(files);
+        if shell::status_is_shown() {
+            screen.redraw();
+        }
+    }
     screen.set_mode(mode);
 
     #[cfg(with_shell)]
@@ -522,6 +527,8 @@ struct Screen {
     display: &'static SharedDisplay,
     mode: status::Mode,
     lines: [StatusLine; line::LINE_COUNT],
+    /// The update under way, for the page drawn without text while the font cannot be read.
+    update: Option<line::UpdateProgress>,
 }
 
 impl Screen {
@@ -536,22 +543,45 @@ impl Screen {
     }
 
     fn draw_line(&self, line: usize) {
-        self.display.lock(|display| {
-            let _ = line::draw_line(
-                &mut *display.borrow_mut(),
-                line,
-                &self.lines[line],
-                self.mode.background(),
-            );
+        if !page_has_text() {
+            return self.draw_without_text();
+        }
+        draw_with_glyphs(|| {
+            self.display.lock(|display| {
+                let _ = line::draw_line(
+                    &mut *display.borrow_mut(),
+                    line,
+                    &self.lines[line],
+                    self.mode.background(),
+                );
+            });
         });
     }
 
     fn redraw(&self) {
+        if !page_has_text() {
+            return self.draw_without_text();
+        }
         self.display.lock(|display| {
             let _ = display.borrow_mut().clear(self.mode.background());
         });
         for line in 0..line::LINE_COUNT {
             self.draw_line(line);
+        }
+    }
+
+    /// The page as coloured steps and a bar, for when the font cannot be read.
+    fn draw_without_text(&self) {
+        self.display.lock(|display| {
+            let _ = line::draw_without_text(&mut *display.borrow_mut(), self.mode.background(), self.update);
+        });
+    }
+
+    /// Notes the update's progress for the page drawn without text, and draws it if that is the page.
+    fn set_update(&mut self, update: Option<line::UpdateProgress>) {
+        self.update = update;
+        if !page_has_text() && shell::status_is_shown() {
+            self.draw_without_text();
         }
     }
 
@@ -592,6 +622,26 @@ fn start_screen(
         display: DISPLAY.init(Mutex::new(RefCell::new(display))),
         mode: status::Mode::Confirmed,
         lines: Default::default(),
+        update: None,
+    }
+}
+
+/// Whether the status page draws text: the full firmware's needs its font from the external flash.
+fn page_has_text() -> bool {
+    #[cfg(with_shell)]
+    return status_font::has_text();
+    #[cfg(not(with_shell))]
+    true
+}
+
+/// Draws, reading any glyphs the drawing missed and drawing again in the full firmware.
+fn draw_with_glyphs(draw: impl FnMut()) {
+    #[cfg(with_shell)]
+    status_font::draw_with_glyphs(draw);
+    #[cfg(not(with_shell))]
+    {
+        let mut draw = draw;
+        draw();
     }
 }
 
@@ -1394,6 +1444,12 @@ fn show_update(
 ) {
     if let Some(failure) = outcome.failure() {
         screen.show_status();
+        let reached = screen.update.map_or(1, |update| update.step);
+        screen.set_update(Some(line::UpdateProgress {
+            step: reached,
+            failed: true,
+            ..Default::default()
+        }));
         screen.write_line(line::ACTION, "Update failed");
         screen.write_line(line::PROGRESS, failure.words());
         screen.release_status();
@@ -1431,5 +1487,17 @@ fn show_update(
     let mut progress = StatusLine::new();
     let _ = write_progress(&mut progress, dfu.bytes_received(), dfu.image_size_in_bytes());
     screen.write_line(line::PROGRESS, &progress);
+    let step = match activity {
+        Activity::Idle | Activity::Starting => 1,
+        Activity::Receiving => 2,
+        Activity::Checking => 3,
+        Activity::Installing => 4,
+    };
+    screen.set_update(Some(line::UpdateProgress {
+        step,
+        failed: false,
+        bytes_received: dfu.bytes_received(),
+        bytes_in_total: dfu.image_size_in_bytes(),
+    }));
     *shown = now;
 }

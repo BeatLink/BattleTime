@@ -1667,23 +1667,6 @@ fn a_preset_theme_is_picked_and_read_back_by_number() {
     assert_eq!(settings::preset_number(&own), -1);
 }
 
-#[test]
-fn fonts_come_from_the_shared_library() {
-    let library: &'static [u8] =
-        std::boxed::Box::leak(battletime_compiler_library_stand_in().into_boxed_slice());
-    let image = battletime_runtime::AppImage::parse(library).unwrap();
-    assert_eq!(crate::fonts::install_from_library(&image), 1);
-    assert!(crate::fonts::text_font_bytes() > 0);
-}
-
-/// A library image holding just the text font, as the compiler's builder writes it.
-fn battletime_compiler_library_stand_in() -> Vec<u8> {
-    let mut writer = ImageWriter::new("shared", "Shared library", AppKind::Library, 1);
-    let path = std::format!("{}/fonts/geometric.ntfont", env!("CARGO_MANIFEST_DIR"));
-    writer.font(&std::fs::read(path).unwrap());
-    writer.build()
-}
-
 /// The counter app, recorded as built against shared library `version`.
 fn counter_image_for_library(version: u16) -> Vec<u8> {
     let mut image = counter_image();

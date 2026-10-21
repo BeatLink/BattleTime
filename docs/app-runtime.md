@@ -173,7 +173,7 @@ Each kind of section appears at most once:
 | 6 | Subscriptions | 16 bytes per subscription, described below. |
 | 7 | Resources | The app's own images, as a table of (offset, length) pairs followed by the images. |
 | 8 | Initial values | Optional. For arrays whose elements do not all start the same: a table of (offset, length) pairs, then per array its number (1 byte) followed by its elements packed as they are stored in RAM. |
-| 9 | Fonts | The shared library's text font, or the dot-matrix font of an app that uses it; see [Fonts](#fonts). |
+| 9 | Fonts | The dot-matrix font of an app that uses it; the text font is a system file, see [Fonts](#fonts). |
 | 10 | Functions | Optional. Up to 256 functions, the same layout as expressions. Each function's bytes start with its argument count, its result count (0 or 1) and how many locals it uses, then its code. |
 | 11 | Launcher | Optional. 2 bytes: the string naming the launcher group the app declares. |
 | 12 | Data | Optional. Files laid out as resources, read by number with `AppImage::data`; no image carries any today. |
@@ -776,9 +776,15 @@ each app image that names `dot_matrix`, and the host takes it from the image whe
 and lets go of it when the app closes, so it costs RAM only while that app is loaded. An image
 without it, such as one built before, draws `dot_matrix` as `normal`.
 
-The font lives in the shared library's font section. The host's font starts empty, and the firmware
-calls `fonts::install_from_library` once with the library; until then text takes no room. The
-`built-in-fonts` feature starts it filled from `app-host/fonts/`, for the simulator and tests.
+On the watch the text font lives on the external flash at `/system/font`, a system file the
+companion puts, and no copy is kept in the firmware or the shared library. `font_file` keeps a copy
+in the heap holding only the glyphs drawn lately, at most 1,536 B, which the memory need counts in
+the system's share. A lookup that misses notes the character; after layout the host reads the
+noted glyphs, builds the copy again, keeping those used since the last build, and lays the screen
+out once more, and the firmware's own pages draw, read what they missed and draw again. While the
+file cannot be read, those pages draw without text: the status page as coloured steps and a
+progress bar, the help screen as a clock of bars. The `built-in-fonts` feature starts the font
+filled from `app-host/fonts/`, for the simulator, and the test harness installs the whole file.
 
 The browser preview draws text in the same letters: `tools/generate_preview_font.py` turns each
 glyph's strokes into filled outlines with round ends and writes them, in the text weight and a light

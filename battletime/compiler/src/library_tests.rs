@@ -354,15 +354,10 @@ fn the_icons_file_holds_every_icon_by_its_number_as_a_square_mask() {
 }
 
 #[test]
-fn the_library_carries_the_text_font() {
+fn the_library_carries_no_font() {
     let bytes = build_library().unwrap();
     let image = battletime_runtime::AppImage::parse(&bytes).unwrap();
-    assert_eq!(image.font_count(), 1);
-    for (index, expected) in super::LIBRARY_FONTS.iter().enumerate() {
-        let font = image.font(index as u16).unwrap();
-        assert_eq!(&font[..4], b"NTGF");
-        assert_eq!(font, *expected);
-    }
+    assert_eq!(image.font_count(), 0);
 }
 
 #[test]

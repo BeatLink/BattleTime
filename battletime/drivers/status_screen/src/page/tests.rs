@@ -254,3 +254,61 @@ fn blending_keeps_both_ends_exact() {
     assert_eq!(blend(BLUE, VALUE_COLOUR, 255), VALUE_COLOUR);
     assert_eq!(blend(Rgb565::BLACK, Rgb565::WHITE, 128), Rgb565::new(16, 32, 16));
 }
+
+// ============================================================================
+// Without a font
+// ============================================================================
+
+#[test]
+fn without_a_font_an_update_shows_its_steps_and_how_much_arrived() {
+    let mut screen = FrameBuffer::filled(Rgb565::BLACK);
+    let update = UpdateProgress {
+        step: 2,
+        failed: false,
+        bytes_received: 50,
+        bytes_in_total: 100,
+    };
+
+    draw_without_text(&mut screen, Rgb565::BLUE, Some(update)).unwrap();
+
+    let left = steps_left();
+    let step_rows = STEPS_TOP..STEPS_TOP + STEP_SIZE;
+    let step =
+        |index: i32| left + index * (STEP_SIZE + STEP_GAP)..left + index * (STEP_SIZE + STEP_GAP) + STEP_SIZE;
+    let square = (STEP_SIZE * STEP_SIZE) as usize;
+    assert_eq!(screen.count(step(1), step_rows.clone(), STEP_LIT), square);
+    assert_eq!(screen.count(step(2), step_rows, STEP_TO_COME), square);
+    let bar_rows = BAR_TOP + BAR_EDGE..BAR_TOP + BAR_HEIGHT - BAR_EDGE;
+    let lit = screen.count(0..SCREEN_SIZE as i32, bar_rows.clone(), STEP_LIT);
+    let inner = (SCREEN_SIZE as i32 - 2 * left - 2 * BAR_EDGE) as usize;
+    assert_eq!(lit, inner / 2 * bar_rows.len());
+}
+
+#[test]
+fn without_a_font_a_failed_update_turns_every_step_red() {
+    let mut screen = FrameBuffer::filled(Rgb565::BLACK);
+    let update = UpdateProgress {
+        step: 3,
+        failed: true,
+        ..UpdateProgress::default()
+    };
+
+    draw_without_text(&mut screen, Rgb565::BLUE, Some(update)).unwrap();
+
+    let rows = STEPS_TOP..STEPS_TOP + STEP_SIZE;
+    let all_steps = (STEP_SIZE * STEP_SIZE) as usize * UPDATE_STEPS;
+    assert_eq!(screen.count(0..SCREEN_SIZE as i32, rows, STEP_FAILED), all_steps);
+}
+
+#[test]
+fn without_a_font_and_no_update_the_page_is_its_colour() {
+    let mut screen = FrameBuffer::filled(Rgb565::BLACK);
+
+    draw_without_text(&mut screen, Rgb565::BLUE, None).unwrap();
+
+    let whole = (SCREEN_SIZE * SCREEN_SIZE) as usize;
+    assert_eq!(
+        screen.count(0..SCREEN_SIZE as i32, 0..SCREEN_SIZE as i32, Rgb565::BLUE),
+        whole
+    );
+}

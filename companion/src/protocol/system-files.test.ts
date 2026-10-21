@@ -30,6 +30,7 @@ describe('putMissingSystemFiles', () => {
     expect(SYSTEM_FILES.map((file) => file.path)).toEqual([
       '/system/accelerometer/bma421',
       '/system/accelerometer/bma425',
+      '/system/font',
       '/system/icons',
       '/system/modules/p256',
       '/system/modules/test',

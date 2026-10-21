@@ -442,6 +442,9 @@ Files the firmware needs that are not apps live under `/system`:
   the watch opens no app. `p256` holds the elliptic-curve maths for pairing, whose call 0 is a
   self-test answering how many microseconds one key exchange took. `test` is the one the `module`
   command above calls to prove the loader.
+- `/system/font`: the text font, `app-host/fonts/geometric.ntfont`, 4,945 bytes. The firmware
+  reads only the glyphs a screen draws; while it is missing, apps show no text and the firmware's
+  own pages draw without it.
 - `/system/shell/notifications/app.ntapp` and `/system/shell/quick-settings/app.ntapp`: the
   shell's own screens, compiled from `shell/`, which the firmware opens from there like any app;
   while one is missing, the swipe that would open it goes back to the face.

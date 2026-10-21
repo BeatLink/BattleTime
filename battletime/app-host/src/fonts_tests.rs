@@ -105,7 +105,7 @@ fn every_glyph_reads_back_whole() {
 #[test]
 fn a_file_that_is_not_the_font_has_no_glyphs() {
     static NOT_A_FONT: [u8; 16] = *b"NTFN\x01\x04\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00";
-    let font = GeometricFont::empty();
+    let font = GeometricFont::empty(false);
     assert_eq!(font.glyph_count(), 0);
     assert!(font.heights().is_none());
     font.install(&NOT_A_FONT);
@@ -128,7 +128,7 @@ fn a_glyph_cut_short_stops_at_its_last_whole_shape() {
         LINE, 1, 2, 3, 4, //
         LINE, 5, 6,
     ];
-    let font = GeometricFont::empty();
+    let font = GeometricFont::empty(false);
     font.install(&TRUNCATED);
     let glyph = font.glyph('A').unwrap();
     assert_eq!(font.shapes(glyph).count(), 1);
@@ -144,7 +144,7 @@ fn an_unknown_shape_ends_the_glyph() {
         DOT, 1, 2, //
         9, 0,
     ];
-    let font = GeometricFont::empty();
+    let font = GeometricFont::empty(false);
     font.install(&ODD_SHAPE);
     assert_eq!(font.shapes(font.glyph('A').unwrap()).count(), 1);
 }
@@ -162,7 +162,7 @@ fn the_font_notes_which_ascii_it_has_and_looks_up_the_rest() {
 fn installing_a_file_that_is_not_the_font_forgets_what_was_checked() {
     static NOT_A_FONT: [u8; 16] = *b"NTFN\x01\x04\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00";
     static FONT_FILE: &[u8] = include_bytes!("../fonts/geometric.ntfont");
-    let font = GeometricFont::empty();
+    let font = GeometricFont::empty(false);
     font.install(FONT_FILE);
     assert!(font.has('A'));
     font.install(&NOT_A_FONT);
@@ -401,7 +401,7 @@ fn the_metrics_box_holds_all_of_a_glyphs_ink() {
 
 #[test]
 fn an_empty_font_has_no_glyphs_and_no_shapes() {
-    let font = GeometricFont::empty();
+    let font = GeometricFont::empty(false);
     assert!(font.glyph('A').is_none());
     let entry = GlyphEntry {
         width: 82,
@@ -822,7 +822,7 @@ fn a_row_of_dots_is_nearest_to_its_nearest_dot() {
 fn an_app_font_is_let_go_only_by_the_image_that_gave_it() {
     let given = Vec::from(include_bytes!("../fonts/dot-matrix.ntfont").as_slice());
     let other = given.clone();
-    let font = GeometricFont::empty();
+    let font = GeometricFont::empty(false);
     unsafe { font.install_borrowed(&given) };
     assert!(font.has('8'));
 

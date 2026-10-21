@@ -1820,8 +1820,11 @@ impl Shell {
             None if self.help_drawn_at != Some(help::next_change(clock::utc_now())) => {
                 let now = clock::utc_now();
                 let local_now = clock::now();
-                self.display
-                    .lock(|display| help::draw(&mut display.borrow_mut(), local_now, &self.theme));
+                self.display.lock(|display| {
+                    crate::status_font::draw_with_glyphs(|| {
+                        help::draw(&mut display.borrow_mut(), local_now, &self.theme)
+                    })
+                });
                 self.help_drawn_at = Some(help::next_change(now));
             }
             None => {}

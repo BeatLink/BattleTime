@@ -85,9 +85,10 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
   from `battletime/shell/` into `/system/shell` on external flash, and rare native code such as the
   verifier is a module in `/system/modules`. No built-in apps, faces, launcher, icons or fonts,
   and no fallback copies of them. Apps live in `/apps` on external flash; the shared library (its
-  font and functions) ships inside the firmware image, after the code, where the image header says.
-  Its icons and the accelerometers' configuration live in `/system` on external flash, which the
-  companion puts on any watch that lacks them.
+  functions) ships inside the firmware image, after the code, where the image header says. Its
+  icons, the text font and the accelerometers' configuration live in `/system` on external flash,
+  which the companion puts on any watch that lacks them; the firmware's own pages draw without text
+  while the font cannot be read.
 - Anything that changes often (notifications, settings, app state) goes on external flash, never
   internal flash.
 - Apps are Preact and Signals compiled on the computer to bytecode ([docs/app-runtime.md](docs/app-runtime.md)).

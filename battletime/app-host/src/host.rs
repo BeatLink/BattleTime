@@ -1143,6 +1143,15 @@ impl<'image> AppHost<'image> {
 
     /// Works out what each widget's images and arrays want, then places every widget.
     fn measure_and_lay_out(&mut self) {
+        self.measure_and_place();
+        // The text it measured may hold characters whose glyphs are still on the external flash.
+        if crate::font_file::load_missing_glyphs() {
+            self.measure_and_place();
+            self.redraw_whole_screen();
+        }
+    }
+
+    fn measure_and_place(&mut self) {
         let mut measured = core::mem::take(&mut self.nodes);
         {
             let context = self.draw_context();
