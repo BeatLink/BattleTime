@@ -620,6 +620,10 @@ each answer a JSON line notified on it, in pieces of up to 20 bytes; a failure a
 command and `"err":"..."`. The recovery firmware has no apps, so it refuses every command with an
 error.
 
+Send a command only while no file service operation is in flight. A command that overlaps file
+service traffic can hang the watch until its watchdog resets it ([todo](todo.md)), so the companion
+sends each one in its own turn on the file service.
+
 | Command | Answer |
 |---|---|
 | `{"c":"apps"}` | `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need,group],...]}`, `kind` being `app` or `face`, `enabled` 0 or 1, `need` the heap in bytes the app needs while open and `group` the launcher group its image declares, empty when none, in id order; `room` is the most an app may need. Each image's CRC and id are checked, but its code only at install. An image larger than `room` is never read: it is listed by its id, as an app, turned off, with `need` its length. The watch sends the line a piece per app, so a long list never needs one large block of its heap |

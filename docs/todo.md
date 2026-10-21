@@ -754,6 +754,12 @@ These live on the `worktree-bootloader`, `worktree-flash-async` and `worktree-up
   that a watch updated from day files keeps its history on the watch and in the companion, and that
   the record keys the old day files held come free as they age out.
 - [ ] **A checkpoint of the store's tables,** so mounting need not read every ring record.
+- [ ] **A packages command during file service traffic hangs the watch.** On the PineTime (origin/dev
+  8b272b31, 2026-10-21), `{"c":"apps"}` sent while the companion's sync pass was listing and reading
+  files stopped the watch about 14 s later, and the watchdog reset it with no crash recorded. That
+  happened on every connect until the companion made its packages commands wait for the file
+  service. The same command alone answered normally. Find what the two wait on together, likely the
+  store or the flash chip, so that neither ordering can stop the main loop.
 
 - [ ] **Use the file system:** save the BLE bond there.
 - [ ] **Resource packages:** fonts and pictures installed from a zip over BLE, with a list of
