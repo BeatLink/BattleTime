@@ -1,0 +1,52 @@
+{
+  "screens": [
+    {
+      "name": "main",
+      "reached_by": null,
+      "texts": [
+        "CPR",
+        "Lost in the wild",
+        "Severe bleeding",
+        "Survival"
+      ]
+    },
+    {
+      "name": "guide_0",
+      "reached_by": "tap \"CPR\"",
+      "texts": [
+        "1. Check it is",
+        "CPR",
+        "Use when someone",
+        "and is not",
+        "breathing",
+        "does not respond",
+        "normally.",
+        "safe to go near."
+      ]
+    },
+    {
+      "name": "guide_1",
+      "reached_by": "tap \"Severe bleeding\"",
+      "texts": [
+        "1. Call the",
+        "2. Press hard",
+        "Severe bleeding",
+        "emergency",
+        "number.",
+        "on the wound."
+      ]
+    },
+    {
+      "name": "guide_9",
+      "reached_by": "tap \"Lost in the wild\"",
+      "texts": [
+        "Lost in the wild",
+        "Observe.",
+        "Plan.",
+        "STOP:",
+        "Stop.",
+        "Think."
+      ]
+    }
+  ]
+}

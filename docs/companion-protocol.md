@@ -418,6 +418,7 @@ whole with the file transfer above; the watch only reads them.
 |---|---|---|
 | `/notes/note.txt`, `/notes/font` | the notes app | [Notes](#notes) |
 | `/qr/list`, `/qr/<slot>` | the `qr-code` app | [QR code](#qr-code) |
+| `/survival/list`, `/survival/<slot>` | the `survival` app | [Survival](#survival) |
 | `/settings/launcher` | the launcher | [Launcher](#launcher) |
 | `/settings/quick_apps` | the watch face's swipes | [Quick apps](#quick-apps) |
 | `/remote/buttons` | the remote app | [Remote](#remote) |
@@ -462,6 +463,26 @@ watch paints the white margin itself.
 
 The watch refuses a code over 120 by 120 modules. Above 74 modules a module is under 3 pixels on
 the 240 pixel screen and may not scan, so the companion warns but still sends it.
+
+### Survival
+
+The `survival` app lists the emergency guides in `/survival/list` and shows the one tapped from
+`/survival/<slot>`, reading only the lines in view. The guides' texts live in the companion app,
+each keeping one slot for good. Sending a choice writes each chosen guide the watch lacks or holds
+at another length, then the list, then deletes the guides left out, so the list never names a
+missing file.
+
+`/survival/list` has the same layout as `/qr/list`, for up to sixteen guides:
+
+| Bytes | Holds |
+|---|---|
+| 0 | format version, 1 |
+| 1 | how many guides, 0 to 16 |
+| 2.. | 26 bytes for each guide: its slot (0 to 15), its title's length (1 to 24), then the title padded with zeros to 24 bytes |
+
+A list in another version shows no guides, and deleting `/survival/list` brings back the app's
+hint. `/survival/<slot>`, such as `/survival/9`, is the guide's text, in plain ASCII; a listed
+guide whose file is missing or empty shows a reminder to send it again.
 
 ### Launcher
 

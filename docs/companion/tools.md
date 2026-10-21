@@ -1,4 +1,4 @@
-# Notes, QR codes, remote and tools
+# Notes, QR codes, survival guides, remote and tools
 
 These screens, under **On the watch** on the Watch screen, feed watch apps that get their content
 from the companion, and look after the watch's files.
@@ -41,6 +41,18 @@ would not fit at all.
 ![The QR code screen with a code's preview and the codes on the watch](../images/companion/qr-code.png){ .phone }
 
 ![A QR code on the watch](../../battletime/harness/snapshots/screens/app-qr-code-code.png)
+
+## Survival guides
+
+The watch's [Survival](../apps/survival.md) app carries short emergency guides, to read without a
+phone or a signal. The **Survival** screen lists every guide the companion has, under first aid,
+outdoors and disasters, each with a switch and **Read it** to see its text first. Tick the guides
+to carry and choose **Send**: the watch then holds exactly those, with only new ones sent. The
+switches start ticked for the guides already on the watch.
+
+The guides are reminders of common first aid and outdoor training, not a replacement for a course.
+
+![A survival guide on the watch](../../battletime/harness/snapshots/screens/app-survival-guide.png)
 
 ## Remote
 

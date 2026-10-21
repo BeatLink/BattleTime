@@ -33,14 +33,14 @@ off, and put back when it opens.
 
 ## The apps
 
-There are 39 apps, ported from InfiniTime and wasp-os and merged where both had the same one, plus
+There are 40 apps, ported from InfiniTime and wasp-os and merged where both had the same one, plus
 apps of BattleTime's own. Each has a page under [apps.md](../apps.md). Among them:
 
 - **Time:** alarm, timer, stopwatch and pomodoro.
 - **Phone:** call, music, weather, navigation, phone finder, notes, remote and QR code.
 - **Health:** steps, heart rate and sports.
 - **Games:** 2048, snake, paddle, puzzle 15, four in a row, Game of Life, dice and paint.
-- **Tools:** calculator, flashlight, metronome, level, motion, beacon, Morse, haiku and more.
+- **Tools:** calculator, flashlight, metronome, level, motion, beacon, Morse, survival guides, haiku and more.
 - **System:** the launcher, Settings, Software, About and Files.
 
 A few work hand in hand with the companion app:
@@ -52,6 +52,8 @@ A few work hand in hand with the companion app:
 - **[QR code](../apps/qr-code.md)** keeps up to eight codes made in the companion app from a link,
   text or a Wi-Fi network, and shows one black on white at full brightness for another phone to
   scan.
+- **[Survival](../apps/survival.md)** carries the emergency guides ticked in the companion app,
+  such as CPR, severe bleeding or being lost in the wild, to read without a phone or a signal.
 - **Temporary apps** open on the watch without being installed, such as a question to answer Yes or
   No with the [prompt](../apps/prompt.md). One opens over whatever shows, and closes when you go
   back, the phone stops it or the phone disconnects.

@@ -8,7 +8,7 @@ firmware beyond sending a watch the reloader that moves it onto BattleTime.
 How to install and use it is in the user guide, [docs/companion](../docs/companion/index.md):
 [connecting a watch](../docs/companion/connecting.md), [apps and the store](../docs/companion/apps-and-store.md),
 [phone features](../docs/companion/phone-features.md), [the watch's data](../docs/companion/watch-data.md),
-[firmware updates](../docs/companion/firmware-updates.md), [notes, QR codes, remote and tools](../docs/companion/tools.md)
+[firmware updates](../docs/companion/firmware-updates.md), [notes, QR codes, survival guides, remote and tools](../docs/companion/tools.md)
 and [the command line](../docs/companion/command-line.md). This file is for working on the app.
 
 ## Status
@@ -238,6 +238,7 @@ src/screens/             One file per screen
   plugins.tsx            Installed plugins, their watch apps and their settings pages
   notes.tsx              The note the watch's Notes app shows (typed, a file or a URL), and its font
   qr-code.tsx            QR codes for text, links or Wi-Fi networks, and the list the watch's qr-code app keeps
+  survival.tsx           A checklist of the emergency guides the watch's survival app carries
   remote.tsx             The watch's Remote app: its buttons, what each runs here, and recent taps
   launcher.tsx           The launcher's style, view and groups, and which group each app is in
   quick-apps.tsx         The apps a swipe left or right on the watch face steps through
@@ -396,6 +397,18 @@ code over 120 modules is refused, and one over 74 is sent with a warning that it
 `battletime qr <text>|wifi <ssid> [password]` adds a code from a terminal, and
 `battletime qr list|rename <n> <label>|move <n> up|down|remove <n>|remove all` manages the list by
 the numbers `list` shows.
+
+## Survival
+
+The Survival screen is a checklist of the emergency guides in
+[src/bundles/survival-guides.ts](src/bundles/survival-guides.ts), grouped into first aid, outdoors
+and disasters, each readable on the phone first. Its switches start as the watch's `/survival/list`
+says, read when it connects, and sending puts exactly the ticked guides on the watch.
+[src/protocol/survival.ts](src/protocol/survival.ts) writes each guide's text to `/survival/<slot>`
+unless the watch already holds it at the same length, then the list, then deletes the guides left
+out (the layout is in [companion-protocol.md](../docs/companion-protocol.md)). Each guide keeps its
+slot for good, and a new one takes the next free slot up to 15. `battletime survival` lists the
+guides from a terminal, and `battletime survival set|add|remove <guide>...|all` changes them.
 
 ## Remote
 

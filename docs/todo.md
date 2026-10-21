@@ -295,6 +295,14 @@ document for its part instead.
   - after `battletime qr remove all`, it shows "No QR codes yet. Make them in the BattleTime companion
     app."
   When these pass, also remove the QR item under "Untried with a watch" in companion/TODO.md.
+- [ ] **The survival app on the PineTime.** It has run only in the test harness and the
+  companion's tests. With the companion app's Survival screen or `battletime survival`, check that:
+  - `battletime survival set cpr bleeding lost` writes `/survival/list` and the three guides, and the
+    app lists "CPR", "Severe bleeding" and "Lost in the wild" the next time it opens;
+  - a tapped guide shows its title and text, and the longest guide scrolls smoothly to its end;
+  - `battletime survival remove lost` takes "Lost in the wild" off the list and deletes `/survival/9`;
+  - after `battletime survival remove all`, it shows "No guides yet. Choose them in the BattleTime
+    companion app."
 - [ ] **Transitions and scrolling on the PineTime.** Slides, wipes and hardware-scrolled lists have
   run only in the emulator and against a model of the panel; none of it is on the watch yet. Flash
   the bootloader first, then a firmware built from master at e78fc7a or later. On the watch, check

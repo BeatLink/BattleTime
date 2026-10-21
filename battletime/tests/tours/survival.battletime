@@ -1,0 +1,24 @@
+# Every screen of the survival app, for docs/apps/survival.md: a guide, scrolled, one missing, then with no guides.
+open app survival
+expect text "CPR"
+expect text "Severe bleeding"
+tap "CPR"
+expect screen guide_0
+expect text "Use when someone"
+snapshot guide
+drag 120 200 120 40         # scroll down the guide
+expect text "2. Shout and tap"
+snapshot scrolled
+button
+expect screen main
+write "/survival/9" ""       # the guide's text is lost
+tap "Lost in the wild"
+expect screen guide_9
+expect text "This guide is"
+snapshot missing
+button
+write "/survival/list" ""   # the phone takes every guide off
+reopen
+expect text "No guides yet"
+snapshot empty
+expect no failures

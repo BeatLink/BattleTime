@@ -75,6 +75,7 @@ These need the phone or computer connected through the companion app.
 | [Motion](apps/motion.md) | Charts the accelerometer's readings on each axis. |
 | [Metronome](apps/metronome.md) | Beats on the vibration motor, with tap tempo. |
 | [Morse](apps/morse.md) | A notepad you type in Morse code with swipes. |
+| [Survival](apps/survival.md) | Emergency guides, such as CPR or being lost in the wild, chosen in the companion and read offline. |
 | [Haiku](apps/haiku.md) | A new short verse each time it opens. |
 | [Hello](apps/hello.md) | The smallest app, a starting point for reading app code. |
 | [Template](apps/template.md) | A starting point for a new app that answers every kind of input. |

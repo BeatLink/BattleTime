@@ -121,7 +121,7 @@ battletime ask "Lunch now?" --timeout 30
 most) beside it. `ask` prints `yes` (exit 0) or `no` (exit 1), exits 2 when no one answers in time
 and 3 when it cannot ask. [Temporary apps](apps-and-store.md#temporary-apps) has more.
 
-## Notes, QR codes and the remote
+## Notes, QR codes, survival guides and the remote
 
 ```bash
 battletime note shopping.txt large        # a text file, in the large font
@@ -133,6 +133,10 @@ battletime qr wifi Home secret --label "Home Wi-Fi"
 battletime qr list
 battletime qr move 2 up
 battletime qr remove all
+battletime survival                       # every guide, ticked when on the watch
+battletime survival set cpr bleeding lost # exactly these on the watch
+battletime survival add water
+battletime survival remove all
 battletime remote list                    # the buttons in ~/.config/battletime-companion/remote.json
 battletime remote push                    # send their icons to the watch
 battletime remote listen                  # run each button tapped on the watch

@@ -43,7 +43,24 @@ pub const STARTING_QR_CODE: [u8; 118] = [
 pub const STARTING_QR_LIST_PATH: &str = "/qr/list";
 pub const STARTING_QR_LIST: [u8; 2 + 2 * 26] = qr_list([(0, "example.com"), (3, "Guest Wi-Fi")]);
 
-/// A QR code list file holding these slots and captions, in the format `apps/qr-code` reads.
+/// The survival app's list: CPR in slot 0, severe bleeding in slot 1 and being lost in slot 9.
+pub const STARTING_SURVIVAL_LIST_PATH: &str = "/survival/list";
+pub const STARTING_SURVIVAL_LIST: [u8; 2 + 3 * 26] =
+    qr_list([(0, "CPR"), (1, "Severe bleeding"), (9, "Lost in the wild")]);
+/// The start of the companion app's CPR guide, in the survival app's first slot.
+/// Its lines are broken where the watch wraps them, so the browser preview, which cannot wrap as the watch does, shows the same lines.
+pub const STARTING_SURVIVAL_GUIDE_PATH: &str = "/survival/0";
+pub const STARTING_SURVIVAL_GUIDE: &str = "Use when someone\ndoes not respond\nand is not\nbreathing\nnormally.\n\n\
+1. Check it is\nsafe to go near.\n2. Shout and tap\ntheir shoulders.\nNo answer?\n3. Call the\nemergency number\n\
+(112, 911, 999) on\nspeaker.\n";
+
+/// The start of the bleeding and lost guides, in slots 1 and 9, with lines as short.
+pub const STARTING_BLEEDING_GUIDE_PATH: &str = "/survival/1";
+pub const STARTING_BLEEDING_GUIDE: &str = "1. Call the\nemergency\nnumber.\n2. Press hard\non the wound.\n";
+pub const STARTING_LOST_GUIDE_PATH: &str = "/survival/9";
+pub const STARTING_LOST_GUIDE: &str = "STOP:\nStop.\nThink.\nObserve.\nPlan.\n";
+
+/// A list file holding these slots and captions, in the format `apps/qr-code` and `apps/survival` read.
 const fn qr_list<const COUNT: usize, const LENGTH: usize>(entries: [(u8, &str); COUNT]) -> [u8; LENGTH] {
     let mut file = [0u8; LENGTH];
     file[0] = 1;
@@ -305,6 +322,22 @@ impl FakeSystem {
                 ),
                 (STARTING_QR_CODE_PATH.to_string(), STARTING_QR_CODE.to_vec()),
                 (STARTING_QR_LIST_PATH.to_string(), STARTING_QR_LIST.to_vec()),
+                (
+                    STARTING_SURVIVAL_LIST_PATH.to_string(),
+                    STARTING_SURVIVAL_LIST.to_vec(),
+                ),
+                (
+                    STARTING_SURVIVAL_GUIDE_PATH.to_string(),
+                    STARTING_SURVIVAL_GUIDE.as_bytes().to_vec(),
+                ),
+                (
+                    STARTING_BLEEDING_GUIDE_PATH.to_string(),
+                    STARTING_BLEEDING_GUIDE.as_bytes().to_vec(),
+                ),
+                (
+                    STARTING_LOST_GUIDE_PATH.to_string(),
+                    STARTING_LOST_GUIDE.as_bytes().to_vec(),
+                ),
             ],
             phone_lines: Vec::new(),
             folder: FolderListing::new(),
