@@ -309,11 +309,16 @@ An app message is a few values for one watch app, sent on its topic, which is th
 - The whole line, `GB(` and `)` included but not the newline, is at most 640 bytes of ASCII, with
   any other character written as `\uXXXX`. The phone refuses to send a longer one.
 - The watch hands a message to the app named by its topic. An open app gets it at once. A closed
-  one is started in the background just long enough to run its message handler, without showing
-  it; when the app is not installed, is turned off, has no handler or cannot be started (the heap
-  is too full, say), the message is dropped.
-- Neither side replies, so the sender never learns whether the app heard it. A message the app
-  must not miss is sent again when it matters, as the companion does for SOS on each connection.
+  one is started in the background just long enough to run its message handlers that are not
+  `while_open`, without showing it. One message waits for that run at a time, so a newer message
+  for any closed app replaces one not yet taken.
+- The message is dropped when the app is not installed or is turned off, has no handler that runs
+  while closed, has its state held by the phone ([App state](#app-state-served)), or cannot be
+  started because the heap is too full.
+- The watch skips top-level keys other than `t`, `ch` and `d`, and answers a phone-to-watch line it
+  cannot read, such as one with five numbers, with `{"t":"error","msg":"could not read that message"}`.
+  Otherwise neither side replies, so the sender never learns whether the app heard it. A message the
+  app must not miss is sent again when it matters, as the companion does for SOS on each connection.
 
 For example `GB({"t":"app","ch":"sos","d":{"on":0}})` stops the SOS app's signalling, and
 `GB({"t":"app","ch":"buzz-back","d":{"count":3,"note":"From the phone"}})` reaches the
