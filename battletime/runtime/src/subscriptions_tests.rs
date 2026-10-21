@@ -104,6 +104,7 @@ fn each_kind_sends_its_handler_the_matching_event() {
         (Navigation, EventKind::PhoneData),
         (SettingsChange, EventKind::SettingsChange),
         (Derive, EventKind::Derive),
+        (Message, EventKind::Message),
     ];
 
     for (kind, event) in expected {
@@ -553,4 +554,68 @@ fn a_subscription_whose_bytes_do_not_parse_is_unreadable() {
             problem: SubscriptionProblem::Unreadable,
         })
     );
+}
+
+// ============================================================================
+// Messages
+// ============================================================================
+
+/// A message subscription in the alarm image, keyed by the strings of `alarm`, `laps` and `wake_minute`.
+fn message_image(keys: impl FnOnce(&mut ImageWriter) -> [u16; MESSAGE_KEYS]) -> Vec<u8> {
+    let mut writer = ImageWriter::new("alarm", "Alarm", AppKind::App, 1);
+    writer.handler(Vec::new());
+    let keys = keys(&mut writer);
+    writer.subscription(Subscription::for_message(0, false, keys));
+    writer.build()
+}
+
+fn message_problem(bytes: &[u8]) -> Option<SubscriptionProblem> {
+    match verify_subscriptions(&AppImage::parse(bytes).unwrap()) {
+        Ok(()) => None,
+        Err(ImageError::BadSubscription { problem, .. }) => Some(problem),
+        Err(other) => panic!("unexpected error {other:?}"),
+    }
+}
+
+#[test]
+fn a_message_subscription_keeps_its_text_key_and_four_number_keys() {
+    let keys = [7, 1, NO_MESSAGE_KEY, 300, 2];
+    let written = Subscription::for_message(3, true, keys);
+    let read = Subscription::parse(&written.to_bytes()).unwrap();
+    let state = empty_state(&image_with(&[]));
+
+    assert_eq!(read.kind, SubscriptionKind::Message);
+    assert_eq!(read.handler, 3);
+    assert!(read.only_while_open);
+    assert_eq!(read.message_keys(), keys);
+    assert_eq!(read.next_due(0, &state, 0), None);
+}
+
+#[test]
+fn message_keys_must_name_strings_and_differ() {
+    let good = message_image(|writer| {
+        let text = writer.string("label");
+        let on = writer.string("on");
+        [text, on, NO_MESSAGE_KEY, NO_MESSAGE_KEY, NO_MESSAGE_KEY]
+    });
+    let missing = message_image(|_| {
+        [
+            NO_MESSAGE_KEY,
+            900,
+            NO_MESSAGE_KEY,
+            NO_MESSAGE_KEY,
+            NO_MESSAGE_KEY,
+        ]
+    });
+    let twice = message_image(|writer| {
+        let on = writer.string("on");
+        [NO_MESSAGE_KEY, on, on, NO_MESSAGE_KEY, NO_MESSAGE_KEY]
+    });
+
+    assert_eq!(message_problem(&good), None);
+    assert_eq!(
+        message_problem(&missing),
+        Some(SubscriptionProblem::BadMessageKey)
+    );
+    assert_eq!(message_problem(&twice), Some(SubscriptionProblem::BadMessageKey));
 }

@@ -85,6 +85,7 @@ pub fn subscription_permission(kind: SubscriptionKind) -> Option<Permission> {
         Motion | Acceleration => Permission::Motion,
         Notification => Permission::Notifications,
         Call | Music | Navigation => Permission::Phone,
+        Message => Permission::PhoneMessages,
         _ => return None,
     })
 }

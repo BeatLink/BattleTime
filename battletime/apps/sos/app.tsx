@@ -1,5 +1,6 @@
 // SOS: hold the red button for five seconds to tell the phone you need help, while the light, screen and motor flash SOS.
 // The second page chooses those signals and runs them alone; leaving the app stops the signals but not the SOS.
+// The phone can stop the SOS too, with a message on the app's own topic, even while the app is closed.
 
 import {
   brightness,
@@ -205,11 +206,17 @@ function continue_hold(time: Instant) {
   }
 }
 
-function stop_sos() {
-  send_to_phone("sos", { on: 0 });
+/** Ends the SOS on the watch alone, leaving the phone untold. */
+function end_sos() {
   is_active.value = false;
   reached_phone.value = false;
+  is_asking_to_stop.value = false;
   if (!is_signalling_alone.value) stop_signals();
+}
+
+function stop_sos() {
+  send_to_phone("sos", { on: 0 });
+  end_sos();
 }
 
 function ask_to_stop() {
@@ -248,6 +255,11 @@ function close() {
 
 function phone_connected() {
   if (is_active.value && !reached_phone.value) send_if_connected();
+}
+
+/** The phone stopped the SOS with `{ "on": 0 }`, so the watch stops it without telling the phone back; `{ "on": 1 }` changes nothing. */
+function heard_from_phone(message: { on: number }) {
+  if (message.on === 0 && is_active.value) end_sos();
 }
 
 // ============================================================================
@@ -374,6 +386,7 @@ on("open", open);
 on("close", close);
 on("tick", step, { every: { milliseconds: UNIT_MILLISECONDS }, while_open: true });
 on("phone_connects", phone_connected, { while_open: true });
+on("message", heard_from_phone);
 
 export default define_app({
   id: "sos",

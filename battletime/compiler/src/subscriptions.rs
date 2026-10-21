@@ -8,11 +8,13 @@ use std::rc::Rc;
 
 use battletime_runtime::instruction::Instruction;
 use battletime_runtime::subscriptions::{
-    Subscription, SubscriptionKind, SubscriptionValue, SHORTEST_BACKGROUND_PERIOD_IN_MILLISECONDS,
-    SHORTEST_PERIOD_IN_MILLISECONDS,
+    Subscription, SubscriptionKind, SubscriptionValue, MESSAGE_KEYS, NO_MESSAGE_KEY,
+    SHORTEST_BACKGROUND_PERIOD_IN_MILLISECONDS, SHORTEST_PERIOD_IN_MILLISECONDS,
 };
 use battletime_runtime::{SystemValue, ValueType, NONE};
-use oxc_ast::ast::{Argument, CallExpression, Expression, ObjectPropertyKind};
+use oxc_ast::ast::{
+    Argument, CallExpression, Expression, ObjectPropertyKind, TSSignature, TSType, TSTypeLiteral, TSTypeName,
+};
 use oxc_span::{GetSpan, Span};
 
 use crate::compiler::{Compiler, DeclaredType};
@@ -20,9 +22,9 @@ use crate::constants::{static_key, strip_parentheses, Constant};
 use crate::diagnostics::{fail, Compiled};
 use crate::emitter::{CodeKind, Emitter};
 use crate::permissions::{runs_in_background, subscription_permission, Permission};
-use crate::scope::{Reference, Scope};
+use crate::scope::{FunctionReference, Reference, Scope};
 use crate::statements::ArgumentSource;
-use crate::types::{NumberHint, Type};
+use crate::types::{Kind, NumberHint, Type};
 
 // ============================================================================
 // Names
@@ -31,7 +33,7 @@ use crate::types::{NumberHint, Type};
 const ALL_DAYS: i64 = 0b111_1111;
 
 /// The subscription and detail each event name given to `on` stands for.
-const EVENTS: [(&str, SubscriptionKind, u8); 32] = {
+const EVENTS: [(&str, SubscriptionKind, u8); 33] = {
     use SubscriptionKind::*;
     [
         ("open", Open, 0),
@@ -66,6 +68,7 @@ const EVENTS: [(&str, SubscriptionKind, u8); 32] = {
         ("weather", Weather, 0),
         ("navigation", Navigation, 0),
         ("settings_change", SettingsChange, 0),
+        ("message", Message, 0),
     ]
 };
 
@@ -114,7 +117,7 @@ impl<'a> Compiler<'a> {
                 )
             }
         };
-        if matches!(event_name.as_str(), "message" | "http_response") {
+        if event_name == "http_response" {
             return fail(
                 event.span(),
                 format!("the `{event_name}` event is not in the image format yet: the runtime has no subscription kind for it"),
@@ -200,12 +203,38 @@ impl<'a> Compiler<'a> {
             );
         }
 
-        let handler = match options.at_most_every {
-            Some(pause) => {
-                let milliseconds = self.duration_in_milliseconds(pause, root)?;
-                self.throttled_handler(handler, root, kind, milliseconds, pause.span())?
+        let mut message_keys = [NO_MESSAGE_KEY; MESSAGE_KEYS];
+        let handler = match (options.at_most_every, kind) {
+            (pause, SubscriptionKind::Message) => {
+                let function = self.message_function(handler, root)?;
+                let (argument, keys) = self.message_argument(&function)?;
+                message_keys = keys;
+                match pause {
+                    Some(pause) => {
+                        let milliseconds = self.duration_in_milliseconds(pause, root)?;
+                        self.throttled_handler(&function, argument, milliseconds, pause.span())?
+                    }
+                    None => {
+                        let mut emitter = Emitter::new(CodeKind::Handler);
+                        let arguments = vec![ArgumentSource::Reference(argument)];
+                        self.inline_call(&mut emitter, &function, arguments, false, None, span)?;
+                        let code = emitter.finish(span)?;
+                        self.add_handler(code)
+                    }
+                }
             }
-            None => self.subscription_handler(handler, root, kind, span)?,
+            (Some(pause), _) => {
+                let milliseconds = self.duration_in_milliseconds(pause, root)?;
+                let Some(Reference::Function(function)) = self.resolve_reference(handler, root) else {
+                    return fail(
+                        handler.span(),
+                        "`at_most_every` needs a function the app defines as the handler",
+                    );
+                };
+                let argument = Reference::Event(kind.event());
+                self.throttled_handler(&function, argument, milliseconds, pause.span())?
+            }
+            (None, _) => self.subscription_handler(handler, root, kind, span)?,
         };
         self.note_permission(subscription_permission(kind), what.clone(), span);
         if runs_in_background(kind, options.while_open) {
@@ -215,14 +244,18 @@ impl<'a> Compiler<'a> {
                 span,
             );
         }
-        self.writer.subscription(Subscription {
-            kind,
-            only_while_open: options.while_open,
-            handler,
-            detail,
-            days,
-            value,
-        });
+        let subscription = match kind {
+            SubscriptionKind::Message => Subscription::for_message(handler, options.while_open, message_keys),
+            _ => Subscription {
+                kind,
+                only_while_open: options.while_open,
+                handler,
+                detail,
+                days,
+                value,
+            },
+        };
+        self.writer.subscription(subscription);
         Ok(())
     }
 
@@ -278,18 +311,11 @@ impl<'a> Compiler<'a> {
     /// A handler that runs only when `pause` has passed since it last ran, timed by a hidden variable.
     fn throttled_handler(
         &mut self,
-        value: &'a Expression<'a>,
-        root: &Rc<Scope<'a>>,
-        kind: SubscriptionKind,
+        function: &FunctionReference<'a>,
+        argument: Reference<'a>,
         pause: i64,
         span: Span,
     ) -> Compiled<u16> {
-        let Some(Reference::Function(function)) = self.resolve_reference(value, root) else {
-            return fail(
-                value.span(),
-                "`at_most_every` needs a function the app defines as the handler",
-            );
-        };
         let key = format!("~last_run{}", self.slots.len());
         let declared = DeclaredType {
             value_type: Type::NUMBER,
@@ -308,8 +334,8 @@ impl<'a> Compiler<'a> {
         emitter.emit(Instruction::ReadSystem(SystemValue::Now), span)?;
         emitter.emit(Instruction::WriteState(last_run), span)?;
         self.note_write(last_run, crate::types::Range::ANY);
-        let arguments = vec![ArgumentSource::Reference(Reference::Event(kind.event()))];
-        self.inline_call(&mut emitter, &function, arguments, false, None, span)?;
+        let arguments = vec![ArgumentSource::Reference(argument)];
+        self.inline_call(&mut emitter, function, arguments, false, None, span)?;
         emitter.place(skip);
         let code = emitter.finish(span)?;
         Ok(self.add_handler(code))
@@ -336,6 +362,132 @@ impl<'a> Compiler<'a> {
                 span,
                 "give the subscription a handler, such as a function the app defines",
             ),
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // Messages from the phone
+    // ------------------------------------------------------------------------
+
+    /// The function a `message` subscription calls, whose parameter's type names the fields it reads.
+    fn message_function(
+        &self,
+        value: &'a Expression<'a>,
+        root: &Rc<Scope<'a>>,
+    ) -> Compiled<FunctionReference<'a>> {
+        match self.resolve_reference(value, root) {
+            Some(Reference::Function(function)) => Ok(function),
+            _ => fail(
+                value.span(),
+                "the `message` event needs a function, such as `function heard(message: { on: number }) { ... }`",
+            ),
+        }
+    }
+
+    /// What a message handler's parameter stands for, and the strings of its keys, text first.
+    fn message_argument(
+        &mut self,
+        function: &FunctionReference<'a>,
+    ) -> Compiled<(Reference<'a>, [u16; MESSAGE_KEYS])> {
+        let mut keys = [NO_MESSAGE_KEY; MESSAGE_KEYS];
+        let mut fields: Vec<(String, Reference<'a>)> = Vec::new();
+        let Some(parameter) = function.parameters.items.first() else {
+            return Ok((Reference::Object(Rc::new(fields)), keys));
+        };
+        let example = "such as `message: { on: number; label: string }`";
+        let Some(annotation) = &parameter.type_annotation else {
+            return fail(
+                parameter.span,
+                format!("give the message's parameter a type naming each field the app reads, {example}"),
+            );
+        };
+        let Some(literal) = self.type_literal(&annotation.type_annotation, function.scope.module) else {
+            return fail(
+                annotation.span,
+                format!("a message's type lists its fields, written out or as a `type`, {example}"),
+            );
+        };
+        let mut number_count = 0;
+        for member in &literal.members {
+            let TSSignature::TSPropertySignature(property) = member else {
+                return fail(member.span(), "a message's type lists only plain fields");
+            };
+            let Some(name) = static_key(&property.key).filter(|name| is_message_key(name)) else {
+                return fail(
+                    property.span,
+                    "a message field's name is 1 to 32 letters, digits, `_` or `-`",
+                );
+            };
+            let declared = match &property.type_annotation {
+                Some(annotation) => self.declared_type(&annotation.type_annotation, function.scope.module)?,
+                None => None,
+            };
+            let kind = declared
+                .filter(|declared| !declared.is_array)
+                .map(|declared| declared.value_type.kind);
+            let (position, value_type) = match kind {
+                Some(Kind::Number | Kind::Bool) => {
+                    number_count += 1;
+                    if number_count >= MESSAGE_KEYS {
+                        return fail(
+                            property.span,
+                            format!(
+                                "a message carries at most {} numbers, so `{name}` is one too many",
+                                MESSAGE_KEYS - 1
+                            ),
+                        );
+                    }
+                    let value_type = match kind {
+                        Some(Kind::Bool) => Type::BOOL,
+                        _ => Type::NUMBER,
+                    };
+                    (number_count, value_type)
+                }
+                Some(Kind::Name | Kind::Text) => {
+                    if keys[0] != NO_MESSAGE_KEY {
+                        return fail(
+                            property.span,
+                            format!("a message carries at most 1 text, so `{name}` is one too many"),
+                        );
+                    }
+                    (0, Type::TEXT)
+                }
+                _ => {
+                    return fail(
+                        property.span,
+                        format!("the message field `{name}` must be a number, a boolean or a string"),
+                    )
+                }
+            };
+            keys[position] = self.string(&name);
+            fields.push((
+                name,
+                Reference::EventField {
+                    field: position as u8,
+                    value_type,
+                },
+            ));
+        }
+        Ok((Reference::Object(Rc::new(fields)), keys))
+    }
+
+    /// The object type an annotation writes out, or names through a `type` alias.
+    fn type_literal(&self, annotation: &'a TSType<'a>, module: usize) -> Option<&'a TSTypeLiteral<'a>> {
+        match annotation {
+            TSType::TSTypeLiteral(literal) => Some(literal),
+            TSType::TSParenthesizedType(inner) => self.type_literal(&inner.type_annotation, module),
+            TSType::TSTypeReference(reference) => {
+                let TSTypeName::IdentifierReference(identifier) = &reference.type_name else {
+                    return None;
+                };
+                let alias = *self
+                    .modules
+                    .get(module)?
+                    .type_aliases
+                    .get(identifier.name.as_str())?;
+                self.type_literal(alias, module)
+            }
+            _ => None,
         }
     }
 
@@ -460,6 +612,14 @@ impl<'a> Compiler<'a> {
             ),
         }
     }
+}
+
+/// Whether a message field's name is 1 to 32 letters, digits, `_` or `-`, as the phone's line allows.
+fn is_message_key(name: &str) -> bool {
+    (1..=32).contains(&name.len())
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
 }
 
 /// The period rules of `runtime/src/subscriptions.rs`, checked when compiling.

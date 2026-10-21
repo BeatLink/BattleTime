@@ -9,9 +9,18 @@ import {
   install_apps,
   open,
   OpenScreen,
+  send_message_to_app,
   start_scheduler,
 } from "battletime/preview";
-import app, { REPEAT_GAP_STEP, SOS_BUZZ_UNITS, SOS_LENGTH, SOS_LIT, use_light } from "./app.tsx";
+import app, {
+  is_active,
+  reached_phone,
+  REPEAT_GAP_STEP,
+  SOS_BUZZ_UNITS,
+  SOS_LENGTH,
+  SOS_LIT,
+  use_light,
+} from "./app.tsx";
 
 let stop_scheduler = () => {};
 
@@ -123,6 +132,31 @@ describe("sos", () => {
     effect_log.value = [];
     advance_in_units(2000);
     expect(buzzes()).toEqual([]);
+  });
+
+  it("stops when the phone sends on 0, without sending on 0 back, and ignores on 1", () => {
+    hold(5000);
+    effect_log.value = [];
+    act(() => send_message_to_app("sos", { on: 1 }));
+    expect(screen.getByText("SOS sent")).toBeTruthy();
+
+    act(() => send_message_to_app("sos", { on: 0 }));
+    expect(phone_messages()).toEqual([]);
+    expect(led_requests().at(-1)).toBe(false);
+    expect(screen.getByText("SOS")).toBeTruthy();
+    expect(is_active.value).toBe(false);
+    expect(reached_phone.value).toBe(false);
+  });
+
+  it("stops while closed when the phone sends on 0, and opens again at the hold button", () => {
+    hold(5000);
+    open(null);
+    effect_log.value = [];
+    send_message_to_app("sos", { on: 0 });
+    expect(is_active.value).toBe(false);
+    expect(phone_messages()).toEqual([]);
+    act(() => open(app));
+    expect(screen.getByText("Hold for 5 seconds")).toBeTruthy();
   });
 
   it("sends nothing to the phone when closed, and still shows Stop when opened again", () => {

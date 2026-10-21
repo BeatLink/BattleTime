@@ -207,18 +207,22 @@ Each subscription is 16 bytes:
 
 | Bytes | Holds |
 |---|---|
-| 0 | The kind, numbered in the order of `SubscriptionKind` in `runtime/src/subscriptions.rs`: open, close, screen on, screen off, every, at, daily, clock change, heart rate, steps, step goal, motion, acceleration, battery, phone, notification, call, music, weather, navigation, settings change, derive. |
+| 0 | The kind, numbered in the order of `SubscriptionKind` in `runtime/src/subscriptions.rs`: open, close, screen on, screen off, every, at, daily, clock change, heart rate, steps, step goal, motion, acceleration, battery, phone, notification, call, music, weather, navigation, settings change, derive, message. |
 | 1 | Flags: bit 0 means it only runs while the app is open. |
 | 2–3 | The handler to call. |
 | 4 | Where the value comes from: 0 the constant in bytes 8–15, 1 the state variable those bytes name. |
 | 5 | Detail: the unit of a clock change (minute, hour, day), the kind of motion, battery or phone event. |
-| 6–7 | For a daily time, the weekdays it runs on, bit 0 for Monday. |
-| 8–15 | The value: a period in milliseconds, an instant, or a local minute of the day. |
+| 6–7 | For a daily time, the weekdays it runs on, bit 0 for Monday. For a message, the string naming its text field, or 0xFFFF for none. |
+| 8–15 | The value: a period in milliseconds, an instant, or a local minute of the day. For a message, the strings naming its four number fields, 2 bytes each in field order, 0xFFFF for an unused one. |
 
 Every, heart rate and acceleration repeat with a period. A period under a minute, and any
 acceleration, must be marked only-while-open, so a closed app can never keep the watch busy. An `at`
 or daily value may name a state variable, so moving an alarm reschedules it without other code.
 `Subscription::next_due` works out when a timer-like subscription next fires, in local time.
+
+A message subscription hears the phone's messages for this app. Its record names its keys rather
+than holding a value, so the image says which of the message's fields go where; the check refuses a
+key that names no string or the same string twice.
 
 A derive subscription keeps an array worked out from other state, such as a `computed` array a
 CellGrid or Chart shows. The compiler gives it a hidden array and a handler that rebuilds it; the
@@ -523,6 +527,7 @@ compiler and the runtime both follow it:
 | `notification` | `id`, `app` (text), `title` (text), `body` (text), `time` |
 | `call` | `kind`, `caller` (text) |
 | `settings_change` | `key` (text) |
+| `message` | the text under the subscription's text key (text), then the numbers under its four number keys |
 | `music`, `weather`, `navigation`, and the app's open, close, screen on and screen off | none; the new values are system values |
 
 Text fields are read with `read event text`; the host passes them with
@@ -567,7 +572,26 @@ the closed `alarm` app's next due time.
 
 A passed `at` fires once each time the app is loaded, and that memory is not saved, so a handler
 that rings should move or clear its time, as the alarm, timer and pomodoro do. Closed apps hear
-timers only, not pushed events such as steps or notifications.
+timers and messages from the phone, not pushed events such as steps or notifications.
+
+### Messages from the phone
+
+The phone's `app` line names a watch app by its id and carries up to 4 named whole numbers and one
+named text. `battletime_companion::app_message` is the only code that reads that line; it gives the
+shell a plain `AppMessage` (topic, numbers, text), and nothing past it knows the wire's format.
+`AppHost::deliver_message` hands it to each message subscription, which looks up the strings its
+record names and reads the matching numbers into fields 1 to 4 and the matching text into field 0,
+leaving 0 and empty text for keys the message lacks.
+
+The shell delivers a message to the open app at once when its id is the topic. For any other app it
+keeps the message in one slot, a newer message for any app replacing it, and takes it once the
+store is free, where it runs due timers. If the app is installed, is not held by the phone's state
+hold, and has a message subscription without `while_open` (`hears_messages_while_closed`), the
+shell checks the heap for `closed_run_bytes` and 2 KB more, closing the open app first if that makes
+room as for a timer, loads the app with `open_in_background`, runs
+`deliver_message_while_closed`, which treats its effects as a closed timer run's, saves its changed
+state and records it again. Otherwise the message is dropped. The recovery firmware ignores these
+lines.
 
 ### Failures
 

@@ -2,10 +2,14 @@
 //!
 //! Each installed app with subscriptions that run while it is closed, and each app the test leaves,
 //! is kept as its image and saved state, with an entry in `ClosedApps`. When one comes due it is
-//! loaded without a screen and run, and one that wakes the screen is opened in front.
+//! loaded without a screen and run, and one that wakes the screen is opened in front. A message from
+//! the phone for a closed app runs its message handlers the same way.
 
-use battletime_app_host::closed_apps::run_while_closed;
-use battletime_app_host::AppHost;
+use battletime_app_host::closed_apps::{
+    deliver_message_while_closed, hears_messages_while_closed, run_while_closed,
+};
+use battletime_app_host::{AppHost, EventResult};
+use battletime_companion::AppMessage;
 use battletime_runtime::{AppImage, AppKind, SystemValue, SystemValues, WidgetTree, DEFAULT_THEME};
 
 use super::{TestWatch, MOST_WAKEUPS_PER_ADVANCE};
@@ -162,6 +166,47 @@ impl TestWatch {
                 self.screen_on();
             }
         }
+    }
+
+    /// Hands a message from the phone to the app it names, as the shell does.
+    ///
+    /// The open app hears it if it is that app. Otherwise an installed or left app that hears
+    /// messages while closed is loaded without a screen, runs its message handlers and saves its
+    /// state, and opens in front if a handler woke the screen. A message for any other app is dropped.
+    pub fn receive_app_message(&mut self, message: &AppMessage) -> EventResult {
+        let numbers = message.number_fields();
+        let text = message.text_field();
+        let now = self.now();
+        let id = message.topic.as_str();
+        if id == self.id() {
+            let result = self.host.deliver_message(&numbers, text, now, &mut self.system);
+            self.report_notification_changes();
+            return result;
+        }
+        let Some(image) = self.images.get(id).copied() else {
+            return EventResult::NotHandled;
+        };
+        let hears = AppImage::parse(image).is_ok_and(|parsed| hears_messages_while_closed(&parsed));
+        let (true, Some(mut host)) = (hears, self.load_closed(id)) else {
+            return EventResult::NotHandled;
+        };
+        let wake = deliver_message_while_closed(&mut host, &numbers, text, now, &mut self.system);
+        save_state(&mut self.saved_states, id, &mut host);
+        self.closed_apps.record(id, &host, now);
+        drop(host);
+        self.report_next_alarm();
+        self.report_notification_changes();
+        if let Some(wake) = wake {
+            self.switch_to(image)
+                .unwrap_or_else(|failure| panic!("{id} woke but would not open: {failure}"));
+            if let Some(screen) = wake.screen {
+                self.host.start_on_screen(&screen, now, &mut self.system);
+            }
+            if !self.is_screen_on {
+                self.screen_on();
+            }
+        }
+        EventResult::Handled
     }
 
     /// Loads a closed app without a screen, from its image and the state it last saved.

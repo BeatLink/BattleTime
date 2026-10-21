@@ -20,6 +20,7 @@ pub mod advertising;
 mod alert;
 #[cfg(test)]
 mod alert_tests;
+mod app_message;
 mod device_information;
 #[cfg(test)]
 mod device_information_tests;
@@ -40,6 +41,9 @@ mod slots_tests;
 mod tests;
 
 pub use alert::{parse_new_alert, parse_phone_new_alert, MOST_NEW_ALERT_BYTES};
+pub use app_message::{
+    AppMessage, AppMessageKey, APP_MESSAGE_TEXT_BYTES, MOST_APP_MESSAGE_KEY_BYTES, MOST_APP_MESSAGE_NUMBERS,
+};
 pub use device_information::{
     serial_number, HARDWARE_REVISION, MANUFACTURER_NAME, MODEL_NUMBER, SOFTWARE_REVISION,
 };
@@ -224,6 +228,8 @@ pub enum Message<'line> {
     NotificationDismissed { id: i64 },
     /// `slots`: where the update and recovery slots are, or a request to move them.
     Slots(SlotsRequest),
+    /// `app`: a message for the watch app named by its topic.
+    App(alloc::boxed::Box<AppMessage>),
     /// `state`: the phone holds, rewrote or lets go of this app's saved state.
     AppState { app: &'line str, step: StateStep },
     /// A message this watch does not act on yet, by its `t`.
@@ -567,6 +573,7 @@ pub fn parse_line(line: &[u8]) -> Result<Message<'_>, MessageError> {
         "vibrate" => return phone::parse_vibrate(json),
         "status" => return Ok(Message::StatusRequest),
         "slots" => return slots::parse_slots(json),
+        "app" => return app_message::parse_app_message(json),
         "state" => {
             return match envelope.app {
                 Some(app) if !app.is_empty() && app.len() <= MOST_APP_ID_BYTES => {

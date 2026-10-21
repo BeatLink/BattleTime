@@ -5,7 +5,7 @@ It presets the UICR words embassy-nrf writes on the first start, so the emulated
 starts the firmware, can swipe up to the launcher and open its first app, and reports the lowest stack word that changed.
 
     python3 -I tools/measure_stack.py FIRMWARE_ELF [seconds] [--launcher [--open-first-app]] [--flash IMAGE] [--library FILE]
-                                      [--packages LINE ...] [--then TOUCH ...]
+                                      [--packages LINE ...] [--uart LINE ...] [--then TOUCH ...]
 
 `--then` sends more touches after those, each two seconds after the last, written as the
 emulator's touch commands take them, such as `Tap 120 120` or `Swipe "left"`.
@@ -14,7 +14,8 @@ emulator's touch commands take them, such as `Tap 120 120` or `Swipe "left"`.
 installed; `--library` puts a compiled shared library where the firmware looks for it.
 `--packages` runs the emulator with its Bluetooth bridge, connects to the watch through
 `tools/packages_over_hci.py` and sends each line to the packages characteristic, as the companion
-app would, before reading the stack. Spare bytes are counted down to the top of the stack guard,
+app would, before reading the stack. `--uart` does the same with companion lines on the Nordic UART,
+such as `{"t":"app","ch":"sos","d":{"on":0}}`, a few seconds apart. Spare bytes are counted down to the top of the stack guard,
 the lowest `GUARD_BYTES` the memory protection unit forbids.
 
 Run it inside `nix develop`. It finds the emulator in $PINETIME_EMULATOR, or in a PineTimeEmulator
@@ -196,8 +197,20 @@ def free_port():
         return probe.getsockname()[1]
 
 
-def run_with_bluetooth(emulator, lines, end, seconds, swipe_to_launcher, packages):
-    """Runs the emulator in real time with its Bluetooth bridge, sends the packages lines, and gives back its readings."""
+def send_uart_lines(hci, uart):
+    """Connects to the watch through the bridge and writes each companion line to the Nordic UART."""
+    port = packages_over_hci.HciPort(str(hci))
+    port.start_controller()
+    watch = packages_over_hci.Watch.connect(port)
+    receive = watch.characteristic_handle(packages_over_hci.NORDIC_UART_RECEIVE_UUID)
+    for line in uart:
+        watch.write_line(receive, line)
+        print(f"uart {line}")
+        time.sleep(SECONDS_BETWEEN_TOUCHES)
+
+
+def run_with_bluetooth(emulator, lines, end, seconds, swipe_to_launcher, packages, uart):
+    """Runs the emulator in real time with its Bluetooth bridge, sends the packages and UART lines, and gives back its readings."""
     folder = Path(tempfile.mkdtemp(prefix="measure-stack-"))
     hci = folder / "hci"
     script = folder / "start.resc"
@@ -224,8 +237,11 @@ def run_with_bluetooth(emulator, lines, end, seconds, swipe_to_launcher, package
         if swipe_to_launcher:
             time.sleep(SECONDS_BEFORE_SWIPE)
             monitor.run('sysbus.serial1.touch Swipe "up"')
-        for line, reply in zip(packages, packages_over_hci.run_commands(str(hci), packages)):
-            print(f"{line} -> {reply}")
+        if packages:
+            for line, reply in zip(packages, packages_over_hci.run_commands(str(hci), packages)):
+                print(f"{line} -> {reply}")
+        if uart:
+            send_uart_lines(hci, uart)
         time.sleep(seconds)
         words = []
         for line in reading_lines(end):
@@ -251,6 +267,7 @@ def main():
     parser.add_argument("--flash", help="an external flash image to load")
     parser.add_argument("--library", help="a compiled shared library to load")
     parser.add_argument("--packages", nargs="+", metavar="LINE", help="packages command lines to send over Bluetooth")
+    parser.add_argument("--uart", nargs="+", default=[], metavar="LINE", help="companion lines to write to the Nordic UART")
     parser.add_argument("--then", nargs="+", default=[], metavar="TOUCH", help="touch commands to send next, such as 'Tap 120 120'")
     arguments = parser.parse_args()
 
@@ -259,8 +276,10 @@ def main():
     end = stack_end(firmware)
     with tempfile.TemporaryDirectory() as folder:
         lines = start_lines(emulator, firmware, end, arguments.flash, arguments.library, folder)
-        if arguments.packages:
-            words = run_with_bluetooth(emulator, lines, end, arguments.seconds, arguments.launcher, arguments.packages)
+        if arguments.packages or arguments.uart:
+            words = run_with_bluetooth(
+                emulator, lines, end, arguments.seconds, arguments.launcher, arguments.packages, arguments.uart
+            )
         else:
             words = run_in_one_go(
                 emulator, lines, end, arguments.seconds, arguments.launcher, arguments.open_first_app, arguments.then

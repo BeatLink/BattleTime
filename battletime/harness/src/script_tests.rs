@@ -736,3 +736,17 @@ fn a_phone_line_reaches_the_app_and_a_line_the_watch_refuses_fails() {
     assert_eq!(failure.expected, "a line the watch takes");
     assert!(failure.found.contains("cannot read"), "{}", failure.found);
 }
+
+#[test]
+fn a_message_writes_an_app_line_for_its_topic() {
+    let script = parse_script("message sos \"{\\\"on\\\":0}\"\n").unwrap();
+    assert_eq!(
+        script.steps[0].command,
+        ScriptCommand::Phone(r#"{"t":"app","ch":"sos","d":{"on":0}}"#.to_string())
+    );
+
+    assert!(parse_script("message \"{}\"\n").is_err());
+    assert_eq!(run_on_scripted_app("message nobody \"{}\"\n").failure, None);
+    let failure = run_on_scripted_app("message nobody \"[1]\"\n").failure.unwrap();
+    assert!(failure.found.contains("cannot read"), "{}", failure.found);
+}

@@ -279,7 +279,7 @@ function ramTree() {
       { name: "Unattributed", rest: true, kind: "spare", holds: "Static bytes the measurement gives no owner, alignment among them." },
     ] },
     { name: "Stack", size: MEASURED.ram.stack, kind: "boot", holds: `What static RAM leaves, ${MEASURED.ram.recovery_stack.toLocaleString("en")} B in the recovery build. Keep at least 2 KB spare; tools/measure_stack.py measures the deepest path again.`, children: [
-      { name: "Deepest path", size: 6616, kind: "boot", holds: "Opening an app, painted in the emulator with a typical install: 6,616 B. Start-up reaches 3,816 B." },
+      { name: "Deepest path", size: 6616, kind: "boot", holds: "Opening an app, painted in the emulator with a typical install: 6,616 B. Start-up reaches 3,816 B, and running a closed app for a message from the phone 6,404 B." },
       { name: "Spare", rest: true, kind: "spare", holds: "What the deepest path leaves, its lowest bytes the stack guard (up to 360 B) that the memory protection unit forbids." },
     ] },
     { name: "Alive marker", size: 16, kind: "boot", holds: "The last 16 bytes: the alive marker, the boot count, the bootloader's note to the firmware and the bootloader updater's note. The bootloader keeps its stack below it." },

@@ -21,7 +21,8 @@ the phone.
   each dot and dash. All three start on and are remembered.
 - Tap **Signal** to flash SOS with the chosen signals without contacting the phone, and **Stop** to
   end it. The button is dimmed while an SOS is on, because the signals already run.
-- It needs the heart rate permission for the light and the phone messages permission for the SOS.
+- It needs the heart rate permission for the light, the phone messages permission for the SOS, and
+  the background permission so the phone can stop the SOS while the app is closed.
 
 ## Screens
 
@@ -61,6 +62,7 @@ Held with no phone connected, so the watch only signals.
 
 The watch sends `{"t":"app","ch":"sos","d":{"on":1}}` when the SOS starts, and
 `{"t":"app","ch":"sos","d":{"on":0}}` when it is stopped on the watch. When the SOS is stopped on the
-phone instead, the companion rewrites the app's state with `is_active` and `reached_phone` false, as
-[app state](../companion-protocol.md#app-state-served) describes; an open app opens again on it,
-back at the hold button with the signals stopped.
+phone instead, the phone sends the app `{"t":"app","ch":"sos","d":{"on":0}}`: the watch ends the SOS
+and stops the signals without sending `on` 0 back, and `{"on":1}` changes nothing. It works while the
+app is closed too, which then opens back at the hold button. A message the watch cannot take at that
+moment, for want of memory, is lost, so the SOS stays on until stopped on the watch.

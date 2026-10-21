@@ -40,7 +40,7 @@ use core::{
     sync::atomic::{AtomicBool, Ordering},
 };
 
-use alloc::vec;
+use alloc::{boxed::Box, vec};
 use core::fmt::Write;
 
 use battletime_accelerometer::wake_gestures::WakeGesture;
@@ -60,7 +60,7 @@ use battletime_app_host::{
 };
 use battletime_battery::BatteryEvent;
 use battletime_button::Gesture;
-use battletime_companion::{PhoneData, PhoneUpdates, SettingsChange, NOTIFICATION_SOURCE_BYTES};
+use battletime_companion::{AppMessage, PhoneData, PhoneUpdates, SettingsChange, NOTIFICATION_SOURCE_BYTES};
 use battletime_crash_record::screen::Choice;
 use battletime_display::SLEEP_SWITCH_GAP_IN_MILLISECONDS;
 use battletime_notifications::NotificationList;
@@ -718,6 +718,8 @@ struct Shell {
     temporary_outcome: Option<Result<u32, PackageError>>,
     /// Set while a closed app that just vibrated is opened, so opening does not stop the vibration.
     keeps_vibration_on_open: bool,
+    /// A message from the phone for a closed app, run once the store is free; a newer one replaces it.
+    waiting_app_message: Option<Box<AppMessage>>,
 }
 
 impl Shell {
@@ -1375,6 +1377,7 @@ impl Shell {
             }),
             AppEvent::Shake => self.deliver(PushedEvent::Motion(MotionKind::Shake)),
             AppEvent::WakeGesture(gesture) => self.take_wake_gesture(gesture),
+            AppEvent::AppMessage(message) => self.app_message_arrived(message, now),
         }
     }
 
@@ -1946,6 +1949,7 @@ pub async fn run_shell(
         temporary_id: None,
         temporary_outcome: None,
         keeps_vibration_on_open: false,
+        waiting_app_message: None,
         face_double_tap: DoubleTapFinder::default(),
     };
     shell.show_first_screen();
@@ -1975,7 +1979,7 @@ pub async fn run_shell(
         shell.files.wait_until_free().await;
         shell.write_released_saves();
         // A closed app that ran may have opened itself or changed the screen, so the loop draws again first.
-        if shell.run_due_closed_apps() {
+        if shell.run_due_closed_apps() || shell.run_waiting_app_message() {
             if shell.follow_requests() {
                 last_input = Instant::now();
             }

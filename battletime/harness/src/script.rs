@@ -112,6 +112,7 @@ pub enum ScriptCommand {
         title: String,
         body: String,
     },
+    /// A companion line from the phone; `message <topic> "<data>"` writes an `app` line here.
     Phone(String),
     Shake,
     Acceleration {
@@ -284,7 +285,7 @@ fn split_words(line: &str) -> Result<SplitLine, String> {
 // ============================================================================
 
 const COMMAND_NAMES: &str = "open, switch, install, tap, long-press, double-tap, drag, swipe, button, long-button, \
-                             wait, set, notify, phone, shake, acceleration, heart, navigation, write, reopen, start, screen, expect, screenshot, snapshot";
+                             wait, set, notify, phone, message, shake, acceleration, heart, navigation, write, reopen, start, screen, expect, screenshot, snapshot";
 
 /// A script's heart rate readings are as sure as the sensor ever reports.
 const FULL_HEART_RATE_CONFIDENCE: Value = 100;
@@ -365,6 +366,14 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
         "phone" => match arguments {
             [Word::Quoted(line)] => Ok(ScriptCommand::Phone(line.clone())),
             _ => Err("write `phone \"<line>\"`, with each quote in the line written \\\"".to_string()),
+        },
+        "message" => match arguments {
+            [Word::Bare(topic), Word::Quoted(data)] => Ok(ScriptCommand::Phone(format!(
+                "{{\"t\":\"app\",\"ch\":\"{topic}\",\"d\":{data}}}"
+            ))),
+            _ => Err(
+                "write `message <app id> \"<data>\"`, such as `message sos \"{\\\"on\\\":0}\"`".to_string(),
+            ),
         },
         "shake" => expect_no_arguments(name, arguments, ScriptCommand::Shake),
         "heart" => match arguments {

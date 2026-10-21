@@ -130,6 +130,19 @@ after closing it. The host is loaded into its slot out of line (`open_in_backgro
 opening an app does: loading it by value put the load's frame under the first derives, and the
 start-up search for closed apps then peaked at 8,784 B of stack, 1,440 B spare.
 
+Messages from the phone for one app (`battletime_companion::app_message`, `AppHost::deliver_message`
+and the shell's waiting message in `firmware/src/closed_apps.rs`) added 4,352 B of code to the full
+build, measured with `cargo size` against master on 2026-10-21 (432,620 B to 436,972 B of text), and
+8 B of static RAM, the signal that passes a message to the shell. The room came out of the 8.7 KB the
+region had free, which leaves about 4.4 KB beside the 49,467 B library. The line reader is about
+1.2 KB, written byte by byte because a JSON parser for an object of any keys would cost far more;
+running a closed app's handler for a message is about 1.5 KB, and the rest is delivery in the host
+and the shell. A waiting message sits on the heap, about 400 B, only until the shell takes it.
+Starting with the SOS app, the stopwatch and the digital face installed and writing
+`{"t":"app","ch":"sos","d":{"on":0}}` to the Nordic UART, which runs the closed SOS app's handler,
+peaked at 6,404 B of stack, 3,052 B spare (6,084 B with a `status` line instead), measured with
+`tools/measure_stack.py --uart`.
+
 Measured in the emulator on 2026-10-14 with the typical install (the `digital` face, the launcher
 and `TYPICAL_APPS`): open the timer from the launcher, start its 10 minutes, leave it, and let it
 ring while closed. The stack pattern was painted before start, and `restart`'s least free heap and

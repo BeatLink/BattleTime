@@ -467,6 +467,19 @@ export function deliver(kind: Subscription["kind"], event: object, filter?: (sub
   }
 }
 
+/**
+ * Sends a message from the phone to the installed app whose id is `topic`, as
+ * `{"t":"app","ch":"<topic>","d":<data>}` does on the watch: its `message` handlers run, unless
+ * they are `while_open` and the app is closed.
+ */
+export function send_message_to_app(topic: string, data: Record<string, number | boolean | string>) {
+  for (const entry of scheduled) {
+    if (entry.app.id !== topic || entry.subscription.kind !== "message") continue;
+    if (!may_run(entry)) continue;
+    run_app_handler(entry.app, entry.subscription.handler, data);
+  }
+}
+
 // ============================================================================
 // Clock control
 // ============================================================================

@@ -12,8 +12,11 @@ document for its part instead.
   Check that holding the button for five seconds keeps reporting the finger until it lifts, so the
   hold completes and an early release cancels; that a swipe to the Signals page while holding
   cancels the hold; that the light, screen and vibration flash "... --- ..." in step; and that an SOS
-  stopped from the phone takes the open app back to its hold button. The phone's half is in
+  stopped from the phone, by its `{"on":0}` message, takes the open app back to its hold button. The phone's half is in
   [the companion's TODO](../companion/TODO.md#sos).
+
+- [ ] **A message from the phone run in the background on the PineTime.** Start an SOS, leave the app,
+  send `{"t":"app","ch":"sos","d":{"on":0}}` and check the SOS app opens at its hold button with no `on` 0 sent back.
 
 - [ ] **A firmware upload through `SlotFlash` on the PineTime.** The update and recovery slots are
   now erased and written through `SlotFlash`, which waits on the timer instead of spinning. Moving
@@ -454,7 +457,8 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   transaction instead of many small reads.
 - [ ] **The remaining companion messages.** [companion-protocol.md](companion-protocol.md) lists
   them under "not served yet". `call`, `musicinfo`, `musicstate`, `weather`, `nav`, `find`, `vibrate`,
-  `status` and the `music`, `call`, `findPhone`, `request` and `app` lines are served (`services/companion/src/phone.rs`).
+  `status`, the phone's `app` messages for one watch app (`services/companion/src/app_message.rs`) and
+  the `music`, `call`, `findPhone`, `request` and `app` lines are served (`services/companion/src/phone.rs`).
   - `alarm` (set or report the alarms), `steps` (a day in 240 six-minute slots, read from the
     step log with `battletime_steps::log`) and `http` (answers to an app's request, and the watch's `http`
     line).

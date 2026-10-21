@@ -933,6 +933,7 @@ fn read_companion_line(line: &[u8]) {
             let _ = SLOTS_REQUESTS.try_send(request);
         }
         Ok(battletime_companion::Message::AppState { app, step }) => app_events::app_state_changed(app, step),
+        Ok(battletime_companion::Message::App(message)) => app_events::app_message_arrived(message),
         Ok(battletime_companion::Message::Unknown { .. }) => {}
         Ok(phone_message) => app_events::phone_message_arrived(phone_message),
         Err(_) => {

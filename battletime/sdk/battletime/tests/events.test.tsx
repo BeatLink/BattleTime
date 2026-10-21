@@ -3,7 +3,15 @@
 
 import { afterEach, describe, expect, it } from "vitest";
 import { define_app, on, signal, EVERY_DAY, MINUTE, SECOND, type EventName, type Subscription } from "battletime";
-import { advance_clock, deliver, freeze_clock, install_apps, open, start_scheduler } from "battletime/preview";
+import {
+  advance_clock,
+  deliver,
+  freeze_clock,
+  install_apps,
+  open,
+  send_message_to_app,
+  start_scheduler,
+} from "battletime/preview";
 
 function Blank() {
   return null;
@@ -163,5 +171,21 @@ describe("on", () => {
     deliver("steps", { steps: 3 });
 
     expect(ticks).toBe(2);
+  });
+
+  it("hands a message from the phone to the app it names, open or closed", () => {
+    const heard: unknown[] = [];
+    const app = app_after(() => on("message", (message: { on: number; label: string }) => heard.push(message)));
+    const open_only = app_after(() =>
+      on("message", (message: { on: number }) => heard.push(["open only", message.on]), { while_open: true }),
+    );
+    install_apps([app, open_only]);
+    stop_scheduler = start_scheduler();
+
+    expect(app.subscriptions).toEqual([{ kind: "message", handler: expect.any(Function), only_while_open: false }]);
+    send_message_to_app("events", { on: 1, label: "hello" });
+    send_message_to_app("elsewhere", { on: 2 });
+
+    expect(heard).toEqual([{ on: 1, label: "hello" }]);
   });
 });
