@@ -48,22 +48,22 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 142.6 KB | 48.6 KB |
-| App host (with `battletime-ui`) | 91.1 KB | 0.0 KB |
-| App runtime | 33.9 KB | 0.0 KB |
+| Firmware (start-up, shell, tasks) | 144.3 KB | 48.6 KB |
+| App host (with `battletime-ui`) | 91.6 KB | 0.0 KB |
+| App runtime | 34.1 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 31.7 KB | 41.3 KB |
-| core, alloc and compiler builtins | 28.4 KB | 16.0 KB |
-| Settings, companion and notifications (with serde) | 17.7 KB | 2.4 KB |
+| core, alloc and compiler builtins | 28.5 KB | 16.0 KB |
+| Settings, companion and notifications (with serde) | 19.3 KB | 2.4 KB |
 | Storage (flash store) | 17.2 KB | 13.6 KB |
 | BLEFS file service | 9.5 KB | 3.1 KB |
-| Embassy, allocator and Cortex-M | 8.1 KB | 5.0 KB |
+| Embassy, allocator and Cortex-M | 8.2 KB | 5.0 KB |
 | Packages | 7.8 KB | 1.3 KB |
 | Display, graphics and drivers | 5.5 KB | 3.3 KB |
 | Updates (DFU) | 3.4 KB | 2.9 KB |
 | Other constants and padding | 25.8 KB | 14.2 KB |
-| **Code and data** | **422.7 KB** | **151.7 KB** |
+| **Code and data** | **427.0 KB** | **151.7 KB** |
 | Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 8.7 KB | 328.1 KB |
+| Free of the 480 KB region, after its header | 4.5 KB | 328.1 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -367,13 +367,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,259 B | 11,394 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,271 B | 11,394 B |
 | Bluetooth controller | 2,618 B | 2,618 B |
 | App host (with `battletime-ui`) | 396 B | 0 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | Other | 5 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,696 B** | **24,652 B** |
-| Left for the stack | 9,824 B | 40,868 B |
+| **Static RAM** (`.data` and `.bss`) | **55,704 B** | **24,652 B** |
+| Left for the stack | 9,816 B | 40,868 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
