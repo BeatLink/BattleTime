@@ -16,6 +16,7 @@ use crate::image::{AppImage, Function, FUNCTION_HEADER_BYTES};
 use crate::instruction::{
     decode, ArrayWork, EffectKind, Instruction, SystemValue, TimeUnit, MOST_EFFECT_ARGUMENTS,
 };
+use crate::native::{Exit, NativeCode, NativeFrame};
 use crate::paging::{CodeCache, CodeUnit};
 use crate::pattern;
 use crate::state::{read_packed, write_packed, AppState, Placement};
@@ -191,9 +192,19 @@ enum JumpTo {
 /// The code a run starts with: an expression's or a handler's that is here, or a paged handler.
 #[derive(Clone, Copy)]
 enum TopCode<'code> {
-    Here(&'code [u8]),
+    Here(&'code [u8], CodeUnit),
     Expression(u16),
     Handler(u16),
+}
+
+impl TopCode<'_> {
+    fn unit(self) -> CodeUnit {
+        match self {
+            TopCode::Here(_, unit) => unit,
+            TopCode::Expression(expression) => CodeUnit::Expression(expression),
+            TopCode::Handler(handler) => CodeUnit::Handler(handler),
+        }
+    }
 }
 
 /// Why a piece of code stopped running: it ended, or it called a function.
@@ -294,6 +305,8 @@ pub struct Interpreter {
     copy_count: usize,
     /// A paged app's code read from its image file; none for an image that holds its code.
     code_cache: Option<Box<CodeCache>>,
+    /// Native code for the image's units, run in place of their bytecode.
+    native: Option<Box<dyn NativeCode>>,
 }
 
 /// Room for working copies of changed variables, none until `allot_scratch`.
@@ -373,6 +386,7 @@ impl Interpreter {
             }; MOST_CHANGED_VARIABLES],
             copy_count: 0,
             code_cache: None,
+            native: None,
         }
     }
 
@@ -384,6 +398,11 @@ impl Interpreter {
     /// The code cache, if the image is paged.
     pub fn code_cache(&self) -> Option<&CodeCache> {
         self.code_cache.as_deref()
+    }
+
+    /// Gives the interpreter native code for the image's units, which it runs in place of their bytecode.
+    pub fn set_native_code(&mut self, native: Option<Box<dyn NativeCode>>) {
+        self.native = native;
     }
 
     /// Sets the row of a Repeat that the next calls run for; 0 outside one.
@@ -412,7 +431,7 @@ impl Interpreter {
         system: &impl SystemValues,
     ) -> Result<Value, Failure> {
         let top = match image.expression_code(expression) {
-            Some(code) => TopCode::Here(code),
+            Some(code) => TopCode::Here(code, CodeUnit::Expression(expression)),
             None if image.expression_place(expression).is_some() => TopCode::Expression(expression),
             None => return Err(Failure::NoSuchCode),
         };
@@ -471,7 +490,7 @@ impl Interpreter {
         system: &impl SystemValues,
     ) -> Result<HandlerOutcome, Failure> {
         let top = match image.handler_code(handler) {
-            Some(code) => TopCode::Here(code),
+            Some(code) => TopCode::Here(code, CodeUnit::Handler(handler)),
             None if image.handler_place(handler).is_some() => TopCode::Handler(handler),
             None => return Err(Failure::NoSuchCode),
         };
@@ -530,8 +549,10 @@ impl Interpreter {
         self.frame_count = 0;
         // Out of `self` while the code runs, so the code it holds can be read while the interpreter changes.
         let mut cache = self.code_cache.take();
-        let result = self.run_code(top, &mut call, cache.as_deref_mut());
+        let mut native = self.native.take();
+        let result = self.run_code(top, &mut call, cache.as_deref_mut(), &mut native);
         self.code_cache = cache;
+        self.native = native;
         result
     }
 
@@ -541,6 +562,7 @@ impl Interpreter {
         top: TopCode,
         call: &mut Call<System>,
         mut cache: Option<&mut CodeCache>,
+        native: &mut Option<Box<dyn NativeCode>>,
     ) -> Result<(), Failure> {
         let image = call.image;
         let library = call.library;
@@ -551,7 +573,7 @@ impl Interpreter {
         loop {
             let code = match running {
                 Running::Top => match top {
-                    TopCode::Here(code) => code,
+                    TopCode::Here(code, _) => code,
                     TopCode::Expression(expression) => {
                         paged_code(&mut cache, image, CodeUnit::Expression(expression), call.system)?
                     }
@@ -577,6 +599,14 @@ impl Interpreter {
                 true => library.ok_or(Failure::NoSuchCode)?,
                 false => image,
             };
+            let unit = match running {
+                Running::Top => Some(top.unit()),
+                Running::App(function) => Some(CodeUnit::Function(function)),
+                Running::Library(_) => None,
+            };
+            if let (Some(unit), Some(native)) = (unit, native.as_deref_mut()) {
+                self.run_natively(native, unit, code, call, &mut steps, &mut offset)?;
+            }
 
             // Runs this piece of code until it ends or calls another.
             let transfer = loop {
@@ -658,6 +688,78 @@ impl Interpreter {
                 }
             }
         }
+    }
+
+    /// Runs an app's unit natively from `offset` when it has native code, leaving `offset` where the interpreter carries on.
+    fn run_natively<System: SystemValues>(
+        &mut self,
+        native: &mut dyn NativeCode,
+        unit: CodeUnit,
+        code: &[u8],
+        call: &mut Call<System>,
+        steps: &mut u32,
+        offset: &mut usize,
+    ) -> Result<(), Failure> {
+        let floor = self.stack_floor;
+        let image = call.image;
+        let mut failure = None;
+        let failure_slot = &mut failure;
+        // Native code and the helper it calls both reach the interpreter through this one pointer.
+        let this: *mut Interpreter = self;
+        let locals_base = self.locals_base;
+        let (stack, locals, depth) = unsafe {
+            (
+                core::ptr::addr_of_mut!((*this).stack).cast::<Value>().add(floor),
+                core::ptr::addr_of_mut!((*this).locals)
+                    .cast::<Value>()
+                    .add((*this).locals_base),
+                (*this).depth - floor,
+            )
+        };
+        let mut execute = move |at: u32, depth: u32| {
+            let interpreter = unsafe { &mut *this };
+            interpreter.depth = floor + depth as usize;
+            let ran = decode(code, at as usize)
+                .map_err(|_| Failure::BadInstruction)
+                .and_then(|(instruction, _)| interpreter.execute(instruction, call, image, false));
+            match ran {
+                Ok(None) => true,
+                Ok(Some(_)) => {
+                    *failure_slot = Some(Failure::BadInstruction);
+                    false
+                }
+                Err(failed) => {
+                    *failure_slot = Some(failed);
+                    false
+                }
+            }
+        };
+        let mut frame = NativeFrame {
+            stack,
+            stack_room: STACK_DEPTH - floor,
+            locals,
+            locals_room: LOCAL_POOL - locals_base,
+            steps_left: MOST_STEPS - *steps,
+            resume_offset: *offset as u32,
+            depth: depth as u32,
+            execute: &mut execute,
+        };
+        let Some(exit) = native.run(unit, &mut frame) else {
+            return Ok(());
+        };
+        let (steps_left, resume_offset, depth) = (frame.steps_left, frame.resume_offset, frame.depth);
+
+        if depth as usize > STACK_DEPTH - floor || steps_left > MOST_STEPS - *steps {
+            return Err(Failure::BadInstruction);
+        }
+        self.depth = floor + depth as usize;
+        *steps = MOST_STEPS - steps_left;
+        match exit {
+            Exit::Finished => *offset = code.len(),
+            Exit::Interpret => *offset = resume_offset as usize,
+            Exit::Failed => return Err(failure.unwrap_or(Failure::BadInstruction)),
+        }
+        Ok(())
     }
 
     /// Moves a call's arguments into its own locals and remembers where the caller was.

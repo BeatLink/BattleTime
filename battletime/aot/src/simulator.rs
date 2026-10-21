@@ -12,7 +12,53 @@ use alloc::vec::Vec;
 /// A stretch of simulated memory at a fixed address.
 pub struct Region {
     pub address: u32,
-    pub bytes: Vec<u8>,
+    memory: Memory,
+}
+
+enum Memory {
+    Owned(Vec<u8>),
+    /// The computer's own memory, such as an interpreter's stack, which simulated code works on in place.
+    Borrowed {
+        pointer: *mut u8,
+        length: usize,
+    },
+}
+
+impl Region {
+    pub fn owned(address: u32, bytes: Vec<u8>) -> Region {
+        Region {
+            address,
+            memory: Memory::Owned(bytes),
+        }
+    }
+
+    /// Memory of the computer's, seen by the simulated code at `address`.
+    ///
+    /// # Safety
+    ///
+    /// `length` bytes from `pointer` must stay valid, and touched by nothing else, while the machine runs.
+    pub unsafe fn borrowed(address: u32, pointer: *mut u8, length: usize) -> Region {
+        Region {
+            address,
+            memory: Memory::Borrowed { pointer, length },
+        }
+    }
+
+    pub fn bytes(&self) -> &[u8] {
+        match &self.memory {
+            Memory::Owned(bytes) => bytes,
+            Memory::Borrowed { pointer, length } => unsafe { core::slice::from_raw_parts(*pointer, *length) },
+        }
+    }
+
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        match &mut self.memory {
+            Memory::Owned(bytes) => bytes,
+            Memory::Borrowed { pointer, length } => unsafe {
+                core::slice::from_raw_parts_mut(*pointer, *length)
+            },
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -29,6 +75,9 @@ pub enum Stop {
 
 /// Where a simulated call returns to; nothing is ever placed there.
 const RETURN_ADDRESS: u32 = 0xFFFF_FFFE;
+
+/// Calling an address from here up runs the computer's host function of that number, a word apart.
+pub const HOST_FUNCTIONS_ADDRESS: u32 = 0xF000_0000;
 
 const MOST_INSTRUCTIONS: u64 = 50_000_000;
 
@@ -66,7 +115,7 @@ impl Machine {
             .enumerate()
             .find(|(_, region)| {
                 address >= region.address
-                    && (address - region.address) as usize + length as usize <= region.bytes.len()
+                    && (address - region.address) as usize + length as usize <= region.bytes().len()
             })
             .map(|(index, region)| (index, (address - region.address) as usize))
             .ok_or(Stop::BadAddress(address))
@@ -74,24 +123,33 @@ impl Machine {
 
     pub fn read_word(&self, address: u32) -> Result<u32, Stop> {
         let (region, at) = self.find(address, 4)?;
-        let bytes = &self.regions[region].bytes[at..at + 4];
+        let bytes = &self.regions[region].bytes()[at..at + 4];
         Ok(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]))
     }
 
     pub fn write_word(&mut self, address: u32, value: u32) -> Result<(), Stop> {
         let (region, at) = self.find(address, 4)?;
-        self.regions[region].bytes[at..at + 4].copy_from_slice(&value.to_le_bytes());
+        self.regions[region].bytes_mut()[at..at + 4].copy_from_slice(&value.to_le_bytes());
         Ok(())
     }
 
     fn read_halfword(&self, address: u32) -> Result<u16, Stop> {
         let (region, at) = self.find(address, 2)?;
-        let bytes = &self.regions[region].bytes[at..at + 2];
+        let bytes = &self.regions[region].bytes()[at..at + 2];
         Ok(u16::from_le_bytes([bytes[0], bytes[1]]))
     }
 
     /// Calls the code at `entry` with `argument` in r0 and the stack at `stack_top`, until it returns.
-    pub fn call(&mut self, entry: u32, argument: u32, stack_top: u32) -> Stop {
+    ///
+    /// A call the code makes to a host function's address runs `host` with its number, which
+    /// leaves its answer in r0, and returns to the code.
+    pub fn call(
+        &mut self,
+        entry: u32,
+        argument: u32,
+        stack_top: u32,
+        host: &mut dyn FnMut(u32, &mut Machine),
+    ) -> Stop {
         self.registers[0] = argument;
         self.registers[13] = stack_top;
         self.registers[14] = RETURN_ADDRESS | 1;
@@ -99,6 +157,11 @@ impl Machine {
         loop {
             if self.registers[15] == RETURN_ADDRESS {
                 return Stop::Returned;
+            }
+            if self.registers[15] >= HOST_FUNCTIONS_ADDRESS {
+                host((self.registers[15] - HOST_FUNCTIONS_ADDRESS) / 4, self);
+                self.branch_to(self.registers[14]);
+                continue;
             }
             if self.instructions_run >= MOST_INSTRUCTIONS {
                 return Stop::TooManyInstructions;
@@ -258,6 +321,10 @@ impl Machine {
                     _ => self.registers[low(0)] = self.read_word(at)?,
                 }
             }
+            // ADD SP, SP, #bytes
+            0b10110 if first >> 7 & 0xF == 0 => {
+                self.registers[13] = self.registers[13].wrapping_add((first & 0x7F) as u32 * 4);
+            }
             // PUSH and POP
             0b10110 | 0b10111 if first >> 9 & 3 == 2 => {
                 let list = first & 0xFF;
@@ -342,19 +409,22 @@ impl Machine {
             }
             return Ok(());
         }
-        if first >> 11 == 0b11110 && second >> 14 == 0b10 {
+        if first >> 11 == 0b11110 && second >> 15 == 1 && (second >> 14 & 1 == 0 || second >> 12 & 1 == 1) {
             let sign = (first >> 10 & 1) as u32;
             let first_jump = (second >> 13 & 1) as u32;
             let second_jump = (second >> 11 & 1) as u32;
             let lower = (second & 0x7FF) as u32;
             match second >> 12 & 1 {
-                // B.W
+                // B.W and BL
                 1 => {
                     let upper = (first & 0x3FF) as u32;
                     let first_bit = 1 - (first_jump ^ sign);
                     let second_bit = 1 - (second_jump ^ sign);
                     let distance = sign << 24 | first_bit << 23 | second_bit << 22 | upper << 12 | lower << 1;
                     let distance = ((distance << 7) as i32) >> 7;
+                    if second >> 14 & 1 == 1 {
+                        self.registers[14] = program_counter | 1;
+                    }
                     self.branch_to(program_counter.wrapping_add(distance as u32));
                 }
                 // B<condition>.W

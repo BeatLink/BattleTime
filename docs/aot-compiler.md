@@ -61,31 +61,46 @@ longer fit stays interpreted.
 - **Simple instructions inline**: constants, locals, the stack moves, 64-bit add and subtract with
   the overflow flag checked, minimum, maximum, negation, absolute value, logic, comparisons, jumps
   and loops.
-- **The rest through helpers**: multiply, divide and remainder, state and array reads and writes,
-  text, time, system values, events, effects, the array work and library calls each call a Rust
-  helper that the interpreter itself uses, so their behaviour cannot drift.
-- **Position-independent**: branches are PC-relative, and helpers and other units are reached
-  through tables in the context, so the code needs no relocation and runs from the RAM's code
-  alias wherever the heap puts it.
+- **The rest through the interpreter**: multiply, divide and remainder, state and array reads and
+  writes, text, time, system values, events, effects and the array work call the execute helper,
+  through one small routine per unit, with the instruction's offset and the stack's depth. The
+  helper runs that one instruction with the interpreter's own code, so its behaviour cannot drift,
+  and a failure there ends the run with the interpreter's own failure.
+- **Calls** are handed over: the interpreter makes the call, counting its step, which the handover
+  gives back. When the callee returns, the interpreter runs the caller natively again from the
+  instruction after the call, which the unit's start dispatches to.
+- **Position-independent**: branches are PC-relative, and the helpers are reached through a table
+  in the context, so the code needs no relocation and runs from the RAM's code alias wherever the
+  heap puts it.
+
+## The runtime's side
+
+`battletime_runtime::native` holds the `Context` the code reads and the `NativeCode` trait. An
+interpreter given native code with `set_native_code` asks it to run each app unit it enters,
+handing it the unit's part of the operand stack, its locals, the steps left and the offset to
+start at, and a closure that runs one instruction. Whatever runs the code builds the context from
+those: the watch calls the code through the RAM's code alias, and the tests run it in the
+simulator, on the interpreter's own memory.
 
 ## How it is checked
 
 The translator is a `no_std` crate, `battletime-aot`, built for the module and for the computer. Its
 `simulator` feature runs the Thumb-2 instructions the translator writes, and stops at any other.
-The tests run translated code beside the interpreter: every arithmetic and comparison instruction
-on edge values, loops counted step for step, each kind of handover, and thousands of random
-programs with branches and nested loops. Once the runtime runs native units, the same comparison
-covers every handler, expression and function of every app in the repository, with the same state,
-events and system values, comparing results, state, effects, texts and failures. The emulator check
-then runs a compiled app on the emulated chip, and the watch measures the speed.
+The tests run an interpreter with native code beside one without: every arithmetic and comparison
+instruction on edge values, loops counted step for step, each kind of handover, thousands of
+random programs with branches and nested loops, and every handler, expression and function of
+every app, face and shell screen in the repository, three rounds over, comparing results, texts,
+state, effects and failures. The emulator check then runs a compiled app on the emulated chip, and
+the watch measures the speed.
 
 ## Order of work
 
 1. The crate: the Thumb-2 encoder, the simulator, and the simple instructions, checked against the
-   interpreter. Done; every other instruction hands over for now.
-2. Every instruction, through helpers, with calls and step counting.
+   interpreter. Done.
+2. Every instruction, through helpers, with calls and step counting. Done.
 3. The runtime's side: the context, the helper table, and running a native unit in place of its
-   bytecode.
+   bytecode. The interpreter's side is done; the watch's `NativeCode`, which calls the code and
+   gives it the helper table, comes with the module.
 4. The `aot` module, the install step, the native file and its record, loading at open and the
    memory need.
 5. Measurements on the watch, starting with Game of Life's generation.

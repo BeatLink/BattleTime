@@ -215,7 +215,10 @@ explains the design; `modules/test` is the module that proves it.
 interpreter's own operand stack and locals, so the interpreter can take over at the start of any
 instruction. Its `thumb` assembler writes the few instructions the translation needs, and the
 `simulator` feature runs them on the computer, where the tests check translated code against the
-interpreter. [aot-compiler.md](aot-compiler.md) gives the design and how far it has got.
+interpreter. The runtime's `native` module holds the context that code reads and the
+`NativeCode` trait an interpreter runs each unit's native code through, falling back to its own
+loop wherever native code hands over. [aot-compiler.md](aot-compiler.md) gives the design and how
+far it has got.
 
 ## App runtime (`runtime`)
 

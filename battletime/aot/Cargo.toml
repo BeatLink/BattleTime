@@ -10,6 +10,7 @@ publish = false
 battletime-runtime = { path = "../runtime" }
 
 [dev-dependencies]
+battletime-compiler = { path = "../compiler" }
 battletime-runtime = { path = "../runtime", features = ["writer"] }
 
 [features]

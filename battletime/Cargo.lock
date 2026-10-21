@@ -76,6 +76,7 @@ dependencies = [
 name = "battletime-aot"
 version = "0.1.0"
 dependencies = [
+ "battletime-compiler",
  "battletime-runtime",
 ]
 

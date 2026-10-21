@@ -5,19 +5,25 @@
 //! then cuts the code into blocks that run straight through, each counting its instructions against
 //! the step limit as it starts, and writes each instruction it can do natively. Every other way out
 //! of a block goes through a small stub that hands the interpreter the instruction's offset, the
-//! stack's depth and the steps the block counted but did not run.
+//! stack's depth and the steps the block counted but did not run. An instruction it leaves to the
+//! interpreter whole, such as a multiply or a state read, calls the execute helper through one
+//! small routine per unit. Calls are handed over, so the interpreter makes them, and the unit can
+//! be entered again at the instruction after each.
 
 use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 
-use battletime_runtime::instruction::{decode, Instruction};
+use battletime_runtime::instruction::{decode, Instruction, StackEffect};
 use battletime_runtime::interpreter::STACK_DEPTH;
+use battletime_runtime::native::{
+    Exit, DEPTH_AT, EXECUTE_HELPER, HELPERS_AT, LOCALS_AT, RESUME_OFFSET_AT, STACK_AT, STACK_ROOM_AT,
+    STEPS_LEFT_AT,
+};
 use battletime_runtime::text::TextReference;
 use battletime_runtime::NONE;
 
 use crate::thumb::{Assembler, Condition, DataOperation, Label, Register, R0, R1, R2, R3, R4, R5, R6, R7};
-use crate::{Exit, DEPTH_AT, LOCALS_AT, RESUME_OFFSET_AT, STACK_AT, STACK_ROOM_AT, STEPS_LEFT_AT};
 
 // ============================================================================
 // Why a unit was not translated
@@ -60,7 +66,10 @@ struct Decoded {
 }
 
 /// Every instruction with its depth, and the depth at the end of the code.
-fn decode_unit(code: &[u8]) -> Result<(Vec<Decoded>, Option<usize>), Untranslatable> {
+fn decode_unit(
+    code: &[u8],
+    call_effects: &[StackEffect],
+) -> Result<(Vec<Decoded>, Option<usize>), Untranslatable> {
     let mut decoded = Vec::new();
     let mut offset = 0;
     while offset < code.len() {
@@ -103,7 +112,7 @@ fn decode_unit(code: &[u8]) -> Result<(Vec<Decoded>, Option<usize>), Untranslata
             continue;
         };
         let instruction = decoded[index].instruction;
-        let effect = instruction.stack_effect();
+        let effect = effect_of(instruction, call_effects)?;
         let after = before.checked_sub(effect.taken).ok_or(Untranslatable::BadStack)? + effect.left;
         if after > STACK_DEPTH {
             return Err(Untranslatable::BadStack);
@@ -138,6 +147,17 @@ fn decode_unit(code: &[u8]) -> Result<(Vec<Decoded>, Option<usize>), Untranslata
     Ok((decoded, end_depth))
 }
 
+/// What an instruction takes from the stack and leaves, with a call's from its function's header.
+fn effect_of(instruction: Instruction, call_effects: &[StackEffect]) -> Result<StackEffect, Untranslatable> {
+    match instruction {
+        Instruction::Call(function) => call_effects
+            .get(function as usize)
+            .copied()
+            .ok_or(Untranslatable::BadInstruction),
+        _ => Ok(instruction.stack_effect()),
+    }
+}
+
 fn merge(current: Option<usize>, at_target: Option<usize>) -> Result<Option<usize>, Untranslatable> {
     match (current, at_target) {
         (Some(current), Some(at_target)) if current != at_target => Err(Untranslatable::BadStack),
@@ -146,16 +166,27 @@ fn merge(current: Option<usize>, at_target: Option<usize>) -> Result<Option<usiz
     }
 }
 
-/// Whether native code does the instruction itself, rather than handing it to the interpreter.
-fn is_native(instruction: Instruction, local_count: usize) -> bool {
+/// How native code carries out an instruction.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    /// In instructions of its own.
+    Inline,
+    /// Through the execute helper, which runs it in the interpreter.
+    Helper,
+    /// By handing over, so the interpreter runs it and carries on.
+    Handover,
+}
+
+fn kind(instruction: Instruction, local_count: usize) -> Kind {
     use Instruction::*;
     match instruction {
-        ReadLocal(local) | WriteLocal(local) => (local as usize) < local_count,
-        PushSmall(_) | PushInt(_) | PushLong(_) | PushNone | PushText(_) | Duplicate | Drop | Swap | Add
-        | Subtract | Negate | Minimum | Maximum | Absolute | BitAnd | BitOr | BitXor | BitNot | Equal
-        | NotEqual | Less | LessOrEqual | Greater | GreaterOrEqual | Not | IsNone | Jump(_)
-        | JumpIfFalse(_) | LoopStart | LoopBack(_) => true,
-        _ => false,
+        ReadLocal(local) | WriteLocal(local) if local as usize >= local_count => Kind::Handover,
+        Call(_) | CallLibrary { .. } => Kind::Handover,
+        ReadLocal(_) | WriteLocal(_) | PushSmall(_) | PushInt(_) | PushLong(_) | PushNone | PushText(_)
+        | Duplicate | Drop | Swap | Add | Subtract | Negate | Minimum | Maximum | Absolute | BitAnd
+        | BitOr | BitXor | BitNot | Equal | NotEqual | Less | LessOrEqual | Greater | GreaterOrEqual
+        | Not | IsNone | Jump(_) | JumpIfFalse(_) | LoopStart | LoopBack(_) => Kind::Inline,
+        _ => Kind::Helper,
     }
 }
 
@@ -164,7 +195,14 @@ fn ends_block(instruction: Instruction, local_count: usize) -> bool {
     matches!(
         instruction,
         Instruction::Jump(_) | Instruction::JumpIfFalse(_) | Instruction::LoopBack(_)
-    ) || !is_native(instruction, local_count)
+    ) || kind(instruction, local_count) == Kind::Handover
+}
+
+fn is_call(instruction: Instruction) -> bool {
+    matches!(
+        instruction,
+        Instruction::Call(_) | Instruction::CallLibrary { .. }
+    )
 }
 
 // ============================================================================
@@ -181,6 +219,9 @@ struct Handover {
 
 struct Writer {
     assembler: Assembler,
+    /// The routine that calls the execute helper, written once the unit is.
+    execute: Label,
+    uses_execute: bool,
     handovers: BTreeMap<Handover, Label>,
     labels: BTreeMap<usize, Label>,
 }
@@ -215,14 +256,19 @@ fn slot(index: usize) -> u32 {
 
 /// The native function for a code unit with `local_count` locals, or why it has none.
 ///
-/// The function takes a `Context` in r0 and gives back an `Exit` in r0. The code is an app's, never
-/// the shared library's, whose text instructions copy their text out.
-pub fn translate(code: &[u8], local_count: usize) -> Result<Vec<u8>, Untranslatable> {
-    let (decoded, end_depth) = decode_unit(code)?;
+/// The function takes a `Context` in r0 and gives back an `Exit` in r0. `call_effects` gives, for
+/// each of the image's functions, the arguments it takes and the results it leaves. The code is an
+/// app's, never the shared library's, whose text instructions copy their text out.
+pub fn translate(
+    code: &[u8],
+    local_count: usize,
+    call_effects: &[StackEffect],
+) -> Result<Vec<u8>, Untranslatable> {
+    let (decoded, end_depth) = decode_unit(code, call_effects)?;
     let highest_depth = decoded
         .iter()
         .filter_map(|entry| {
-            let effect = entry.instruction.stack_effect();
+            let effect = effect_of(entry.instruction, call_effects).ok()?;
             let before = entry.depth?;
             Some(before.max(before - effect.taken + effect.left))
         })
@@ -232,6 +278,10 @@ pub fn translate(code: &[u8], local_count: usize) -> Result<Vec<u8>, Untranslata
     let targeted: Vec<bool> = decoded
         .iter()
         .map(|entry| decoded.iter().any(|other| other.target == Some(entry.offset)))
+        .collect();
+    // The unit is entered again after each call, once the interpreter has made it.
+    let reentered: Vec<bool> = (0..decoded.len())
+        .map(|index| index > 0 && is_call(decoded[index - 1].instruction) && decoded[index].depth.is_some())
         .collect();
     let mut block_starts = vec![false; decoded.len()];
     for (index, entry) in decoded.iter().enumerate() {
@@ -248,8 +298,12 @@ pub fn translate(code: &[u8], local_count: usize) -> Result<Vec<u8>, Untranslata
         run += 1;
     }
 
+    let mut assembler = Assembler::new();
+    let execute = assembler.label();
     let mut writer = Writer {
-        assembler: Assembler::new(),
+        execute,
+        uses_execute: false,
+        assembler,
         handovers: BTreeMap::new(),
         labels: BTreeMap::new(),
     };
@@ -261,23 +315,31 @@ pub fn translate(code: &[u8], local_count: usize) -> Result<Vec<u8>, Untranslata
     writer.assembler.move_register(CONTEXT, R0);
     writer.assembler.load_word(LOCALS, CONTEXT, LOCALS_AT);
     writer.assembler.load_word(STACK, CONTEXT, STACK_AT);
+    // Without room, or asked to start where it cannot, the unit hands over at once with the context as given.
+    let refuse = writer.assembler.label();
     if highest_depth > 0 {
-        let no_room = writer.handover(Handover {
-            offset: 0,
-            depth: 0,
-            refund: 0,
-        });
         writer.assembler.load_word(R0, CONTEXT, STACK_ROOM_AT);
         writer.assembler.compare_small(R0, highest_depth as u32);
-        writer.assembler.branch_if(Condition::CarryClear, no_room);
+        writer.assembler.branch_if(Condition::CarryClear, refuse);
     }
+    writer.assembler.load_word(R0, CONTEXT, RESUME_OFFSET_AT);
+    for (index, entry) in decoded.iter().enumerate() {
+        if reentered[index] {
+            let label = writer.label_at(entry.offset);
+            writer.assembler.load_constant(R1, entry.offset as u32);
+            writer.assembler.compare(R0, R1);
+            writer.assembler.branch_if(Condition::Equal, label);
+        }
+    }
+    writer.assembler.compare_small(R0, 0);
+    writer.assembler.branch_if(Condition::NotEqual, refuse);
 
     let mut block_length = 0;
     let mut place_in_block = 0;
     // Code after a handover or an unconditional jump runs natively only when something jumps to it.
     let mut reachable = true;
     for (index, entry) in decoded.iter().enumerate() {
-        reachable |= targeted[index];
+        reachable |= targeted[index] || reentered[index];
         let Some(depth) = entry.depth.filter(|_| reachable) else {
             continue;
         };
@@ -298,17 +360,24 @@ pub fn translate(code: &[u8], local_count: usize) -> Result<Vec<u8>, Untranslata
         write_instruction(&mut writer, entry, depth, handover, local_count);
         place_in_block += 1;
         reachable = !matches!(entry.instruction, Instruction::Jump(_) | Instruction::LoopBack(_))
-            && is_native(entry.instruction, local_count);
+            && kind(entry.instruction, local_count) != Kind::Handover;
     }
 
     writer.assembler.place(finish);
     writer.assembler.move_small(R0, end_depth.unwrap_or(0) as u32);
     writer.assembler.store_word(R0, CONTEXT, DEPTH_AT);
     writer.assembler.move_small(R0, Exit::Finished as u32);
+    writer.assembler.branch_short(exit);
+    writer.assembler.place(refuse);
+    writer.assembler.move_small(R0, Exit::Interpret as u32);
     writer.assembler.place(exit);
     writer
         .assembler
         .pop(&[R3, R4, R5, R6, R7, crate::thumb::PROGRAM_COUNTER]);
+
+    if writer.uses_execute {
+        write_execute_routine(&mut writer.assembler, writer.execute, exit);
+    }
 
     let handovers: Vec<(Handover, Label)> = writer
         .handovers
@@ -332,6 +401,27 @@ pub fn translate(code: &[u8], local_count: usize) -> Result<Vec<u8>, Untranslata
     }
 
     writer.assembler.finish().map_err(|_| Untranslatable::TooLarge)
+}
+
+/// Writes the routine a helper instruction calls with its offset in r1 and the stack's depth in r2.
+///
+/// It runs the instruction in the interpreter and returns, or on a failure leaves the unit at once with the helper's exit.
+fn write_execute_routine(assembler: &mut Assembler, routine: Label, exit: Label) {
+    let failed = assembler.label();
+    assembler.place(routine);
+    assembler.push(&[R3, crate::thumb::LINK]);
+    assembler.store_word(R2, CONTEXT, DEPTH_AT);
+    assembler.move_register(R0, CONTEXT);
+    assembler.load_word(R3, CONTEXT, HELPERS_AT);
+    assembler.load_word(R3, R3, EXECUTE_HELPER * 4);
+    assembler.call_register(R3);
+    assembler.compare_small(R0, Exit::Finished as u32);
+    assembler.branch_short_if(Condition::NotEqual, failed);
+    assembler.pop(&[R3, crate::thumb::PROGRAM_COUNTER]);
+    assembler.place(failed);
+    // The routine's own two words go, so the unit's exit finds its frame.
+    assembler.add_to_stack_pointer(8);
+    assembler.branch(exit);
 }
 
 /// Takes a block's steps as it starts, or hands over before it when too few are left.
@@ -358,10 +448,21 @@ fn write_instruction(
 ) {
     use Instruction::*;
 
-    if !is_native(entry.instruction, local_count) {
-        let label = writer.handover(handover);
-        writer.assembler.branch(label);
-        return;
+    match kind(entry.instruction, local_count) {
+        Kind::Handover => {
+            let label = writer.handover(handover);
+            writer.assembler.branch(label);
+            return;
+        }
+        Kind::Helper => {
+            writer.uses_execute = true;
+            let routine = writer.execute;
+            writer.assembler.load_constant(R1, entry.offset as u32);
+            writer.assembler.move_small(R2, depth as u32);
+            writer.assembler.branch_and_link(routine);
+            return;
+        }
+        Kind::Inline => {}
     }
     let top = depth.wrapping_sub(1);
     let below = depth.wrapping_sub(2);

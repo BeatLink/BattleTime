@@ -98,6 +98,7 @@ pub enum AssembleError {
 #[derive(Clone, Copy)]
 enum BranchKind {
     Long,
+    Link,
     LongIf(Condition),
     ShortIf(Condition),
     Short,
@@ -350,6 +351,17 @@ impl Assembler {
         self.pending(BranchKind::Short, target, 1);
     }
 
+    /// `BL label`, calling a routine in the code.
+    pub fn branch_and_link(&mut self, target: Label) {
+        self.pending(BranchKind::Link, target, 2);
+    }
+
+    /// `ADD SP, SP, #bytes`, dropping words from the stack.
+    pub fn add_to_stack_pointer(&mut self, bytes: u32) {
+        self.check(bytes.is_multiple_of(4) && bytes < 512);
+        self.halfword(0xB000 | ((bytes / 4) & 0x7F) as u16);
+    }
+
     /// `BLX rm`, calling the address in a register.
     pub fn call_register(&mut self, register: Register) {
         self.halfword(0x4780 | (register.number as u16) << 3);
@@ -395,7 +407,7 @@ impl Assembler {
                     self.halfwords[at] = 0xF000 | sign << 10 | (condition as u16) << 6 | upper;
                     self.halfwords[at + 1] = 0x8000 | first_jump << 13 | second_jump << 11 | lower;
                 }
-                BranchKind::Long => {
+                BranchKind::Long | BranchKind::Link => {
                     fits_signed(distance, 25)?;
                     let sign = ((distance >> 24) & 1) as u16;
                     let first = ((distance >> 23) & 1) as u16;
@@ -405,7 +417,9 @@ impl Assembler {
                     let upper = ((distance >> 12) & 0x3FF) as u16;
                     let lower = ((distance >> 1) & 0x7FF) as u16;
                     self.halfwords[at] = 0xF000 | sign << 10 | upper;
-                    self.halfwords[at + 1] = 0x9000 | first_jump << 13 | second_jump << 11 | lower;
+                    let link = matches!(branch.kind, BranchKind::Link) as u16;
+                    self.halfwords[at + 1] =
+                        0x9000 | link << 14 | first_jump << 13 | second_jump << 11 | lower;
                 }
             }
         }

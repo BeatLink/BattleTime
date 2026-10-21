@@ -17,6 +17,7 @@ pub mod instruction;
 pub mod interpreter;
 pub mod library_icons;
 pub mod memory_need;
+pub mod native;
 pub mod paging;
 pub mod pattern;
 pub mod resources;
