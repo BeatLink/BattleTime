@@ -15,11 +15,9 @@ use battletime_runtime::{
     paging::{cache_bytes, CodeCache},
     state::SaveBufferFull,
     subscriptions::{Subscription, SubscriptionKind},
-    verify_with,
     widgets::{screen_table, Property, PropertyValue as ValueKind, ScreenEntry, ScreenWindow, MOST_WIDGETS},
-    AppImage, AppKind, AppState, Bindings, CheckedFunctions, EffectKind, Failure, HandlerOutcome, ImageError,
-    Inputs, Interpreter, PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree,
-    NONE,
+    AppImage, AppKind, AppState, Bindings, EffectKind, Failure, HandlerOutcome, ImageError, Inputs,
+    Interpreter, PropertySource, SystemValue, SystemValues, Theme, Value, WidgetKind, WidgetTree, NONE,
 };
 use battletime_ui::geometry::Rect;
 
@@ -167,10 +165,24 @@ impl NodeKey {
 
 /// Runs the install checks on an image before it is loaded, in a frame of its own, so the verifier
 /// never runs below the large frame that builds the host. Its 800-byte table goes on the heap.
+///
+/// Without `verify-on-open`, as on the watch, only the image's own checks run: the firmware verifies
+/// each image once, through the verifier module, before it ever opens it.
 #[inline(never)]
 fn verify_image(image_bytes: &[u8]) -> Result<(), OpenError> {
     let image = AppImage::parse(image_bytes)?;
-    verify_with(&image, &mut Box::new(CheckedFunctions::NONE))?;
+    verify_code(&image)
+}
+
+#[cfg(feature = "verify-on-open")]
+fn verify_code(image: &AppImage) -> Result<(), OpenError> {
+    use battletime_runtime::{verify_with, CheckedFunctions};
+    verify_with(image, &mut Box::new(CheckedFunctions::NONE))?;
+    Ok(())
+}
+
+#[cfg(not(feature = "verify-on-open"))]
+fn verify_code(_image: &AppImage) -> Result<(), OpenError> {
     Ok(())
 }
 
@@ -576,7 +588,7 @@ impl<'image> AppHost<'image> {
     /// Checks the library and works out again what reads its functions, from `analysed`, the app's whole image.
     fn attach_library(&mut self, library_bytes: &'image [u8], analysed: &AppImage) -> Result<(), OpenError> {
         let library = AppImage::parse(library_bytes)?;
-        verify_with(&library, &mut Box::new(CheckedFunctions::NONE))?;
+        verify_code(&library)?;
         if library.kind != AppKind::Library {
             return Err(OpenError::NotALibrary);
         }

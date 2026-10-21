@@ -22,6 +22,10 @@ installed or turned on, the watch works out how much memory it needs, and refuse
 not fit, or that would leave the launcher without room for its longer list, saying why. The launcher
 and the last face always stay on.
 
+Installing an app closes the one open while the watch checks the new app's code, with an
+**Installing** page on the screen, then shows the face. After a firmware update each app shows a
+**Checking** page the first time it opens, for the same check.
+
 An app opened without enough free memory does not start; a page says how much it needs and how much
 is free. Apps remember where they were: an app's state is saved when it closes or the screen turns
 off, and put back when it opens.

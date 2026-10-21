@@ -221,11 +221,22 @@ Docs and comments the code contradicts, as of e30358e4:
    `mod:<name>` as the open app, and the next start counts it against that module's file in
    `/system/modules/crashes`; after two the module is not run again until its file changes.
    `tools/check_modules.py` checks all of this but the restart in the emulator. The loader,
-   counting included, costs 6.7 KB of firmware code; the test module is 364 B on the flash, and
+   counting included, costs 7.1 KB of firmware code; the test module is 364 B on the flash, and
    the verifier, built as a trial module, 14.7 KB, about twice its share of the firmware, since it
    carries its own copy of the image parser and instruction decoder. A panic's return addresses
    inside a module are not recorded, since the crash record looks only in the firmware's code.
-5. **Package install and the verifier as a module**, with the install-time function index.
+5. **The verifier as a module:** done. The firmware carries no verifier: `modules/verifier`
+   (15,360 B on the flash) checks an image's code once, in the shell, with the open app closed,
+   which leaves it room beside even the largest image (Settings, 7.2 KB) within the app budget. An
+   install answers only once that ran, behind an Installing page, and an image it passed is named
+   by CRC and length in `/system/verified`, for this firmware build, so it opens at once
+   afterwards; any other image, a temporary app or every app after an update, is verified before
+   its first open behind a Checking page. Closed apps that are not named wait until they open. The
+   firmware lost 4.2 KB of verifier code to the stage-4 loader's 7.1 KB, so both together cost
+   2.8 KB, and the stack spare across an install went from 2.4 KB to 3.4 KB. No install-time function
+   index was needed, as paging found. The rest of the install, the facts and id checks, could join
+   the module later, for 2 to 4 KB more, while listing, turning apps on and off and the launcher's
+   order stay in the firmware, which the shell needs at every turn.
 6. **P-256 as a module** when pairing starts.
 7. **Paged bytecode functions and glyph subsets**, and the shell's screens as bytecode. Paged code
    is done ([app-runtime.md](app-runtime.md#paged-code)), ahead of the stages before it, while

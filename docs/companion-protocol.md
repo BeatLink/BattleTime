@@ -437,8 +437,12 @@ Files the firmware needs that are not apps live under `/system`:
   [app-runtime.md](app-runtime.md#the-shared-library) says. The app host reads the ones a screen
   shows before painting it; while the file is missing they draw as empty boxes.
 - `/system/modules/<name>`: a native module, as `tools/package_module.py` packs it: native code
-  the firmware reads into its heap and runs only when asked, such as `test`, which the `module`
-  command above calls. The firmware writes `/system/modules/crashes` itself, counting the crashes
+  the firmware reads into its heap and runs only when asked. `verifier` checks an app's code once,
+  after its install or before its first open, since the firmware carries no verifier; without it
+  the watch opens no app. `test` is the one the `module` command above calls to prove the loader.
+- `/system/verified`: written by the firmware, never the companion. It names each image the
+  verifier module passed by its CRC and length, for this firmware build only, so after an update
+  each app shows a Checking page the first time it opens. The firmware writes `/system/modules/crashes` itself, counting the crashes
   of each module, and runs no module that crashed the watch twice until its file changes. While a
   module runs, a crash records `mod:<name>` as the open app.
 
@@ -618,7 +622,7 @@ error.
 | Command | Answer |
 |---|---|
 | `{"c":"apps"}` | `{"c":"apps","room":budget,"a":[[id,name,kind,enabled,bytes,need,group],...]}`, `kind` being `app` or `face`, `enabled` 0 or 1, `need` the heap in bytes the app needs while open and `group` the launcher group its image declares, empty when none, in id order; `room` is the most an app may need. Each image's CRC and id are checked, but its code only at install. An image larger than `room` is never read: it is listed by its id, as an app, turned off, with `need` its length. The watch sends the line a piece per app, so a long list never needs one large block of its heap |
-| `{"c":"install","id":id}` | `{"c":"install","ok":1,"need":need,"room":budget}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id, is not the shared library, was built against no newer shared library than the one inside the running firmware, and fits the heap, as `enable` checks; the app then appears in `installed_apps`. An app that needs a newer library or does not fit stays installed but turned off, and the answer is a refusal |
+| `{"c":"install","id":id}` | `{"c":"install","ok":1,"need":need,"room":budget}` once `/apps/<id>/app.ntapp` passes the app checks, holds that id, is not the shared library, was built against no newer shared library than the one inside the running firmware, and fits the heap, as `enable` checks; the app then appears in `installed_apps`. An app that needs a newer library or does not fit stays installed but turned off, and the answer is a refusal. The shell answers, after it closed the open app, ran the verifier module over the image's code with an Installing page on the screen, and went back to the face; code that fails answers `the image fails the app checks`, and a missing verifier module `the verifier module is missing or would not run`, and either leaves the app turned off |
 | `{"c":"remove","id":id}` | `{"c":"remove","ok":1}`; deletes `/apps/<id>` with its saved state |
 | `{"c":"enable","id":id,"on":bool}` | `{"c":"enable","ok":1,"need":need,"room":budget}`; a disabled app stays installed but leaves the launcher. `on` is true when left out |
 | `{"c":"launcher"}` | `{"c":"launcher","ok":1}`; reads `/settings/launcher` again and regroups the launcher, as [Launcher](#launcher) describes |

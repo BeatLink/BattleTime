@@ -45,7 +45,7 @@ static_cell = "2.1"
 trouble-host = { version = "0.8", default-features = false, features = ["peripheral", "gatt", "derive", "default-packet-pool", "default-packet-pool-mtu-128", "default-packet-pool-size-8"] }
 
 battletime-accelerometer = { path = "../drivers/accelerometer" }
-battletime-app-host = { path = "../app-host" }
+battletime-app-host = { path = "../app-host", default-features = false }
 battletime-ui = { path = "../ui" }
 battletime-bluetooth = { path = "../drivers/bluetooth" }
 battletime-boot = { path = "../boot" }
@@ -61,7 +61,7 @@ battletime-button = { path = "../drivers/button" }
 battletime-dfu = { path = "../services/dfu", features = ["trouble"] }
 battletime-notifications = { path = "../services/notifications" }
 battletime-flash-store = { path = "../services/flash_store" }
-battletime-packages = { path = "../services/packages" }
+battletime-packages = { path = "../services/packages", default-features = false }
 battletime-phone-client = { path = "../services/phone_client" }
 battletime-display = { path = "../drivers/display" }
 battletime-heart-rate = { path = "../drivers/heart_rate" }

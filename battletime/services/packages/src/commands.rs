@@ -43,6 +43,11 @@ pub enum Change {
     StopTemporary,
     /// The firmware runs this module call and sends its answer with `module_reply`.
     RunModule(ModuleCall),
+    /// The app passed the install's other checks; the shell verifies its code, then answers with `install_reply`.
+    VerifyInstall {
+        id: AppId,
+        need_bytes: u32,
+    },
 }
 
 /// Where a command's reply line goes, a piece at a time; the line ends with its newline.
@@ -98,7 +103,16 @@ async fn run_command<Files: FileAccess>(
                 Ok(app) => {
                     let apps = packages.list().await.unwrap_or_default();
                     let need = crate::checks::room_needed(&app, &apps);
-                    (ok_reply_with_need(name, need), Change::Apps)
+                    match cfg!(feature = "verify-on-install") {
+                        true => (ok_reply_with_need(name, need), Change::Apps),
+                        false => (
+                            String::new(),
+                            Change::VerifyInstall {
+                                id: app_id(id),
+                                need_bytes: need,
+                            },
+                        ),
+                    }
                 }
                 Err(error) => (error_reply_for(name, error), Change::None),
             };
@@ -153,6 +167,14 @@ fn module_call(name: Option<&str>, call: Option<u32>) -> Option<ModuleCall> {
         name: heapless::String::try_from(name).ok()?,
         call: call.unwrap_or(0),
     })
+}
+
+/// The shell's answer to `install` once it verified the app's code: the heap it needs, or why it was turned off.
+pub fn install_reply(outcome: Result<u32, PackageError>) -> String {
+    match outcome {
+        Ok(need_bytes) => ok_reply_with_need("install", need_bytes),
+        Err(error) => error_reply_for("install", error),
+    }
 }
 
 /// The firmware's answer to `module`: what the call answered, or why it did not run.
@@ -368,6 +390,15 @@ mod tests {
     }
 
     #[test]
+    fn install_reply_gives_the_need_or_why_the_code_failed() {
+        assert_eq!(
+            install_reply(Ok(4096)),
+            std::format!("{{\"c\":\"install\",\"ok\":1,\"need\":4096,\"room\":{APP_HEAP_BUDGET_BYTES}}}\n")
+        );
+        assert!(install_reply(Err(PackageError::CouldNotVerify)).contains("the verifier module"));
+    }
+
+    #[test]
     fn module_reply_gives_the_calls_answer_or_why_it_did_not_run() {
         assert_eq!(module_reply(Ok(-3)), "{\"c\":\"module\",\"ok\":1,\"r\":-3}\n");
         assert_eq!(
@@ -424,6 +455,27 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(feature = "verify-on-install"))]
+    fn without_install_verification_the_shell_verifies_and_answers() {
+        let mut files = file_system();
+        put_app(&mut files, "timer", "Timer", AppKind::App);
+        let need = block_on(crate::Packages::new(&mut files).list()).unwrap()[0].need_bytes;
+        let need_bytes = need + battletime_runtime::memory_need::indexed_app_bytes("timer");
+
+        let (reply, change) = run(r#"{"c":"install","id":"timer"}"#, &mut files);
+
+        assert_eq!(reply, "");
+        assert_eq!(
+            change,
+            Change::VerifyInstall {
+                id: app_id("timer"),
+                need_bytes
+            }
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "verify-on-install")]
     fn install_remove_and_enable_answer_and_report_a_change() {
         let mut files = file_system();
         put_app(&mut files, "timer", "Timer", AppKind::App);

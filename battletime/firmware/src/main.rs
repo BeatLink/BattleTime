@@ -93,7 +93,7 @@ mod settings;
 mod shell;
 mod stack_guard;
 // Under wasp-os the firmware is never rolled back or installed as recovery.
-#[cfg(with_shell)]
+#[cfg_attr(not(with_shell), allow(dead_code))]
 mod modules;
 #[cfg_attr(not(with_shell), allow(dead_code))]
 mod motion;

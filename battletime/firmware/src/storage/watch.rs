@@ -876,6 +876,12 @@ impl Files {
         self.queue_write(path, Some(bytes.into()));
     }
 
+    /// Writes the whole file at once, for a write the shell must see done, or nothing while another task holds the store.
+    #[cfg_attr(not(with_shell), allow(dead_code))]
+    pub fn write_now(&self, path: &str, bytes: &[u8]) -> bool {
+        self.now(|store| run_on_heap(FileAccess::write_file(store, path, bytes)).is_ok()) == Some(true)
+    }
+
     /// Queues deleting the file, as `write_soon` queues a write.
     fn delete_soon(&self, path: &str) {
         self.queue_write(path, None);
@@ -1008,6 +1014,17 @@ impl Files {
                 buffer,
             )))
         })?
+    }
+
+    /// Runs a native module's call on `input` with the store held, or none while another task holds it.
+    #[cfg_attr(not(with_shell), allow(dead_code))]
+    pub fn call_module_now(
+        &self,
+        name: &str,
+        call: u32,
+        input: &[u8],
+    ) -> Option<Result<i32, crate::modules::ModuleFailure>> {
+        self.now(|store| block_on(crate::modules::call(store, name, call, input)))
     }
 
     pub fn read_now(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
@@ -1380,7 +1397,7 @@ impl Files {
         let Change::RunModule(module_call) = change else {
             return change;
         };
-        let outcome = crate::modules::call(store, &module_call.name, module_call.call).await;
+        let outcome = crate::modules::call(store, &module_call.name, module_call.call, &[]).await;
         let reply =
             battletime_packages::commands::module_reply(outcome.map_err(|failure| failure.describe()));
         packages::REPLIES.send(reply).await;
@@ -1525,7 +1542,9 @@ pub async fn run_storage(files: &'static Files) {
                 match change {
                     Change::None | Change::RunModule(_) => {}
                     Change::Apps => packages::CHANGED.signal(change),
-                    Change::RunTemporary(_) | Change::StopTemporary => packages::TEMPORARY.signal(change),
+                    Change::RunTemporary(_) | Change::StopTemporary | Change::VerifyInstall { .. } => {
+                        packages::TEMPORARY.signal(change)
+                    }
                 }
             }
         }

@@ -2,7 +2,8 @@
 //!
 //! After a crash the wearer sees what stopped BattleTime and picks Restart or Send debug info; while
 //! the debug info waits for the companion app a second page says so. When an app needs more memory
-//! than is free, a page says so instead of opening it. These pages need no app, so they work
+//! than is free, a page says so instead of opening it, and while the verifier checks an app's code
+//! after an install, or before its first open, a page without buttons says that. These pages need no app, so they work
 //! whatever app broke; their words are in the status page's font, which in the full firmware is the
 //! shared library's text font.
 
@@ -33,6 +34,8 @@ pub enum Page<'text> {
         needed_bytes: u32,
         free_bytes: u32,
     },
+    /// The verifier checks `app_name`'s code, just installed or about to open for the first time.
+    Checking { app_name: &'text str, installing: bool },
 }
 
 /// What the wearer picked on a page.
@@ -56,12 +59,15 @@ impl Page<'_> {
             ],
             Page::WaitingForCompanion => &[("Skip", Choice::Dismiss)],
             Page::NotEnoughMemory { .. } => &[("OK", Choice::Dismiss)],
+            Page::Checking { .. } => &[],
         }
     }
 
-    /// What a click of the side button picks: the page's first button.
+    /// What a click of the side button picks: the page's first button, or leaving a page without one.
     pub fn button_press_choice(&self) -> Choice {
-        self.buttons()[0].1
+        self.buttons()
+            .first()
+            .map_or(Choice::Dismiss, |(_, choice)| *choice)
     }
 
     /// What a tap at the point picks, if it lands on a button.
@@ -77,7 +83,7 @@ impl Page<'_> {
     fn background(&self) -> Rgb565 {
         match self {
             Page::Crash { .. } | Page::WaitingForCompanion => CRASH_BACKGROUND,
-            Page::NotEnoughMemory { .. } => NOTICE_BACKGROUND,
+            Page::NotEnoughMemory { .. } | Page::Checking { .. } => NOTICE_BACKGROUND,
         }
     }
 }
@@ -150,6 +156,14 @@ fn lines(page: &Page) -> heapless::Vec<Line, MOST_LINES> {
                 kilobytes_rounded_up(*needed_bytes)
             ));
             add(format_args!("{} KB is free.", free_bytes / 1024));
+        }
+        Page::Checking { app_name, installing } => {
+            add(format_args!(""));
+            add(format_args!(
+                "{}",
+                if *installing { "Installing" } else { "Checking" }
+            ));
+            add(format_args!("{app_name}..."));
         }
     }
     lines

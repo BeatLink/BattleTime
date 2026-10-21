@@ -249,6 +249,11 @@ impl Shell {
         slot: &mut Option<AppHost<'static>>,
     ) -> Option<Lent<[u8]>> {
         let image = apps::read_image(self.files, battletime_packages::APPS_DIRECTORY, id)?;
+        // One not verified yet waits until it is, when it opens; the heap beside an open app has no room for the verifier.
+        if !self.is_verified(image.get()) {
+            image.release();
+            return None;
+        }
         let saved = self.files.read_now(&state_path(id)).unwrap_or_default();
         let opened =
             AppHost::open_in_background_into(slot, image.get(), self.theme, &saved, now, &mut self.system);

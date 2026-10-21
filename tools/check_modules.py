@@ -1,8 +1,10 @@
-"""Checks native modules end to end in the PineTime emulator: the test module is read, placed, called and its crash recorded.
+"""Checks native modules end to end in the PineTime emulator: the verifier module checks apps, and the test module is placed, called and its crash recorded.
 
-It builds the modules with `tools/build_modules.sh`, puts the test module at /system/modules/test
-on the emulated external flash beside a face, starts the firmware with the emulator's Bluetooth
-bridge and connects through `tools/packages_over_hci.py`, without BlueZ. Call 0 must answer 385,
+The emulated external flash holds a face, the call app and every module, as `filesystem_use`
+writes it, and no record of verified images, so the face opening at start shows the verifier
+module ran. The script starts the firmware with the emulator's Bluetooth bridge and connects
+through `tools/packages_over_hci.py`, without BlueZ. Installing the call app again must answer
+with its need once the shell verified it, and the face must be back afterwards. Call 0 must answer 385,
 which it reaches only through its heap, its data and function addresses the loader moved; an
 unknown call must answer -1, and a missing module an error. Call 2 then runs an undefined
 instruction, and the crash record in RAM must name a HardFault inside `mod:test`.
@@ -50,14 +52,12 @@ def main():
     crash_address, _ = check_call.symbol(firmware, CRASH_RECORD_SYMBOL)
     open_app_address, open_app_size = check_call.symbol(firmware, check_call.OPEN_APP_SYMBOL)
     emulator = check_call.emulator_folder()
-    check_call.run([str(check_call.REPOSITORY / "tools" / "build_modules.sh")])
-    module = check_call.BATTLETIME / "dist" / "modules" / "test"
     results = []
 
     with tempfile.TemporaryDirectory(prefix="check-modules-") as temporary:
         folder = Path(temporary)
         pairs, library = check_call.compile_install(folder)
-        flash = check_call.write_flash(folder / "flash.bin", pairs + [f"/system/modules/test={module}"])
+        flash = check_call.write_flash(folder / "flash.bin", pairs)
         lines = [f"include @{emulator}/scripts/pinetime.resc"]
         lines += [f"sysbus WriteDoubleWord {address:#x} {value:#x}" for address, value in check_call.FIRST_START_UICR]
         lines += [
@@ -77,12 +77,30 @@ def main():
         try:
             if not link.exists():
                 sys.exit("the engine never opened its Bluetooth bridge")
-            check_call.wait_for_open_app(engine, open_app_address, open_app_size,
-                                         lambda current: current == check_call.FACE_ID)
+            face = check_call.wait_for_open_app(engine, open_app_address, open_app_size,
+                                                lambda current: current == check_call.FACE_ID, seconds=60)
+            results.append(check_call.check("the face opens once the verifier module checked it",
+                                            face == check_call.FACE_ID, f"open app {face!r}"))
             port = packages_over_hci.HciPort(str(link))
             port.start_controller()
             watch = packages_over_hci.Watch.connect(port)
             packages = watch.open_packages()
+
+            try:
+                reply = watch.run_command(packages, f'{{"c":"install","id":"{check_call.CALL_APP_ID}"}}')
+            except packages_over_hci.Disconnected as error:
+                magic, kind, open_app = read_crash(engine, crash_address)
+                crashed = f", crash kind {kind} in {open_app!r}" if magic == RECORD_MAGIC else ""
+                crashed += f", open app {check_call.open_app(engine, open_app_address, open_app_size)!r}"
+                crashed += f", pc {engine.command('cpu PC')}"
+                check_call.check("an install answers once the shell verified the app", False, f"{error}{crashed}")
+                sys.exit(1)
+            results.append(check_call.check("an install answers once the shell verified the app",
+                                            '"ok":1' in reply and '"need"' in reply, reply))
+            face = check_call.wait_for_open_app(engine, open_app_address, open_app_size,
+                                                lambda current: current == check_call.FACE_ID)
+            results.append(check_call.check("the face is back after the install", face == check_call.FACE_ID,
+                                            f"open app {face!r}"))
 
             started = time.monotonic()
             reply = watch.run_command(packages, call_line("test", 0))

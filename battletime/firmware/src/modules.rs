@@ -99,16 +99,17 @@ static HOST: Host = Host {
 /// A boxed future, polled out of line, so a rare call costs the task that awaits it no code or frame.
 pub type OutOfLine<'call, Output> = Pin<Box<dyn Future<Output = Output> + 'call>>;
 
-/// Runs call `call` of the module `name`, giving what it answers.
+/// Runs call `call` of the module `name` on `input`, giving what it answers.
 pub fn call<'call>(
     files: &'call mut impl FileAccess,
     name: &'call str,
     call: u32,
+    input: &'call [u8],
 ) -> OutOfLine<'call, Result<i32, ModuleFailure>> {
-    Box::pin(run(files, name, call))
+    Box::pin(run(files, name, call, input))
 }
 
-async fn run(files: &mut impl FileAccess, name: &str, call: u32) -> Result<i32, ModuleFailure> {
+async fn run(files: &mut impl FileAccess, name: &str, call: u32, input: &[u8]) -> Result<i32, ModuleFailure> {
     let path = module_path(name);
     let file_length = files
         .file_length(&path)
@@ -137,18 +138,18 @@ async fn run(files: &mut impl FileAccess, name: &str, call: u32) -> Result<i32, 
     let ram_address = bytes.as_ptr() as u32;
     let header = place(bytes, file_length, ram_address).map_err(ModuleFailure::Refused)?;
 
-    Ok(unsafe { enter(name, code_alias(ram_address) + header.entry, call) })
+    Ok(unsafe { enter(name, code_alias(ram_address) + header.entry, call, input) })
 }
 
 /// Calls the placed module's entry at `entry_address`, naming it for the crash record while it runs.
 #[inline(never)]
-unsafe fn enter(name: &str, entry_address: u32, call: u32) -> i32 {
+unsafe fn enter(name: &str, entry_address: u32, call: u32, input: &[u8]) -> i32 {
     // The code was written as data, so both finish before the first instruction is fetched.
     cortex_m::asm::dsb();
     cortex_m::asm::isb();
     let entry: Entry = unsafe { core::mem::transmute::<usize, Entry>(entry_address as usize) };
     restart::set_running_module(Some(crash_tag(name)));
-    let answer = unsafe { entry(&HOST, call, core::ptr::null(), 0, core::ptr::null_mut(), 0) };
+    let answer = unsafe { entry(&HOST, call, input.as_ptr(), input.len(), core::ptr::null_mut(), 0) };
     restart::set_running_module(None);
     answer
 }

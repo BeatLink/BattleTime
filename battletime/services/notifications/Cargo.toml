@@ -8,6 +8,6 @@ publish = false
 
 [dependencies]
 heapless = "0.9"
-battletime-app-host = { path = "../../app-host" }
+battletime-app-host = { path = "../../app-host", default-features = false }
 battletime-companion = { path = "../companion", default-features = false }
 battletime-runtime = { path = "../../runtime" }

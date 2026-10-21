@@ -1,12 +1,14 @@
 //! Builds the external flash of a typical install and reports what each file costs in the flash store.
 //!
-//! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] [--no-accelerometer] [--no-icons] ID=FILE... /PATH=FILE...`
+//! Usage: `cargo run -p battletime-packages --example filesystem_use -- [--image OUT] [--no-theme] [--no-accelerometer] [--no-icons] [--no-modules] ID=FILE... /PATH=FILE...`
 //! or `... -- --read IMAGE /PATH`
 //!
 //! `ID=FILE` installs an app or face image; `/PATH=FILE` copies any other file, such as a saved state.
 //! `--no-theme` leaves out the all-black theme, so the built-in colours show. Both accelerometers'
-//! configuration files and the shared library's icons go in, as the companion app puts them, unless
-//! `--no-accelerometer` or `--no-icons` leaves them out to show a watch without them.
+//! configuration files, the shared library's icons and the native modules go in, as the companion
+//! app puts them, unless `--no-accelerometer`, `--no-icons` or `--no-modules` leaves them out to
+//! show a watch without them. The modules are built first with `tools/build_modules.sh`, which needs
+//! `nix develop`; without the verifier module the watch opens no app.
 //!
 //! The store is mounted with the watch's own layout and sizes, so files up to 1 KB become records and
 //! larger ones take whole sectors, as on the watch. Each step's cost is the file sectors it added.
@@ -86,6 +88,8 @@ struct Options {
     without_accelerometer: bool,
     /// Leaves out the shared library's icons file, so library icons draw as placeholders.
     without_icons: bool,
+    /// Leaves out the native modules, the verifier among them, so the watch opens no app.
+    without_modules: bool,
     entries: Vec<Entry>,
     /// `--read IMAGE /PATH`: the image to mount and the file to print from it.
     read: Option<(String, String)>,
@@ -100,6 +104,7 @@ fn read_options(arguments: impl IntoIterator<Item = String>) -> Result<Options, 
             "--no-theme" => options.without_theme = true,
             "--no-accelerometer" => options.without_accelerometer = true,
             "--no-icons" => options.without_icons = true,
+            "--no-modules" => options.without_modules = true,
             "--read" => {
                 let image = arguments.next().ok_or("--read wants an image")?;
                 let path = arguments.next().ok_or("--read wants a path")?;
@@ -173,6 +178,12 @@ fn main() {
         );
     }
 
+    if !options.without_modules {
+        for (name, bytes) in built_modules() {
+            write_measured(&mut store, &mut steps, &format!("/system/modules/{name}"), &bytes);
+        }
+    }
+
     for entry in &options.entries {
         match entry {
             Entry::File { path, file } => {
@@ -205,6 +216,28 @@ fn main() {
     }
 }
 
+/// Each native module by name, built for the watch by `tools/build_modules.sh`.
+fn built_modules() -> Vec<(String, Vec<u8>)> {
+    let battletime = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let built = std::process::Command::new(battletime.join("../tools/build_modules.sh"))
+        .status()
+        .is_ok_and(|status| status.success());
+    assert!(
+        built,
+        "tools/build_modules.sh failed; run inside nix develop, or pass --no-modules"
+    );
+    let mut modules: Vec<(String, Vec<u8>)> = std::fs::read_dir(battletime.join("dist/modules"))
+        .expect("the modules were built")
+        .map(|entry| entry.expect("the folder lists").path())
+        .map(|path| {
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            (name, std::fs::read(&path).expect("a module reads"))
+        })
+        .collect();
+    modules.sort();
+    modules
+}
+
 // ============================================================================
 // Reading an image back
 // ============================================================================
@@ -235,6 +268,7 @@ mod tests {
             "--no-theme",
             "--no-accelerometer",
             "--no-icons",
+            "--no-modules",
             "launcher=out/launcher.ntapp",
             "--image",
             "flash.bin",
@@ -249,6 +283,7 @@ mod tests {
                 without_theme: true,
                 without_accelerometer: true,
                 without_icons: true,
+                without_modules: true,
                 entries: vec![
                     Entry::App {
                         id: "launcher".into(),

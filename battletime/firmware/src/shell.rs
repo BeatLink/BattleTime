@@ -103,6 +103,8 @@ use crate::{
 
 #[path = "closed_apps.rs"]
 mod closed_apps;
+#[path = "verifying.rs"]
+mod verifying;
 
 /// The side button's gestures, from the task that watches it.
 pub static BUTTON_GESTURES: Channel<CriticalSectionRawMutex, Gesture, 2> = Channel::new();
@@ -813,6 +815,14 @@ impl Shell {
             (None, Some(bytes)) => bytes,
             (None, None) => return,
         };
+        if built_in.is_none() && self.verify_before_opening(bytes, false).is_err() {
+            if let Some(image) = image {
+                image.release();
+            }
+            restart::set_open_app("");
+            self.open_failed(showing);
+            return;
+        }
         apps::keep_list_for(&mut self.system.installed, self.files, bytes);
         if showing == Showing::Launcher {
             self.launcher_icons = Some(LauncherIcons::read(self.files, &self.system.installed));
@@ -977,8 +987,8 @@ impl Shell {
         }
     }
 
-    /// Reads the installed apps again, such as after the companion app installed one, and shows the face.
-    fn reload_apps(&mut self) {
+    /// Closes the open app, saving its state, and lets go of its image and the launcher's icons.
+    fn close_everything(&mut self) {
         if let Some(mut host) = self.host.take() {
             host.close(clock::utc_now(), &mut self.system);
             self.save_state_of(&mut host);
@@ -989,6 +999,11 @@ impl Shell {
         if let Some(icons) = self.launcher_icons.take() {
             icons.release();
         }
+    }
+
+    /// Reads the installed apps again, such as after the companion app installed one, and shows the face.
+    fn reload_apps(&mut self) {
+        self.close_everything();
         self.system.installed = InstalledApps::read(self.files);
         self.show_first_screen();
     }
@@ -1388,6 +1403,7 @@ impl Shell {
         match change {
             Change::RunTemporary(id) => self.run_temporary(id),
             Change::StopTemporary => self.stop_temporary(),
+            Change::VerifyInstall { id, need_bytes } => self.verify_install(id, need_bytes),
             Change::None | Change::Apps | Change::RunModule(_) => {}
         }
     }

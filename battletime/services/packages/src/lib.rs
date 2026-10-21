@@ -15,12 +15,12 @@
 
 extern crate alloc;
 
-use alloc::{boxed::Box, string::String, vec::Vec};
+use alloc::{string::String, vec::Vec};
 use core::fmt::Write;
 
 use battletime_flash_store::{FileAccess, FileError};
 use battletime_runtime::memory_need::{estimate_memory_need, launcher_share_bytes, APP_HEAP_BUDGET_BYTES};
-use battletime_runtime::{verify_with, AppImage, AppKind, CheckedFunctions, ImageError};
+use battletime_runtime::{AppImage, AppKind, ImageError};
 
 pub mod checks;
 pub mod commands;
@@ -28,6 +28,7 @@ pub mod faces;
 pub mod image_reader;
 pub mod launcher;
 pub mod library;
+pub mod verified;
 
 pub use checks::{check_change, Refusal};
 
@@ -106,6 +107,10 @@ pub enum PackageError {
     NeedsNewerLibrary,
     /// The shell could not open the image: it is missing, fails the app checks, or needs a newer shared library.
     WouldNotOpen,
+    /// The verifier module is missing, or would not run.
+    CouldNotVerify,
+    /// The verifier module found the image's code unsafe to run.
+    CodeFails,
     /// The store refused.
     Storage(FileError),
 }
@@ -122,6 +127,8 @@ impl PackageError {
             PackageError::Refused(refusal) => refusal.describe(),
             PackageError::NeedsNewerLibrary => "the app needs a newer shared library; update the watch first",
             PackageError::WouldNotOpen => "the image is missing or would not open",
+            PackageError::CouldNotVerify => "the verifier module is missing or would not run",
+            PackageError::CodeFails => "the image fails the app checks",
             PackageError::Storage(FileError::Full) => "no room left on the flash",
             PackageError::Storage(_) => "the flash store refused",
         }
@@ -178,7 +185,7 @@ pub fn temporary_file(id: &str, file: &str) -> AppPath {
 /// The checks the app host makes before it runs an image.
 fn check_image(bytes: &[u8]) -> Result<AppImage<'_>, PackageError> {
     let image = AppImage::parse(bytes).map_err(PackageError::BadImage)?;
-    verify_with(&image, &mut checked_functions_on_the_heap()).map_err(PackageError::BadImage)?;
+    verify_code(&image)?;
     // A listing trusts the stored facts, so they are checked against a fresh analysis once, here.
     let need = estimate_memory_need(&image);
     let facts = battletime_runtime::image::Facts {
@@ -193,9 +200,17 @@ fn check_image(bytes: &[u8]) -> Result<AppImage<'_>, PackageError> {
     Ok(image)
 }
 
-/// The verifier's 800-byte table, on the heap, since commands run with little stack to spare.
-fn checked_functions_on_the_heap() -> Box<CheckedFunctions> {
-    Box::new(CheckedFunctions::NONE)
+/// Verifies the image's code, its 800-byte table on the heap, since commands run with little stack to spare.
+#[cfg(feature = "verify-on-install")]
+fn verify_code(image: &AppImage) -> Result<(), PackageError> {
+    use battletime_runtime::{verify_with, CheckedFunctions};
+    verify_with(image, &mut alloc::boxed::Box::new(CheckedFunctions::NONE)).map_err(PackageError::BadImage)
+}
+
+/// The watch verifies an image's code after the install, through the verifier module, with the open app closed.
+#[cfg(not(feature = "verify-on-install"))]
+fn verify_code(_image: &AppImage) -> Result<(), PackageError> {
+    Ok(())
 }
 
 /// Checks an app or face image for the folder `id`.

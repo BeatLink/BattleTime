@@ -347,6 +347,7 @@ fn image_with_bad_code(id: &str) -> Vec<u8> {
 }
 
 #[test]
+#[cfg(feature = "verify-on-install")]
 fn installing_verifies_the_code_but_listing_only_parses() {
     let mut files = file_system();
     let bytes = image_with_bad_code("timer");

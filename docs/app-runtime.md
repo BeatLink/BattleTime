@@ -504,8 +504,13 @@ embed it.
 
 ### Opening an app
 
-1. The shell reads the image from `/apps/<id>/` into the heap, and the host parses and verifies it,
-   checking the shared library version.
+1. The shell reads the image from `/apps/<id>/` into the heap, and the host parses it, checking
+   the shared library version. On the watch the code was verified once before: the firmware
+   carries no verifier, and the shell runs the verifier module over each image after its install,
+   or before it first opens one that `/system/verified` does not name, such as a temporary app or
+   any app after a firmware update, with the open app closed and a Checking page on the screen.
+   The simulator and the test harness verify at every open, through the app host's default
+   `verify-on-open` feature.
 2. The state is set up from its defaults, with the saved state put over them.
 3. The host works out from the code which inputs each expression reads and how often the clock
    changes what it shows.
@@ -527,7 +532,7 @@ Opening a paged app takes these steps instead of the first and fourth above:
 1. The shell reads the whole image, and `paging::resident_image` copies everything but the code's
    and widget records' data into a resident image. Their tables stay, so every number still names
    the same code or widget, and a section of kind 14 says where their data lies in the image file.
-2. `AppHost::open_paged_into` verifies the whole image and works the bindings and subscriptions
+2. `AppHost::open_paged_into` checks the whole image as the first step does and works the bindings and subscriptions
    out from it, with the shared library, keeps the resident image, and gives the interpreter a
    `CodeCache` on the image file's path, and a table of each screen's root, end and name, read from
    the whole image; then the derive subscriptions run.

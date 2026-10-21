@@ -8,6 +8,16 @@ document for its part instead.
 
 ## Hardware tests
 
+- [ ] **Put a changed system file again even at the same size.** The companion compares each system
+  file by its size alone, so a new verifier module of the same length as the old one would stay
+  unsent, and the watch would check apps by the older rules. Compare a checksum, such as a module
+  file's CRC in its header, or the store's own.
+- [ ] **Native modules on the watch.** `tools/check_modules.py` proves the loader, the verifier
+  module and a crash inside a module in the emulator, which runs RAM's code alias with no wait
+  states. On the watch, install an app (the Installing page), call `battletime apps module test 0`
+  (385), then `1` and `2` (each restarts the watch, the crash naming `mod:test`), and check that a
+  third call answers that the module no longer runs.
+
 - [ ] **A firmware upload through `SlotFlash` on the PineTime.** The update and recovery slots are
   now erased and written through `SlotFlash`, which waits on the timer instead of spinning. Moving
   the recovery slot over the Nordic UART is proven in the emulator (`tools/check_slot_move.py`),
@@ -554,6 +564,13 @@ Found by the harness's snapshots and quality checks; see [testing.md](testing.md
   app's worst moment rather than its first screen.
 
 ## Display and SPI bus
+
+- [ ] **A queued write while the shell opens a screen stalls the watch.** In the emulator, a
+  `write_soon` the shell made while opening the face at start (the record of verified images,
+  16 bytes) left the shell and the radio waiting for good: the next packages command that read
+  the store dropped the link, and with no module run the watchdog reset the watch. Writing it at
+  once with `write_now` avoids it. Find which wait never ends, likely the storage task's queued
+  write and the painter sharing the bus, since app state saved with `write_soon` could meet it too.
 
 - [ ] **12-bit colour mode.** The ST7789 can take 12 bits a pixel, which cuts the time to send a
   full screen by a quarter, from about 115 ms to 86 ms at 8 MHz. It costs banding in gradients and

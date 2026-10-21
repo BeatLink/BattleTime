@@ -19,6 +19,9 @@ battletime-ui = { path = "../ui" }
 battletime-runtime = { path = "../runtime", features = ["writer"] }
 
 [features]
+default = ["verify-on-open"]
+# Verifies an image's code each time it opens; the watch leaves it out and verifies once, through the verifier module.
+verify-on-open = []
 # The text fonts built in from fonts/, for the simulator and tools; the watch takes them from the shared library.
 built-in-fonts = []
 # The built-in stopwatch demo image, written with the runtime's image writer.

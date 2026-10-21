@@ -14,7 +14,7 @@ pub struct SystemFile {
 }
 
 // Each at its path on the watch, as docs/companion-protocol.md lists them.
-pub const SYSTEM_FILES: [SystemFile; 4] = [
+pub const SYSTEM_FILES: [SystemFile; 5] = [
     SystemFile {
         path: "/system/accelerometer/bma421",
         contents: include_bytes!("../../system-files/accelerometer/bma421"),
@@ -30,6 +30,10 @@ pub const SYSTEM_FILES: [SystemFile; 4] = [
     SystemFile {
         path: "/system/modules/test",
         contents: include_bytes!("../../system-files/modules/test"),
+    },
+    SystemFile {
+        path: "/system/modules/verifier",
+        contents: include_bytes!("../../system-files/modules/verifier"),
     },
 ];
 
@@ -95,7 +99,8 @@ mod tests {
                 "/system/accelerometer/bma421",
                 "/system/accelerometer/bma425",
                 "/system/icons",
-                "/system/modules/test"
+                "/system/modules/test",
+                "/system/modules/verifier"
             ]
         );
         let files = watch.files.lock().unwrap();
@@ -109,6 +114,7 @@ mod tests {
             ("/system/accelerometer/bma425", SYSTEM_FILES[1].contents),
             ("/system/icons", SYSTEM_FILES[2].contents),
             ("/system/modules/test", SYSTEM_FILES[3].contents),
+            ("/system/modules/verifier", SYSTEM_FILES[4].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 
@@ -123,6 +129,7 @@ mod tests {
             ("/system/accelerometer/bma425", b"cut short"),
             ("/system/icons", SYSTEM_FILES[2].contents),
             ("/system/modules/test", SYSTEM_FILES[3].contents),
+            ("/system/modules/verifier", SYSTEM_FILES[4].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 

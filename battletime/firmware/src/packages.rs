@@ -11,7 +11,8 @@ use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, channel::Channe
 /// Raised after a packages command changes the installed apps, so the shell reads its app list again.
 pub static CHANGED: Signal<CriticalSectionRawMutex, Change> = Signal::new();
 
-/// Raised when the phone runs or stops a temporary app, carrying `Change::RunTemporary` or `Change::StopTemporary`.
+/// Raised when the phone runs or stops a temporary app, carrying `Change::RunTemporary` or `Change::StopTemporary`,
+/// and after an install, carrying `Change::VerifyInstall` for the shell to verify the app's code.
 pub static TEMPORARY: Signal<CriticalSectionRawMutex, Change> = Signal::new();
 
 /// Command lines from the phone, without their newline, sent by the Bluetooth task.

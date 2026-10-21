@@ -32,7 +32,7 @@ use crate::{
 };
 
 /// When the firmware was built, in UTC: where the clock starts with nothing kept, and the earliest it takes.
-const BUILD_TIME: Value = parse_or_zero(env!("BATTLETIME_BUILD_TIME_MS"));
+pub const BUILD_TIME: Value = parse_or_zero(env!("BATTLETIME_BUILD_TIME_MS"));
 
 static CLOCK: Mutex<CriticalSectionRawMutex, Cell<WallClock>> =
     Mutex::new(Cell::new(WallClock::starting_at(BUILD_TIME)));

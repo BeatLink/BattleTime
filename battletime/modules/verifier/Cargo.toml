@@ -1,0 +1,11 @@
+[package]
+name = "battletime-module-verifier"
+version = "0.1.0"
+edition = "2021"
+description = "The verifier as a module: checks every piece of an app image's code once, after an install or before its first open"
+license.workspace = true
+publish = false
+
+[dependencies]
+battletime-module-abi = { path = "../../module-abi", features = ["module"] }
+battletime-runtime = { path = "../../runtime" }

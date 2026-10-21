@@ -24,6 +24,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "battletime-module-verifier"
+version = "0.1.0"
+dependencies = [
+ "battletime-module-abi",
+ "battletime-runtime",
+]
+
+[[package]]
+name = "battletime-runtime"
+version = "0.1.0"
+
+[[package]]
 name = "embedded-storage"
 version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

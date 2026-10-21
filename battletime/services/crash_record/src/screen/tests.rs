@@ -126,6 +126,23 @@ fn the_memory_page_gives_the_need_rounded_up_and_the_free_rounded_down() {
 }
 
 #[test]
+fn the_checking_page_names_the_app_and_has_no_buttons() {
+    let installing = Page::Checking {
+        app_name: "Settings",
+        installing: true,
+    };
+    let opening = Page::Checking {
+        app_name: "Settings",
+        installing: false,
+    };
+
+    assert_eq!(texts(&installing), ["", "Installing", "Settings..."]);
+    assert_eq!(texts(&opening)[1], "Checking");
+    assert_eq!(installing.choice_at(Point::new(120, 210)), None);
+    assert_eq!(installing.button_press_choice(), Choice::Dismiss);
+}
+
+#[test]
 fn every_line_fits_across_the_screen() {
     let pages = [
         crash_page("a-long-app-id-16"),
