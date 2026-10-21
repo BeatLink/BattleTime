@@ -512,7 +512,7 @@ embed it.
    the shared library version. On the watch the code was verified once before: the firmware
    carries no verifier, and the shell runs the verifier module over each image after its install,
    or before it first opens one that `/system/verified` does not name, such as a temporary app or
-   any app after a firmware update, with the open app closed and a Checking page on the screen.
+   any app once a new verifier module arrives, with the open app closed and a Checking page on the screen.
    The simulator and the test harness verify at every open, through the app host's default
    `verify-on-open` feature.
 2. The state is set up from its defaults, with the saved state put over them.
@@ -802,9 +802,9 @@ without it, such as one built before, draws `dot_matrix` as `normal`.
 
 On the watch the text font lives on the external flash at `/system/font`, a system file the
 companion puts, and no copy is kept in the firmware or the shared library. `font_file` keeps a copy
-in the heap holding only the glyphs drawn lately, at most 1,536 B, which the memory need counts in
+in the heap holding only the glyphs drawn lately, at most 2,048 B, which the memory need counts in
 the system's share. A lookup that misses notes the character; after layout the host reads the
-noted glyphs, builds the copy again, keeping those used since the last build, and lays the screen
+noted glyphs, builds the copy again, the missed ones first and then those used since the last build, and lays the screen
 out once more, and the firmware's own pages draw, read what they missed and draw again. While the
 file cannot be read, those pages draw without text: the status page as coloured steps and a
 progress bar, the help screen as a clock of bars. The `built-in-fonts` feature starts the font

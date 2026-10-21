@@ -125,7 +125,7 @@ pub const ASSUMED_ROWS: u32 = 8;
 pub const HEAP_BYTES: u32 = 30_976;
 
 /// The most the text font's glyphs in use take on the heap, read from the external flash as screens draw them.
-pub const TEXT_FONT_BYTES: u32 = 1_536;
+pub const TEXT_FONT_BYTES: u32 = 2_048;
 
 /// What the system holds on the heap while an app is open: notifications, file transfers, the shell and the text font's glyphs.
 pub const SYSTEM_BYTES: u32 = 4_096 + TEXT_FONT_BYTES;

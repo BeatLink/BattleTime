@@ -25,15 +25,21 @@ python3 tools/draw_memory_maps.py
 | Bootloader | `0x00000` | 20 KB | The `embassy-boot` bootloader with its status screen and button menu, 18,576 bytes of it used. There is no SoftDevice and no MBR. |
 | Slot table | `0x05000` | 8 KB | Two pages recording where the update and recovery slots sit in the external flash; see [bootloader.md](bootloader.md#the-slot-table). |
 | Boot state | `0x07000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x08000` | 480 KB | The running firmware, to the end of flash: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`, then the shared library. No app, face, icon or font is built into the code apart from the notifications and quick settings screens (about 2.2 KB, compiled from `shell/`); [What fills the firmware](#what-fills-the-firmware) shows what is. The code and the library share the region, so either can grow into the other's room. |
+| Firmware | `0x08000` | 480 KB | The running firmware, to the end of flash: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`, then the shared library. No app, face, icon or font is built into the code, not even the notifications and quick settings screens, which live in `/system/shell` on the external flash; [What fills the firmware](#what-fills-the-firmware) shows what is. The code and the library share the region, so either can grow into the other's room. |
 
 The shared library sits right after the code, on a word boundary, where the image header says. It
-holds what apps share: images, the app host's text font (4,945 B, one font of lines and arcs that
-every text size scales, which the full firmware's status page draws with too), Bosch's configuration file for each accelerometer (6,144 B each, which the
-firmware uploads to the chip; the library with all of it is 43,753 B), components, common functions
-and the preset themes. It arrives with each firmware
+holds what apps share: components, common functions and the preset themes. The app host's text
+font (4,945 B, one font of lines and arcs that every text size scales, which the full firmware's
+status page draws with too) lives on the external flash at `/system/font`, and only the glyphs in
+use are read into the heap, at most 2,048 B. Bosch's configuration file for each
+accelerometer (6,144 B each) lives on the external flash instead, under `/system/accelerometer`. It arrives with each firmware
 update and is never written on the watch. No apps are kept in internal flash; they live in `/apps`
 on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library).
+
+Native modules, rare native code such as `modules/test`, live on the external flash too, in
+`/system/modules`, and take room in the heap only while a call runs; the loader that reads and
+places them costs the firmware 7.1 KB, less the 4.2 KB of verifier it no longer carries, since
+the verifier is a module too. See [architecture.md](architecture.md#native-modules-module-abi-modules).
 
 
 ### What fills the firmware
@@ -48,22 +54,22 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 144.3 KB | 48.6 KB |
-| App host (with `battletime-ui`) | 91.6 KB | 0.0 KB |
-| App runtime | 34.1 KB | 0.0 KB |
-| Bluetooth (controller and TrouBLE) | 31.7 KB | 41.3 KB |
-| core, alloc and compiler builtins | 28.5 KB | 16.0 KB |
-| Settings, companion and notifications (with serde) | 19.3 KB | 2.4 KB |
-| Storage (flash store) | 17.2 KB | 13.6 KB |
+| Firmware (start-up, shell, tasks) | 150.4 KB | 49.2 KB |
+| App host (with `battletime-ui`) | 98.7 KB | 0.0 KB |
+| App runtime | 31.8 KB | 0.0 KB |
+| Bluetooth (controller and TrouBLE) | 31.7 KB | 41.4 KB |
+| core, alloc and compiler builtins | 30.3 KB | 16.5 KB |
+| Settings, companion and notifications (with serde) | 17.9 KB | 2.5 KB |
+| Storage (flash store) | 17.4 KB | 13.7 KB |
 | BLEFS file service | 9.5 KB | 3.1 KB |
-| Embassy, allocator and Cortex-M | 8.2 KB | 5.0 KB |
-| Packages | 7.8 KB | 1.3 KB |
-| Display, graphics and drivers | 5.5 KB | 3.3 KB |
-| Updates (DFU) | 3.4 KB | 2.9 KB |
-| Other constants and padding | 25.8 KB | 14.2 KB |
-| **Code and data** | **427.0 KB** | **151.7 KB** |
-| Shared library, after the code | 48.3 KB | none |
-| Free of the 480 KB region, after its header | 4.5 KB | 328.1 KB |
+| Packages | 8.4 KB | 1.4 KB |
+| Display, graphics and drivers | 8.4 KB | 3.3 KB |
+| Embassy, allocator and Cortex-M | 8.0 KB | 5.0 KB |
+| Updates (DFU) | 3.3 KB | 2.8 KB |
+| Other constants and padding | 25.4 KB | 14.2 KB |
+| **Code and data** | **441.3 KB** | **153.1 KB** |
+| Shared library, after the code | 1.7 KB | none |
+| Free of the 480 KB region, after its header | 36.7 KB | 326.7 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -106,6 +112,86 @@ library and keeps the bitmap font, as do the bootloader and its updater. Startin
 library and erased external flash, which shows the status page and then the help screen in that
 font, peaked at 5,316 B of stack, 4,140 B spare.
 
+Open files, which keep a file's map of flash runs so the shell reads any part of it in one DMA read
+with no look-up (`Files::open_now`, `FlashStore::file_map`), added 1,992 B of code and 8 B of
+constants, measured with `cargo size` against master e30358e4 on 2026-10-15 (432,020 B to 434,020 B of
+text and rodata), and 16 B of static RAM. The shell keeps the file it last read open, a boxed few
+dozen bytes plus a heap list of the file's runs, until the app closes. Notes reading a 6.8 KB note
+from the launcher peaked at 6,332 B of stack, 3,124 B spare, against master's 6,188 B and 3,268 B.
+Awaiting store reads instead of sleeping in WFE was measured too, at 4,600 B more code, and left out.
+
+Moving the accelerometers' configuration files out of the shared library onto the external flash
+shrank the library from 49,467 B to 37,159 B. Loading the detected chip's file through the storage
+task added 1,068 B of code and 56 B of constants, measured with `cargo size` against the commit
+before on 2026-10-15 (434,724 B to 435,848 B of text and rodata), and 32 B of static RAM, so the
+firmware region gained 11,184 B. The file takes 6 KB of heap while it is uploaded, once at start.
+
+Moving the shared library's 72 icons out of it into `/system/icons` on the external flash, read
+for each screen before it paints, shrank the library from 37,159 B to 6,731 B. Reading them added
+2,960 B of code, measured with `cargo size` against the commit before on 2026-10-16 (435,996 B to
+438,956 B of text and rodata), and 16 B of static RAM for the icons file's own open file, so the
+firmware region gained 27,468 B. A screen holds its icons on the heap, 1,040 B for each one an app
+may show counted in its [need](#how-much-heap-an-app-needs), up to 8 KB. Opening the launcher's
+first app with the digital face, the launcher, settings and the alarm installed peaked at 6,284 B
+of stack, 2,916 B spare.
+
+Paging the code of apps that need less of the heap that way (`runtime/src/paging.rs`) added
+3,944 B of code, measured with `cargo size` against the commit before on 2026-10-16 (438,956 B to
+442,900 B of text and rodata), and 32 B of static RAM for the paged app's image file's open file
+and the image's two paged offsets. Seven of the repository's 66 apps and faces are paged: `fancy`
+needs 18,864 B instead of 21,888 B, `omega-time` 11,036 B instead of 14,040 B, and `phrase-clock`,
+`infineat`, `about`, `four-in-a-row` and `twos` from 1,376 B down to 40 B less. Opening `about`
+paged and turning to its second page peaked at about the launcher's 6,252 B of stack, 2,948 B
+spare, against 6,092 B for `about` whole.
+
+Paging widget records too, so a paged app holds only the open screen's, added 2,636 B of code,
+measured with `cargo size` against the commit before on 2026-10-16 (442,900 B to 445,536 B of text
+and rodata), and saved 208 B of static RAM, since the host no longer keeps a copy of its image in a
+widget tree. Ten apps and faces are paged now: `settings` needs 18,024 B instead of 19,232 B and
+`about` 16,800 B instead of 18,412 B, while `fancy` and `omega-time`, one screen each, save about
+50 B less than with code alone. Opening `settings` paged and turning on Always on peaked at
+6,332 B of stack, 3,124 B spare.
+
+With paging, measured with `tools/measure_heap.py` on 2026-10-16: the face held 6,552 B, the
+launcher 4,272 B, `settings` paged 15,768 B in use with the heap touched to 16,504 B of 30,976 B
+(its need is worked out at 18,024 B), and `about` paged 8,928 B, touched to 11,628 B (16,800 B
+worked out). Across the 66 apps and faces, nodes are the largest part of the worked-out needs
+(158 KB together), then the library icons a screen may show (168 KB, counted at 1,040 B each
+though an icon averages 420 B), working memory (210 KB) and images (119 KB).
+
+Counting each library icon an app names at its own size rather than the most an icon may take
+added 1,096 B of code with the change before it, which counts an image a value picks as a library
+icon only in an app that can name one, measured with `cargo size` on 2026-10-16 (445,536 B to
+446,632 B of text and rodata), 144 B of it the table of sizes. The icons counted across the 66 apps
+and faces fell from 168 KB to 95 KB: `fancy` needs 15,464 B instead of 18,912 B, `pinetime-style`
+15,344 B instead of 18,660 B and `settings` 17,424 B. The largest need is still the stopwatch's,
+20,084 B, nearly all of it nodes.
+
+The worked-out need had left out the 40-byte extra part the host keeps on the heap for a node of
+some kinds, such as an `Icon`, `Button` or `Repeat`; it now counts it, from
+`memory_need::holds_extra`, which a test in the app host keeps equal to the kinds it gives one.
+That added 104 B of code (446,632 B to 446,736 B) and raised the nodes counted across the 66 apps
+and faces from 158 KB to 169 KB; the stopwatch needs 20,284 B, still the most.
+
+Nine settings that fewer than 2% of the repository's 1,186 widgets set (margin, border colour,
+disabled, opacity, minimum, maximum, start and end angle and columns) moved out of every node into
+a box the node keeps only once its widget sets one, which shrank a node from 128 B to 108 B on the
+watch and cost 1,400 B of code (446,736 B to 448,136 B). The nodes counted across the 66 apps and
+faces fell from 169 KB to 146 KB, and the stopwatch's need, the largest, from 20,284 B to 18,468 B.
+Measured with `tools/measure_heap.py`, `settings` open paged held 14,728 B instead of 15,768 B and
+the face 6,308 B instead of 6,552 B; opening `settings` still peaked at 6,332 B of stack.
+
+Paging expressions too, through the same code cache, added 232 B of code (448,136 B to 448,368 B).
+Thirteen apps and faces page now: `settings` needs 15,448 B instead of 16,384 B, `about` 15,036 B
+instead of 16,408 B, and `pinetime-style`, now paged, 13,612 B instead of 15,344 B. Measured,
+`settings` open paged held 14,128 B instead of 14,728 B, turning Always on and scrolling its list
+worked, and it peaked at 6,340 B of stack.
+
+Keeping four free file sectors erased ahead, so a file of up to four sectors is written without
+waiting 45 ms an erase, added 704 B of code, measured with `cargo size` against the commit before on
+2026-10-15 (434,020 B to 434,724 B of text and rodata), and 64 B of static RAM for the map of which
+free sectors are erased.
+
 Queuing the shell's store writes for the storage task and writing the update and recovery slots
 through `SlotFlash`, so neither spins on the flash chip, added 4,048 B to the firmware's code image,
 measured with `cargo objcopy` against master on 2026-10-15 (428,660 B to 432,708 B), leaving 9,089 B
@@ -130,19 +216,6 @@ after closing it. The host is loaded into its slot out of line (`open_in_backgro
 opening an app does: loading it by value put the load's frame under the first derives, and the
 start-up search for closed apps then peaked at 8,784 B of stack, 1,440 B spare.
 
-Messages from the phone for one app (`battletime_companion::app_message`, `AppHost::deliver_message`
-and the shell's waiting message in `firmware/src/closed_apps.rs`) added 4,352 B of code to the full
-build, measured with `cargo size` against master on 2026-10-21 (432,620 B to 436,972 B of text), and
-8 B of static RAM, the signal that passes a message to the shell. The room came out of the 8.7 KB the
-region had free, which leaves about 4.4 KB beside the 49,467 B library. The line reader is about
-1.2 KB, written byte by byte because a JSON parser for an object of any keys would cost far more;
-running a closed app's handler for a message is about 1.5 KB, and the rest is delivery in the host
-and the shell. A waiting message sits on the heap, about 400 B, only until the shell takes it.
-Starting with the SOS app, the stopwatch and the digital face installed and writing
-`{"t":"app","ch":"sos","d":{"on":0}}` to the Nordic UART, which runs the closed SOS app's handler,
-peaked at 6,404 B of stack, 3,052 B spare (6,084 B with a `status` line instead), measured with
-`tools/measure_stack.py --uart`.
-
 Measured in the emulator on 2026-10-14 with the typical install (the `digital` face, the launcher
 and `TYPICAL_APPS`): open the timer from the launcher, start its 10 minutes, leave it, and let it
 ring while closed. The stack pattern was painted before start, and `restart`'s least free heap and
@@ -159,9 +232,9 @@ The same install without the timer started peaks at 5,984 B, as master does. Wit
 the run beside Settings went ahead, leaving 1,304 B free at its lowest and touching the heap to
 30,812 B of 30,976 B, so the margin is 2 KB.
 
-The watch face, the launcher and the apps live in `/apps` on the external flash, and the icons,
-the app host's text font and the accelerometers' configuration files in the shared library after
-the firmware's code; none is inside the code. See
+The watch face, the launcher, the apps, the accelerometers' configuration files and the shared
+library's icons live on the external flash, and the app host's text font in the shared library
+after the firmware's code; none is inside the code. See
 [app-runtime.md](app-runtime.md#property-values).
 
 ## External SPI flash (4 MB)
@@ -197,6 +270,8 @@ records ring, so it costs no sector. There are no folders, so an app costs nothi
 | `/settings/system` | The watch-wide settings, 41 bytes. |
 | `/settings/theme` | The theme's colours, 16 bytes. |
 | `/settings/launcher` | The launcher's style, view and groups with their apps, which the companion writes; a few hundred bytes, kept in the system heap while the watch runs. |
+| `/system/accelerometer/bma421`, `/system/accelerometer/bma425` | Bosch's configuration for each accelerometer chip, 6,144 B and 2 sectors each, which the companion puts on the watch. |
+| `/system/icons` | The shared library's 72 icons, 30,436 B in 8 sectors, which the companion puts on the watch; see [app-runtime.md](app-runtime.md#the-shared-library). |
 | `/resources/` | For resource packages; empty for now. |
 | `/day_blocks/steps/<n>` | 8 days of steps in six-minute slots, a blank file of one sector programmed a slot at a time; 90 to 97 days are kept, 12 or 13 sectors, about 52 KB. |
 | `/steps/trip` | The trip count, 4 bytes. |
@@ -212,8 +287,9 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 117 | 0 |
-| 12 app images, 739 B (flashlight) to 7,233 B (settings); those of 1 KB or less are records | 26,383 | 12 |
-| **In use** | | **12 of 512: 48 KB of 2 MB, and 968 B of records in the 256 KB records ring** |
+| `/system/`: the accelerometers' configuration and the shared library's icons, as the companion puts them | 75,404 | 23 |
+| 14 app images, 739 B (flashlight) to 7,233 B (settings); those of 1 KB or less are records | 29,846 | 14 |
+| **In use** | | **35 of 512: 140 KB of 2 MB, and 1,372 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
 The rest, almost 2 MB of files and most of the records ring, is free for apps, saved state and
@@ -367,13 +443,13 @@ task storage, which holds each task's state, and the Bluetooth host's packet poo
 | Owner | Full build | Recovery build |
 |---|---:|---:|
 | Heap (system 10 KB, UI 20.25 KB; the recovery build has no UI heap) | 30,976 B | 10,240 B |
-| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,271 B | 11,394 B |
+| Firmware: task storage, the Bluetooth host's resources and packet pool | 21,287 B | 11,514 B |
 | Bluetooth controller | 2,618 B | 2,618 B |
-| App host (with `battletime-ui`) | 396 B | 0 B |
+| App host (with `battletime-ui`) | 620 B | 0 B |
 | Display, graphics and drivers | 372 B | 372 B |
 | Other | 5 B | 1 B |
-| **Static RAM** (`.data` and `.bss`) | **55,704 B** | **24,652 B** |
-| Left for the stack | 9,816 B | 40,868 B |
+| **Static RAM** (`.data` and `.bss`) | **55,960 B** | **24,776 B** |
+| Left for the stack | 9,560 B | 40,744 B |
 <!-- /measure_memory:ram -->
 
 The table below is the budget:
@@ -409,11 +485,13 @@ it opens one. The parts, in bytes:
 | Passing use | 1,536 | Drawing, the image checks at open, and the allocator's gaps |
 | Read ahead | 4,096 when the app calls `prefetch_file` | The one file part it holds until a `file_bytes` takes it |
 | Folder listing | 1,600 when the app calls `open_folder` | The listed folder's path (64), 64 entries of 8 and 1,024 for their names, reserved when a folder is listed |
-| Nodes | 132 per widget of the largest screen | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
+| Nodes | 112 per widget of the largest screen, 40 more for each of a kind that keeps an extra part (`memory_need::holds_extra`: images, icons, buttons, badges, battery and status icons, pickers, app lists, repeats and a few others), and 24 more for each that sets a rare setting (`memory_need::is_rare_setting`: margin, border colour, disabled, opacity, minimum, maximum, start and end angle, columns) | A node and its place in the list; every widget counts as shown, a Repeat counts each row (8 when the count is worked out at run time, only those in view down a list of fixed-height rows), and no screen more than 128 |
 | Text | each fixed text's length, 16 for text worked out at run time, 2,560 for a TextFile | |
+| Paged code, instead of the image | its resident image, a code cache as large as its longest handler or function and at least 1,024, 160 for the cache's path and list, the widget records of its largest screen with 24 for their window, and 6 for each screen in the screen table; or, if more, the whole image and the resident one together, held while it opens | Chosen only when it makes the total smaller; see [app-runtime.md](app-runtime.md#paged-code) |
+| Library icons | each library icon a screen may show at its size, rounded to 4 bytes, plus 16; one a value picks at 1,040; at most 8,192 | The icons the host reads from `/system/icons` for the screen with the most, their sizes from `LIBRARY_ICON_BYTES`, which a compiler test keeps equal to the icons file: an `Image`, `Icon`, `Button` or `Badge` that names one, or takes its image from an expression in an app that can name a library icon at all (a constant from the library's range in its code, a starting value, an image other than its launcher icon that names one, an icon system value or a call to `weather_icon_at`), the notification, Bluetooth and alarm icons for a `StatusIcons`, the charging bolt for a `Battery` and the 8 KB cap for an `AppList`; each icon is at most 1,024 B |
 
-An app's need must fit `APP_HEAP_BUDGET_BYTES`, 27,648 B: the 31,744 B heap less 4 KB for the
-system while an app is open. At rest the system holds the shell's index of app ids, about 12 B an
+An app's need must fit `APP_HEAP_BUDGET_BYTES`, 24,832 B: the 30,976 B heap less 6,144 B for the
+system while an app is open, 2,048 B of it the text font's glyphs in use. At rest the system holds the shell's index of app ids, about 12 B an
 app; the rest of its share is for kept notifications (up to about 1 KB), a small file gathered while it uploads (up to
 1 KB), and lines to and from the companion app.
 

@@ -1213,9 +1213,9 @@ fn tap_package(watch: &mut TestWatch, name: &str) {
     watch.tap_text(name);
 }
 
-/// The most an app may need, in the whole kilobytes, rounded, that the Software app shows.
+/// The most an app may need, in the whole kilobytes, rounded up, that the Software app shows.
 fn budget_kilobytes() -> u32 {
-    (battletime_runtime::memory_need::APP_HEAP_BUDGET_BYTES + 512) / 1024
+    battletime_runtime::memory_need::APP_HEAP_BUDGET_BYTES.div_ceil(1024)
 }
 
 #[test]
