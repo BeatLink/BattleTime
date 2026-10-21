@@ -211,9 +211,9 @@ Docs and comments the code contradicts, as of e30358e4:
    that reads them). Rather than ship them in each DFU package, the companion puts any the watch
    lacks whenever it connects, and after `battletime flash`; a missing file means no steps or empty
    boxes for icons, not a watch that will not start, so the status page, Bluetooth, updates and
-   files all keep working without them, which is the safe mode this stage asked for. Each file is
-   checked only by its size, so new artwork of the same size would not be put again; a checksum in
-   the listing would close that.
+   files all keep working without them, which is the safe mode this stage asked for. The companion
+   keeps a manifest of each file's CRC-32 at `/system/manifest`, so a new version of the same
+   size, such as a verifier module with new rules, is put too.
 4. **The module loader:** done, without a UI arena. A module takes its room from the heap like
    any allocation and gives it back when its call returns; one that does not fit beside the open
    app answers that the heap has no room, so no part of the heap is set aside for modules. The

@@ -10,6 +10,7 @@ import { SYSTEM_FILES } from '@/bundles/system-files';
 import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 import { FileService } from '@/protocol/file-service';
 import { NOTE_FONT_PATH, NOTE_PATH } from '@/protocol/notes';
+import { SYSTEM_MANIFEST_PATH } from '@/protocol/system-files';
 
 import type { WatchSession } from './ble';
 import { debug } from './commands/debug';
@@ -33,6 +34,9 @@ class FakeSession extends MockLegacyDfuTarget {
     return {
       list: async (dir: string) => {
         throw new Error(`${dir} is missing`);
+      },
+      read: async (path: string) => {
+        throw new Error(`${path} is missing`);
       },
       write: async (path: string, data: Uint8Array) => {
         this.written.set(path, data);
@@ -64,7 +68,7 @@ describe('the flash command', () => {
     expect(session.sent).toEqual([]);
     expect(session.received.image).toEqual(image);
     expect(session.timeWrites).toHaveLength(1);
-    expect([...session.written.keys()]).toEqual(SYSTEM_FILES.map((file) => file.path));
+    expect([...session.written.keys()]).toEqual([...SYSTEM_FILES.map((file) => file.path), SYSTEM_MANIFEST_PATH]);
   });
 
   it('restarts a watch still on wasp-os into its bootloader first', async () => {

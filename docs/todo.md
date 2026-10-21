@@ -8,11 +8,6 @@ document for its part instead.
 
 ## Hardware tests
 
-- [ ] **Put a changed system file again even at the same size.** The companion compares each system
-  file by its size alone, so a new verifier module of the same length as the old one would stay
-  unsent, and the watch would check apps by the older rules. Compare a checksum, such as a module
-  file's CRC in its header, or the store's own.
-
 - [ ] **The SOS app on the PineTime.** The `sos` app has run only in the simulator and harness.
   Check that holding the button for five seconds keeps reporting the finger until it lifts, so the
   hold completes and an early release cancels; that a swipe to the Signals page while holding

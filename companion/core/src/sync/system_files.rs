@@ -57,20 +57,71 @@ pub const SYSTEM_FILES: [SystemFile; 9] = [
 // Putting them on the watch
 // ============================================================================
 
-// Writes each system file the watch lacks or holds at another size, giving the paths it wrote.
+/// Where the companion keeps the CRC-32 of each system file it put, since the file service lists only names and sizes.
+pub const SYSTEM_MANIFEST_PATH: &str = "/system/manifest";
+
+// The CRC-32 zlib uses, as the window's `crc32` does.
+fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for &byte in bytes {
+        crc ^= byte as u32;
+        for _ in 0..8 {
+            crc = if crc & 1 != 0 {
+                0xEDB8_8320 ^ (crc >> 1)
+            } else {
+                crc >> 1
+            };
+        }
+    }
+    !crc
+}
+
+// The manifest's line for one file: its CRC-32 in hex, its size and its path, as src/protocol/system-files.ts writes it.
+fn manifest_line(file: &SystemFile) -> String {
+    format!(
+        "{:08x} {} {}",
+        crc32(file.contents),
+        file.contents.len(),
+        file.path
+    )
+}
+
+fn manifest_of(bundle: &[SystemFile]) -> String {
+    bundle.iter().map(|file| manifest_line(file) + "\n").collect()
+}
+
+// Writes each system file the watch lacks or holds in another version, then the manifest, giving the paths it wrote.
+//
+// A file counts as held only while the manifest names it with the bundle's CRC and the listing with its size, so a
+// watch without the manifest gets every file once.
 pub async fn put_missing_system_files(files: &FileClient) -> Result<Vec<&'static str>, FileError> {
+    put_from(files, &SYSTEM_FILES).await
+}
+
+async fn put_from(files: &FileClient, bundle: &'static [SystemFile]) -> Result<Vec<&'static str>, FileError> {
+    let on_watch = files
+        .read(SYSTEM_MANIFEST_PATH)
+        .await
+        .ok()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+        .unwrap_or_default();
+    let held: std::collections::HashSet<&str> = on_watch.lines().collect();
     let mut written = Vec::new();
-    for file in &SYSTEM_FILES {
+    for file in bundle {
         let (folder, name) = file.path.rsplit_once('/').unwrap_or(("/", file.path));
         // A folder the watch has never had lists as missing, which means the file is too.
         let entries = files.list(folder).await.unwrap_or_default();
-        let held = entries
+        let listed = entries
             .iter()
             .any(|entry| entry.name == name && !entry.folder && entry.size as usize == file.contents.len());
-        if !held {
+        if !listed || !held.contains(manifest_line(file).as_str()) {
             files.write(file.path, file.contents).await?;
             written.push(file.path);
         }
+    }
+    let manifest = manifest_of(bundle);
+    if manifest != on_watch {
+        files.write(SYSTEM_MANIFEST_PATH, manifest.as_bytes()).await?;
     }
     Ok(written)
 }
@@ -128,9 +179,73 @@ mod tests {
         assert_eq!(files["/system/accelerometer/bma425"], SYSTEM_FILES[1].contents);
     }
 
+    #[test]
+    fn the_crc_is_zlibs() {
+        assert_eq!(crc32(b"123456789"), 0xCBF4_3926);
+    }
+
+    const SMALL_BUNDLE: [SystemFile; 2] = [
+        SystemFile {
+            path: "/system/accelerometer/bma421",
+            contents: &[1, 2, 3],
+        },
+        SystemFile {
+            path: "/system/accelerometer/bma425",
+            contents: &[4, 5, 6, 7],
+        },
+    ];
+
+    #[tokio::test]
+    async fn a_file_changed_at_the_same_size_is_written_again_and_then_held() {
+        let old: [SystemFile; 2] = [
+            SystemFile {
+                path: "/system/accelerometer/bma421",
+                contents: &[1, 2, 3],
+            },
+            SystemFile {
+                path: "/system/accelerometer/bma425",
+                contents: &[4, 5, 6, 0],
+            },
+        ];
+        let manifest = manifest_of(&old);
+        let watch = FakeWatch::with(&[
+            ("/system/accelerometer/bma421", &[1, 2, 3]),
+            ("/system/accelerometer/bma425", &[4, 5, 6, 0]),
+            (SYSTEM_MANIFEST_PATH, manifest.as_bytes()),
+        ]);
+
+        let client = watch.client();
+        let first = put_from(&client, &SMALL_BUNDLE).await.unwrap();
+        let second = put_from(&client, &SMALL_BUNDLE).await.unwrap();
+
+        assert_eq!(first, ["/system/accelerometer/bma425"]);
+        assert!(second.is_empty());
+        assert_eq!(
+            watch.files.lock().unwrap()[SYSTEM_MANIFEST_PATH],
+            manifest_of(&SMALL_BUNDLE).as_bytes()
+        );
+    }
+
+    #[tokio::test]
+    async fn a_watch_without_the_manifest_gets_every_file_once() {
+        let watch = FakeWatch::with(&[
+            ("/system/accelerometer/bma421", &[1, 2, 3]),
+            ("/system/accelerometer/bma425", &[4, 5, 6, 7]),
+        ]);
+
+        let client = watch.client();
+        let first = put_from(&client, &SMALL_BUNDLE).await.unwrap();
+        let second = put_from(&client, &SMALL_BUNDLE).await.unwrap();
+
+        assert_eq!(first.len(), 2);
+        assert!(second.is_empty());
+    }
+
     #[tokio::test]
     async fn a_watch_that_holds_them_gets_nothing() {
+        let manifest = manifest_of(&SYSTEM_FILES);
         let watch = FakeWatch::with(&[
+            (SYSTEM_MANIFEST_PATH, manifest.as_bytes()),
             ("/system/accelerometer/bma421", SYSTEM_FILES[0].contents),
             ("/system/accelerometer/bma425", SYSTEM_FILES[1].contents),
             ("/system/font", SYSTEM_FILES[2].contents),
@@ -149,7 +264,9 @@ mod tests {
 
     #[tokio::test]
     async fn a_file_of_another_size_is_written_again() {
+        let manifest = manifest_of(&SYSTEM_FILES);
         let watch = FakeWatch::with(&[
+            (SYSTEM_MANIFEST_PATH, manifest.as_bytes()),
             ("/system/accelerometer/bma421", SYSTEM_FILES[0].contents),
             ("/system/accelerometer/bma425", b"cut short"),
             ("/system/font", SYSTEM_FILES[2].contents),

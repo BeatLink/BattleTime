@@ -10,6 +10,7 @@ import { zlibSync } from 'fflate';
 
 import { base64ToBytes, bytesToBase64 } from '@/ble/encoding';
 import { SYSTEM_FILES, type BundledSystemFile } from '@/bundles/system-files';
+import { crc32 } from './crc32';
 
 // ============================================================================
 // Reading the icons file
@@ -62,22 +63,6 @@ export function readLibraryIcons(file: Uint8Array): (IconMask | null)[] {
 // ============================================================================
 // Writing a PNG
 // ============================================================================
-
-const CRC_TABLE = Array.from({ length: 256 }, (_unused, byte) => {
-  let value = byte;
-  for (let bit = 0; bit < 8; bit++) {
-    value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-  }
-  return value >>> 0;
-});
-
-function crc32(bytes: Uint8Array): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
 
 function chunk(type: string, body: Uint8Array): Uint8Array {
   const out = new Uint8Array(12 + body.length);

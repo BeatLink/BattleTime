@@ -494,8 +494,11 @@ Files the firmware needs that are not apps live under `/system`:
   module runs, a crash records `mod:<name>` as the open app.
 
 The companion app, when it connects to a watch that
-serves files, lists each file's folder and writes any file that is missing or of another size, and
-the command line tool does the same after `flash` and `apps setup`. The bundled copies come from
+serves files, reads `/system/manifest`, which it wrote itself: a line per system file with its
+CRC-32 in hex, its size and its path. It writes any file the manifest does not name with the
+bundle's CRC, or the folder's listing does not show at the bundle's size, so a new version of the
+same size goes too, then writes the manifest again if it changed; a watch without one gets every
+file once. The command line tool does the same after `flash` and `apps setup`. The bundled copies come from
 `tools/build_store.py`'s `system/` folder through `npm run import-system-files`; the Rust core's
 are in `companion/core/system-files/` and the window's in `companion/src/bundles/system-files.ts`.
 
