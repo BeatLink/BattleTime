@@ -1,7 +1,7 @@
 // The watch's survival app from the terminal: list the emergency guides and which the watch carries, and choose
 // the ones it carries.
 
-import { SURVIVAL_GUIDES } from '@/bundles/survival-guides';
+import { SURVIVAL_GUIDES, SURVIVAL_TOPICS } from '@/bundles/survival-guides';
 import { guideIdsIn, readSurvivalList, sendSurvivalGuides } from '@/protocol/survival';
 
 import type { WatchSession } from '../ble';
@@ -12,8 +12,8 @@ battletime survival set <guide>...|all
 battletime survival add <guide>...
 battletime survival remove <guide>...|all
 
-  survival lists every emergency guide by its name, ticking the ones the watch's
-  survival app carries. set puts exactly the guides named on the watch, add and
+  survival lists every emergency guide by its name under its topic, ticking the
+  ones the watch's survival app carries. set puts exactly the guides named on the watch, add and
   remove change the ones it has, and all stands for every guide.`;
 
 // ============================================================================
@@ -52,10 +52,13 @@ export function parseSurvivalArguments(args: string[]): SurvivalRequest {
 
 type SurvivalSession = Pick<WatchSession, 'files'>;
 
-// Prints every guide, ticked when it is on the watch.
+// Prints every guide under its topic, ticked when it is on the watch.
 function sayGuides(onWatch: string[]) {
-  for (const guide of SURVIVAL_GUIDES) {
-    say(`[${onWatch.includes(guide.id) ? 'x' : ' '}] ${guide.id.padEnd(18)} ${guide.title}`);
+  for (const topic of SURVIVAL_TOPICS) {
+    say(topic.title);
+    for (const guide of SURVIVAL_GUIDES.filter((each) => each.topic === topic.id)) {
+      say(`  [${onWatch.includes(guide.id) ? 'x' : ' '}] ${guide.id.padEnd(20)} ${guide.title}`);
+    }
   }
 }
 

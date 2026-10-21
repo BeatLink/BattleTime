@@ -4,25 +4,33 @@ import { preview_files } from "battletime";
 import { install_apps, open, OpenScreen, start_scheduler } from "battletime/preview";
 import app from "./app.tsx";
 
-/** A list file holding these slots and titles, as the phone writes it. */
-function list_file(entries: [number, string][]): string {
-  const entry_text = ([slot, title]: [number, string]) =>
-    String.fromCharCode(slot, title.length) + title.padEnd(24, "\0");
-  return String.fromCharCode(1, entries.length) + entries.map(entry_text).join("");
+/** A list file holding these slots, topics and titles, as the phone writes it. */
+function list_file(entries: [number, number, string][]): string {
+  const entry_text = ([slot, topic, title]: [number, number, string]) =>
+    String.fromCharCode(slot, topic, title.length) + title.padEnd(23, "\0");
+  return String.fromCharCode(2, entries.length) + entries.map(entry_text).join("");
 }
 
-/** Ten guides, so the last two come from the second half of the list. */
-const TEN_GUIDES: [number, string][] = [
-  [0, "CPR"],
-  [1, "Severe bleeding"],
-  [2, "Choking"],
-  [3, "Burns"],
-  [4, "Broken bones"],
-  [5, "Stroke"],
-  [6, "Allergic reaction"],
-  [7, "Hypothermia"],
-  [9, "Lost in the wild"],
-  [13, "Earthquake"],
+/** Eighteen guides over four topics, so the last ones come from the list's third part. */
+const GUIDES: [number, number, string][] = [
+  [0, 0, "CPR"],
+  [1, 0, "Severe bleeding"],
+  [2, 0, "Choking"],
+  [3, 0, "Burns"],
+  [4, 0, "Broken bones"],
+  [5, 0, "Stroke"],
+  [6, 0, "Allergic reaction"],
+  [7, 1, "Hypothermia"],
+  [8, 1, "Heat illness"],
+  [9, 1, "Lost in the wild"],
+  [10, 1, "Finding water"],
+  [11, 1, "Shelter and fire"],
+  [12, 1, "Signalling for help"],
+  [13, 2, "Earthquake"],
+  [14, 3, "Protesting safely"],
+  [15, 3, "Nonviolent action"],
+  [16, 3, "De-escalating violence"],
+  [18, 3, "Police and arrest"],
 ];
 
 let stop_scheduler = () => {};
@@ -40,39 +48,54 @@ describe("survival", () => {
     preview_files.value = {};
   });
 
-  it("lists each guide by its title, past the first eight too", () => {
-    preview_files.value = { "/survival/list": list_file(TEN_GUIDES) };
+  it("lists the topics that have guides, and a topic's guides, past the first sixteen too", () => {
+    preview_files.value = { "/survival/list": list_file(GUIDES.filter(([, topic]) => topic !== 2)) };
     open(app);
     render(<OpenScreen />);
 
-    expect(screen.getByText("CPR")).toBeTruthy();
-    expect(screen.getByText("Hypothermia")).toBeTruthy();
-    expect(screen.getByText("Lost in the wild")).toBeTruthy();
-    expect(screen.getByText("Earthquake")).toBeTruthy();
+    expect(screen.getByText("First aid")).toBeTruthy();
+    expect(screen.getByText("Personal safety")).toBeTruthy();
+    expect(screen.queryByText("Disasters")).toBeNull();
+
+    act(() => screen.getByText("Personal safety").click());
+
+    expect(screen.getByText("Protesting safely")).toBeTruthy();
+    expect(screen.getByText("Police and arrest")).toBeTruthy();
+    expect(screen.queryByText("CPR")).toBeNull();
   });
 
   it("opens the guide tapped, read from its own slot", () => {
     preview_files.value = {
-      "/survival/list": list_file(TEN_GUIDES),
-      "/survival/13": "Drop, cover and hold on.\n",
+      "/survival/list": list_file(GUIDES),
+      "/survival/18": "Stay calm.\n",
     };
     open(app);
     render(<OpenScreen />);
 
-    act(() => screen.getByText("Earthquake").click());
+    act(() => screen.getByText("Personal safety").click());
+    act(() => screen.getByText("Police and arrest").click());
 
-    expect(screen.getByText("Earthquake")).toBeTruthy();
-    expect(screen.getByText("Drop, cover and hold on.")).toBeTruthy();
+    expect(screen.getByText("Police and arrest")).toBeTruthy();
+    expect(screen.getByText("Stay calm.")).toBeTruthy();
   });
 
   it("says when a listed guide's text is missing", () => {
-    preview_files.value = { "/survival/list": list_file([[4, "Broken bones"]]) };
+    preview_files.value = { "/survival/list": list_file([[4, 0, "Broken bones"]]) };
     open(app);
     render(<OpenScreen />);
 
+    act(() => screen.getByText("First aid").click());
     act(() => screen.getByText("Broken bones").click());
 
     expect(screen.getByText(/This guide is missing/)).toBeTruthy();
+  });
+
+  it("shows nothing from a list in the first format", () => {
+    preview_files.value = { "/survival/list": String.fromCharCode(1, 1, 0, 3) + "CPR".padEnd(24, "\0") };
+    open(app);
+    render(<OpenScreen />);
+
+    expect(screen.getByText(/No guides yet/)).toBeTruthy();
   });
 
   it("asks for guides while there are none", () => {

@@ -305,7 +305,10 @@ document for its part instead.
 - [ ] **The survival app on the PineTime.** It has run only in the test harness and the
   companion's tests. With the companion app's Survival screen or `battletime survival`, check that:
   - `battletime survival set cpr bleeding lost` writes `/survival/list` and the three guides, and the
-    app lists "CPR", "Severe bleeding" and "Lost in the wild" the next time it opens;
+    app lists the topics "First aid" and "Wilderness" the next time it opens, "First aid" lists "CPR"
+    and "Severe bleeding", and the side button goes back through the topic to the topics;
+  - with `battletime survival set all`, "Personal safety" lists its last guides, which come from the
+    list's third part;
   - a tapped guide shows its title and text, and the longest guide scrolls smoothly to its end;
   - `battletime survival remove lost` takes "Lost in the wild" off the list and deletes `/survival/9`;
   - after `battletime survival remove all`, it shows "No guides yet. Choose them in the BattleTime

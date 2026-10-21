@@ -89,7 +89,7 @@ afterEach(() => {
 
 describe('the survival screen', () => {
   it('ticks the guides the watch already holds', async () => {
-    mockWatchFiles.set(SURVIVAL_LIST_PATH, packSurvivalList([{ slot: 1, title: 'Severe bleeding' }]));
+    mockWatchFiles.set(SURVIVAL_LIST_PATH, packSurvivalList([{ slot: 1, topic: 0, title: 'Severe bleeding' }]));
     const host = await draw();
 
     expect(toggle(host, 'Severe bleeding').checked).toBe(true);
@@ -106,15 +106,15 @@ describe('the survival screen', () => {
     await settle();
 
     expect(parseSurvivalList(mockWatchFiles.get(SURVIVAL_LIST_PATH)!)).toEqual([
-      { slot: 0, title: 'CPR' },
-      { slot: 9, title: 'Lost in the wild' },
+      { slot: 0, topic: 0, title: 'CPR' },
+      { slot: 9, topic: 1, title: 'Lost in the wild' },
     ]);
     expect(mockWatchFiles.has('/survival/0')).toBe(true);
     expect(host.textContent).toContain('The watch now holds 2 guides; 2 sent, 0 removed.');
   });
 
   it('takes every guide off once all are cleared', async () => {
-    mockWatchFiles.set(SURVIVAL_LIST_PATH, packSurvivalList([{ slot: 0, title: 'CPR' }]));
+    mockWatchFiles.set(SURVIVAL_LIST_PATH, packSurvivalList([{ slot: 0, topic: 0, title: 'CPR' }]));
     mockWatchFiles.set('/survival/0', new Uint8Array(5));
     const host = await draw();
 

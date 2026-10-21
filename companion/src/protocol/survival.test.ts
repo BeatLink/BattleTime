@@ -1,6 +1,6 @@
 import { describe, expect, it } from '@jest/globals';
 
-import { SURVIVAL_GUIDES } from '@/bundles/survival-guides';
+import { SURVIVAL_GUIDES, SURVIVAL_TOPICS } from '@/bundles/survival-guides';
 import type { WatchFile } from '@/protocol/file-service';
 
 import { FileMissingError } from './file-service';
@@ -16,6 +16,7 @@ import {
   SurvivalError,
   survivalGuidePath,
   SURVIVAL_LIST_PATH,
+  topicNumber,
   type SurvivalFiles,
 } from './survival';
 
@@ -70,6 +71,14 @@ describe('the bundled guides', () => {
     expect(new Set(SURVIVAL_GUIDES.map((guide) => guide.id)).size).toBe(SURVIVAL_GUIDES.length);
   });
 
+  it('fill every topic, each guide under one the watch numbers', () => {
+    for (const topic of SURVIVAL_TOPICS) {
+      expect(SURVIVAL_GUIDES.some((guide) => guide.topic === topic.id)).toBe(true);
+    }
+    expect(SURVIVAL_GUIDES.map(topicNumber).every((number) => number >= 0)).toBe(true);
+    expect(topicNumber(SURVIVAL_GUIDES.find((guide) => guide.id === 'nonviolent-action')!)).toBe(3);
+  });
+
   it("use only plain ASCII, so every character is in the watch's font, and titles that fit its list", () => {
     for (const guide of SURVIVAL_GUIDES) {
       expect(guide.text).toMatch(/^[\x20-\x7e\n]+$/);
@@ -83,35 +92,39 @@ describe('the bundled guides', () => {
 // ============================================================================
 
 describe('the list file', () => {
-  it('packs a version, a count, then each slot, title length and padded title', () => {
+  it('packs a version, a count, then each slot, topic, title length and padded title', () => {
     const file = packSurvivalList([
-      { slot: 0, title: 'CPR' },
-      { slot: 9, title: 'Lost in the wild' },
+      { slot: 0, topic: 0, title: 'CPR' },
+      { slot: 9, topic: 1, title: 'Lost in the wild' },
     ]);
 
     expect(file.length).toBe(2 + 2 * 26);
-    expect([...file.subarray(0, 7)]).toEqual([1, 2, 0, 3, 67, 80, 82]);
-    expect(file[28]).toBe(9);
+    expect([...file.subarray(0, 8)]).toEqual([2, 2, 0, 0, 3, 67, 80, 82]);
+    expect([...file.subarray(28, 31)]).toEqual([9, 1, 16]);
     expect(parseSurvivalList(file)).toEqual([
-      { slot: 0, title: 'CPR' },
-      { slot: 9, title: 'Lost in the wild' },
+      { slot: 0, topic: 0, title: 'CPR' },
+      { slot: 9, topic: 1, title: 'Lost in the wild' },
     ]);
   });
 
   it('reads nothing from a file in another format', () => {
-    expect(parseSurvivalList(new Uint8Array([2, 1, 0, 1, 65]))).toEqual([]);
+    expect(parseSurvivalList(new Uint8Array([1, 1, 0, 1, 65]))).toEqual([]);
+  });
+
+  it('refuses a topic the watch does not have', () => {
+    expect(() => packSurvivalList([{ slot: 0, topic: SURVIVAL_TOPICS.length, title: 'CPR' }])).toThrow(SurvivalError);
   });
 
   it('refuses a title too long for the watch', () => {
-    expect(() => packSurvivalList([{ slot: 0, title: 'x'.repeat(25) }])).toThrow(SurvivalError);
+    expect(() => packSurvivalList([{ slot: 0, topic: 0, title: 'x'.repeat(24) }])).toThrow(SurvivalError);
   });
 
   it('names the guides it lists by id', () => {
     expect(
       guideIdsIn([
-        { slot: 9, title: 'Lost' },
-        { slot: 15, title: 'Unknown' },
-        { slot: 0, title: 'CPR' },
+        { slot: 9, topic: 1, title: 'Lost' },
+        { slot: 23, topic: 0, title: 'Unknown' },
+        { slot: 0, topic: 0, title: 'CPR' },
       ]),
     ).toEqual(['lost', 'cpr']);
   });
@@ -129,8 +142,8 @@ describe('sendSurvivalGuides', () => {
 
     expect(result).toEqual({
       entries: [
-        { slot: 0, title: 'CPR' },
-        { slot: 9, title: 'Lost in the wild' },
+        { slot: 0, topic: 0, title: 'CPR' },
+        { slot: 9, topic: 1, title: 'Lost in the wild' },
       ],
       sent: 2,
       removed: 0,

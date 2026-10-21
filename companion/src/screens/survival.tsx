@@ -6,22 +6,14 @@ import { ErrorNote } from '@/components/fields';
 import { ToggleRow } from '@/components/row';
 import { Screen } from '@/components/screen';
 import { ThemedText } from '@/components/themed-text';
-import { SURVIVAL_GUIDES, type SurvivalGuide } from '@/bundles/survival-guides';
+import { SURVIVAL_GUIDES, SURVIVAL_TOPICS, type SurvivalGuide } from '@/bundles/survival-guides';
 import { useWatch } from '@/hooks/use-watch';
 import { guideBytes, guideIdsIn, readSurvivalList, sendSurvivalGuides } from '@/protocol/survival';
 import { useTask } from '@/state/use-task';
 
 // ============================================================================
-// Choices
+// Sizes
 // ============================================================================
-
-const KIND_TITLES: Record<SurvivalGuide['kind'], string> = {
-  'first-aid': 'First aid',
-  outdoors: 'Outdoors',
-  disaster: 'Disasters',
-};
-
-const KINDS = Object.keys(KIND_TITLES) as SurvivalGuide['kind'][];
 
 function sizeText(guide: SurvivalGuide): string {
   return `${(guideBytes(guide).length / 1024).toFixed(1)} kB`;
@@ -85,14 +77,14 @@ export default function SurvivalScreen() {
       <Card>
         <ThemedText type="small" themeColor="textSecondary">
           Tick the guides to carry on the watch&apos;s Survival app, to read without a phone or a signal. They are
-          reminders of common first aid and outdoor training, not a replacement for a course. Call your emergency number
-          first whenever you can.
+          reminders of common first aid, outdoor and protest safety training, not a replacement for a course. Call your
+          emergency number first whenever you can.
         </ThemedText>
       </Card>
 
-      {KINDS.map((kind) => (
-        <Card key={kind} title={KIND_TITLES[kind]}>
-          {SURVIVAL_GUIDES.filter((guide) => guide.kind === kind).map((guide) => (
+      {SURVIVAL_TOPICS.map((topic) => (
+        <Card key={topic.id} title={topic.title}>
+          {SURVIVAL_GUIDES.filter((guide) => guide.topic === topic.id).map((guide) => (
             <div key={guide.id} class="entry">
               <ToggleRow
                 label={guide.title}

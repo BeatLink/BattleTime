@@ -46,11 +46,11 @@ would not fit at all.
 
 The watch's [Survival](../apps/survival.md) app carries short emergency guides, to read without a
 phone or a signal. The **Survival** screen lists every guide the companion has, under first aid,
-outdoors and disasters, each with a switch and **Read it** to see its text first. Tick the guides
+wilderness, disasters and personal safety (protesting safely and nonviolent action among them), each with a switch and **Read it** to see its text first. Tick the guides
 to carry and choose **Send**: the watch then holds exactly those, with only new ones sent. The
 switches start ticked for the guides already on the watch.
 
-The guides are reminders of common first aid and outdoor training, not a replacement for a course.
+The guides are reminders of common first aid, outdoor and protest safety training, not a replacement for a course.
 
 ![A survival guide on the watch](../../battletime/harness/snapshots/screens/app-survival-guide.png)
 

@@ -142,13 +142,6 @@ export const KNOWN_DIFFERENCES: KnownDifference[] = [
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Theme", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Updates", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-settings", screen: "main", side: "preview_only", text: "Face", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
-  { snapshot: "app-survival", screen: "guide_0", side: "preview_only", text: "(112, 911, 999) on", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
-  { snapshot: "app-survival", screen: "guide_0", side: "preview_only", text: "2. Shout and tap", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
-  { snapshot: "app-survival", screen: "guide_0", side: "preview_only", text: "3. Call the", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
-  { snapshot: "app-survival", screen: "guide_0", side: "preview_only", text: "No answer?", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
-  { snapshot: "app-survival", screen: "guide_0", side: "preview_only", text: "emergency number", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
-  { snapshot: "app-survival", screen: "guide_0", side: "preview_only", text: "speaker.", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
-  { snapshot: "app-survival", screen: "guide_0", side: "preview_only", text: "their shoulders.", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "12 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "14 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
   { snapshot: "app-software", screen: "main", side: "preview_only", text: "9 KB", reason: "These rows sit below the screen on the watch, and the preview test has no layout to tell." },
@@ -206,15 +199,15 @@ export const STARTING_QR_LIST =
   String.fromCharCode(1, STARTING_QR_ENTRIES.length) +
   STARTING_QR_ENTRIES.map(([slot, caption]) => String.fromCharCode(slot, caption.length) + caption.padEnd(24, "\0")).join("");
 
-/** The survival guide list harness/src/fake_system.rs starts with, its STARTING_SURVIVAL_LIST, in the QR list's format. */
-const STARTING_SURVIVAL_ENTRIES: [number, string][] = [
-  [0, "CPR"],
-  [1, "Severe bleeding"],
-  [9, "Lost in the wild"],
+/** The survival guide list harness/src/fake_system.rs starts with, its STARTING_SURVIVAL_LIST: slot, topic and title. */
+const STARTING_SURVIVAL_ENTRIES: [number, number, string][] = [
+  [0, 0, "CPR"],
+  [1, 0, "Severe bleeding"],
+  [9, 1, "Lost in the wild"],
 ];
 export const STARTING_SURVIVAL_LIST =
-  String.fromCharCode(1, STARTING_SURVIVAL_ENTRIES.length) +
-  STARTING_SURVIVAL_ENTRIES.map(([slot, title]) => String.fromCharCode(slot, title.length) + title.padEnd(24, "\0")).join("");
+  String.fromCharCode(2, STARTING_SURVIVAL_ENTRIES.length) +
+  STARTING_SURVIVAL_ENTRIES.map(([slot, topic, title]) => String.fromCharCode(slot, topic, title.length) + title.padEnd(23, "\0")).join("");
 
 /** The guide in the survival app's slot 0 harness/src/fake_system.rs starts with, its STARTING_SURVIVAL_GUIDE. */
 export const STARTING_SURVIVAL_GUIDE =

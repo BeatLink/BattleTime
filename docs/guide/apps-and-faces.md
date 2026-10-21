@@ -53,7 +53,8 @@ A few work hand in hand with the companion app:
   text or a Wi-Fi network, and shows one black on white at full brightness for another phone to
   scan.
 - **[Survival](../apps/survival.md)** carries the emergency guides ticked in the companion app,
-  such as CPR, severe bleeding or being lost in the wild, to read without a phone or a signal.
+  such as CPR, being lost in the wild or protesting safely, under their topics, to read without a phone
+  or a signal.
 - **Temporary apps** open on the watch without being installed, such as a question to answer Yes or
   No with the [prompt](../apps/prompt.md). One opens over whatever shows, and closes when you go
   back, the phone stops it or the phone disconnects.

@@ -472,21 +472,24 @@ the 240 pixel screen and may not scan, so the companion warns but still sends it
 
 ### Survival
 
-The `survival` app lists the emergency guides in `/survival/list` and shows the one tapped from
-`/survival/<slot>`, reading only the lines in view. The guides' texts live in the companion app,
+The `survival` app lists the topics of the emergency guides in `/survival/list`, then a topic's
+guides, and shows the guide tapped from `/survival/<slot>`, reading only the lines in view. The guides' texts live in the companion app,
 each keeping one slot for good. Sending a choice writes each chosen guide the watch lacks or holds
 at another length, then the list, then deletes the guides left out, so the list never names a
 missing file.
 
-`/survival/list` has the same layout as `/qr/list`, for up to sixteen guides:
+`/survival/list` holds up to 24 guides, in the order the watch lists them within each topic:
 
 | Bytes | Holds |
 |---|---|
-| 0 | format version, 1 |
-| 1 | how many guides, 0 to 16 |
-| 2.. | 26 bytes for each guide: its slot (0 to 15), its title's length (1 to 24), then the title padded with zeros to 24 bytes |
+| 0 | format version, 2 |
+| 1 | how many guides, 0 to 24 |
+| 2.. | 26 bytes for each guide: its slot (0 to 23), its topic, its title's length (1 to 23), then the title padded with zeros to 23 bytes |
 
-A list in another version shows no guides, and deleting `/survival/list` brings back the app's
+The topics are numbered 0 first aid, 1 wilderness, 2 disasters and 3 personal safety; the watch
+lists only those with a guide.
+
+A list in another version, such as the first one without topics, shows no guides, and deleting `/survival/list` brings back the app's
 hint. `/survival/<slot>`, such as `/survival/9`, is the guide's text, in plain ASCII; a listed
 guide whose file is missing or empty shows a reminder to send it again.
 

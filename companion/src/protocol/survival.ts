@@ -1,10 +1,11 @@
-// The guides the watch's survival app lists: each a text file at /survival/<slot>, and their titles in /survival/list.
+// The guides the watch's survival app lists: each a text file at /survival/<slot>, and their topics and titles in
+// /survival/list.
 //
 // docs/companion-protocol.md in the BattleTime repository describes the files. They travel over the file
 // service; sending a choice of guides writes only the guides the watch lacks or holds at another length, then the
 // list, then removes the guides left out.
 
-import { SURVIVAL_GUIDES, guideInSlot, type SurvivalGuide } from '@/bundles/survival-guides';
+import { SURVIVAL_GUIDES, SURVIVAL_TOPICS, guideInSlot, type SurvivalGuide } from '@/bundles/survival-guides';
 import { FileMissingError, type FileService } from '@/protocol/file-service';
 
 // ============================================================================
@@ -13,15 +14,15 @@ import { FileMissingError, type FileService } from '@/protocol/file-service';
 
 export const SURVIVAL_DIRECTORY = '/survival';
 export const SURVIVAL_LIST_PATH = `${SURVIVAL_DIRECTORY}/list`;
-export const SURVIVAL_LIST_VERSION = 1;
+export const SURVIVAL_LIST_VERSION = 2;
 
 // The most guides the watch keeps, each in its own slot from 0.
-export const MOST_SURVIVAL_GUIDES = 16;
+export const MOST_SURVIVAL_GUIDES = 24;
 
 // The longest title the watch lists.
-export const LARGEST_SURVIVAL_TITLE_BYTES = 24;
+export const LARGEST_SURVIVAL_TITLE_BYTES = 23;
 
-const ENTRY_BYTES = 2 + LARGEST_SURVIVAL_TITLE_BYTES;
+const ENTRY_BYTES = 3 + LARGEST_SURVIVAL_TITLE_BYTES;
 
 export class SurvivalError extends Error {}
 
@@ -34,15 +35,20 @@ export function guideBytes(guide: SurvivalGuide): Uint8Array {
   return new TextEncoder().encode(guide.text);
 }
 
+// The number the list file gives a guide's topic.
+export function topicNumber(guide: SurvivalGuide): number {
+  return SURVIVAL_TOPICS.findIndex((topic) => topic.id === guide.topic);
+}
+
 // ============================================================================
 // The list file
 // ============================================================================
 
 // A guide as the watch lists it.
-export type SurvivalEntry = { slot: number; title: string };
+export type SurvivalEntry = { slot: number; topic: number; title: string };
 
-// A /survival/list file naming these guides, in order: a version, a count, then per guide its slot, its title's
-// length and the title padded with zeros.
+// A /survival/list file naming these guides, in order: a version, a count, then per guide its slot, its topic's
+// number, its title's length and the title padded with zeros.
 export function packSurvivalList(entries: SurvivalEntry[]): Uint8Array {
   if (entries.length > MOST_SURVIVAL_GUIDES) {
     throw new SurvivalError(`The watch keeps up to ${MOST_SURVIVAL_GUIDES} guides.`);
@@ -52,13 +58,18 @@ export function packSurvivalList(entries: SurvivalEntry[]): Uint8Array {
   file[1] = entries.length;
   entries.forEach((entry, place) => {
     const title = new TextEncoder().encode(entry.title);
-    if (title.length > LARGEST_SURVIVAL_TITLE_BYTES || entry.slot >= MOST_SURVIVAL_GUIDES) {
+    if (
+      title.length > LARGEST_SURVIVAL_TITLE_BYTES ||
+      entry.slot >= MOST_SURVIVAL_GUIDES ||
+      entry.topic >= SURVIVAL_TOPICS.length
+    ) {
       throw new SurvivalError(`The guide "${entry.title}" does not fit the watch's list.`);
     }
     const start = 2 + place * ENTRY_BYTES;
     file[start] = entry.slot;
-    file[start + 1] = title.length;
-    file.set(title, start + 2);
+    file[start + 1] = entry.topic;
+    file[start + 2] = title.length;
+    file.set(title, start + 3);
   });
   return file;
 }
@@ -75,9 +86,9 @@ export function parseSurvivalList(file: Uint8Array): SurvivalEntry[] {
     if (start + ENTRY_BYTES > file.length) {
       break;
     }
-    const length = Math.min(file[start + 1], LARGEST_SURVIVAL_TITLE_BYTES);
-    const title = new TextDecoder().decode(file.subarray(start + 2, start + 2 + length));
-    entries.push({ slot: file[start], title });
+    const length = Math.min(file[start + 2], LARGEST_SURVIVAL_TITLE_BYTES);
+    const title = new TextDecoder().decode(file.subarray(start + 3, start + 3 + length));
+    entries.push({ slot: file[start], topic: file[start + 1], title });
   }
   return entries;
 }
@@ -154,10 +165,7 @@ export async function sendSurvivalGuides(files: SurvivalFiles, ids: readonly str
     }
   }
 
-  const entries = chosen.map((guide) => ({
-    slot: guide.slot,
-    title: guide.title,
-  }));
+  const entries = chosen.map((guide) => ({ slot: guide.slot, topic: topicNumber(guide), title: guide.title }));
   if (entries.length > 0) {
     await files.write(SURVIVAL_LIST_PATH, packSurvivalList(entries));
   } else {

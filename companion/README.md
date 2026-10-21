@@ -420,13 +420,13 @@ the numbers `list` shows.
 ## Survival
 
 The Survival screen is a checklist of the emergency guides in
-[src/bundles/survival-guides.ts](src/bundles/survival-guides.ts), grouped into first aid, outdoors
-and disasters, each readable on the phone first. Its switches start as the watch's `/survival/list`
+[src/bundles/survival-guides.ts](src/bundles/survival-guides.ts), grouped into the topics the watch
+lists them under (first aid, wilderness, disasters and personal safety), each readable on the phone first. Its switches start as the watch's `/survival/list`
 says, read when it connects, and sending puts exactly the ticked guides on the watch.
 [src/protocol/survival.ts](src/protocol/survival.ts) writes each guide's text to `/survival/<slot>`
 unless the watch already holds it at the same length, then the list, then deletes the guides left
 out (the layout is in [companion-protocol.md](../docs/companion-protocol.md)). Each guide keeps its
-slot for good, and a new one takes the next free slot up to 15. `battletime survival` lists the
+slot for good, and a new one takes the next free slot up to 23. `battletime survival` lists the
 guides from a terminal, and `battletime survival set|add|remove <guide>...|all` changes them.
 
 ## Remote

@@ -43,10 +43,11 @@ pub const STARTING_QR_CODE: [u8; 118] = [
 pub const STARTING_QR_LIST_PATH: &str = "/qr/list";
 pub const STARTING_QR_LIST: [u8; 2 + 2 * 26] = qr_list([(0, "example.com"), (3, "Guest Wi-Fi")]);
 
-/// The survival app's list: CPR in slot 0, severe bleeding in slot 1 and being lost in slot 9.
+/// The survival app's list: CPR in slot 0 and severe bleeding in slot 1 under first aid (topic 0), and being lost
+/// in slot 9 under wilderness survival (topic 1).
 pub const STARTING_SURVIVAL_LIST_PATH: &str = "/survival/list";
 pub const STARTING_SURVIVAL_LIST: [u8; 2 + 3 * 26] =
-    qr_list([(0, "CPR"), (1, "Severe bleeding"), (9, "Lost in the wild")]);
+    survival_list([(0, 0, "CPR"), (1, 0, "Severe bleeding"), (9, 1, "Lost in the wild")]);
 /// The start of the companion app's CPR guide, in the survival app's first slot.
 /// Its lines are broken where the watch wraps them, so the browser preview, which cannot wrap as the watch does, shows the same lines.
 pub const STARTING_SURVIVAL_GUIDE_PATH: &str = "/survival/0";
@@ -60,7 +61,7 @@ pub const STARTING_BLEEDING_GUIDE: &str = "1. Call the\nemergency\nnumber.\n2. P
 pub const STARTING_LOST_GUIDE_PATH: &str = "/survival/9";
 pub const STARTING_LOST_GUIDE: &str = "STOP:\nStop.\nThink.\nObserve.\nPlan.\n";
 
-/// A list file holding these slots and captions, in the format `apps/qr-code` and `apps/survival` read.
+/// A list file holding these slots and captions, in the format `apps/qr-code` reads.
 const fn qr_list<const COUNT: usize, const LENGTH: usize>(entries: [(u8, &str); COUNT]) -> [u8; LENGTH] {
     let mut file = [0u8; LENGTH];
     file[0] = 1;
@@ -74,6 +75,28 @@ const fn qr_list<const COUNT: usize, const LENGTH: usize>(entries: [(u8, &str); 
         let mut index = 0;
         while index < caption.len() {
             file[start + 2 + index] = caption.as_bytes()[index];
+            index += 1;
+        }
+        place += 1;
+    }
+    file
+}
+
+/// A survival list file holding these slots, topics and titles, in the format `apps/survival` reads.
+const fn survival_list<const COUNT: usize, const LENGTH: usize>(entries: [(u8, u8, &str); COUNT]) -> [u8; LENGTH] {
+    let mut file = [0u8; LENGTH];
+    file[0] = 2;
+    file[1] = COUNT as u8;
+    let mut place = 0;
+    while place < COUNT {
+        let (slot, topic, title) = entries[place];
+        let start = 2 + place * 26;
+        file[start] = slot;
+        file[start + 1] = topic;
+        file[start + 2] = title.len() as u8;
+        let mut index = 0;
+        while index < title.len() {
+            file[start + 3 + index] = title.as_bytes()[index];
             index += 1;
         }
         place += 1;

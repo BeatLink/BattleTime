@@ -62,9 +62,10 @@ describe('the survival command', () => {
     await run(session, 'add', 'lost', 'cpr');
     const said = await run(session, 'remove', 'lost');
 
-    expect(said).toContain('[x] cpr                CPR');
-    expect(said).toContain('[ ] lost               Lost in the wild');
+    expect(said).toContain('Wilderness');
+    expect(said).toContain('  [x] cpr                  CPR');
+    expect(said).toContain('  [ ] lost                 Lost in the wild');
     expect(said.at(-1)).toBe('Sent 0 guides and removed 1.');
-    expect(await readSurvivalList(await session.files())).toEqual([{ slot: 0, title: 'CPR' }]);
+    expect(await readSurvivalList(await session.files())).toEqual([{ slot: 0, topic: 0, title: 'CPR' }]);
   });
 });

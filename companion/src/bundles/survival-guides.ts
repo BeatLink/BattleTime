@@ -1,14 +1,25 @@
 // The emergency guides the watch's survival app can carry, each a short text read on the watch without a signal.
 //
 // Each guide keeps its slot for good, since the slot names its file on the watch; a new guide takes the next free
-// slot, and the watch has room for slots 0 to 15. The texts use plain ASCII, so every character is in the watch's
-// font, and follow common first aid and outdoor training; they are reminders, not a replacement for a course.
+// slot, and the watch has room for slots 0 to 23. The texts use plain ASCII, so every character is in the watch's
+// font, and follow common first aid, outdoor and protest safety training; they are reminders, not a replacement for a
+// course.
+
+// The topics the watch lists the guides under, in its order; each one's place is its number in the list file.
+export const SURVIVAL_TOPICS = [
+  { id: 'first-aid', title: 'First aid' },
+  { id: 'wilderness', title: 'Wilderness' },
+  { id: 'disaster', title: 'Disasters' },
+  { id: 'personal-safety', title: 'Personal safety' },
+] as const;
+
+export type SurvivalTopic = (typeof SURVIVAL_TOPICS)[number]['id'];
 
 export type SurvivalGuide = {
   id: string;
   slot: number;
   title: string;
-  kind: 'first-aid' | 'outdoors' | 'disaster';
+  topic: SurvivalTopic;
   text: string;
 };
 
@@ -17,7 +28,7 @@ export const SURVIVAL_GUIDES: readonly SurvivalGuide[] = [
     id: 'cpr',
     slot: 0,
     title: 'CPR',
-    kind: 'first-aid',
+    topic: 'first-aid',
     text: `Use when someone does not respond and is not breathing normally.
 
 1. Check it is safe to go near.
@@ -38,7 +49,7 @@ Child: push one third of the chest's depth, with one hand if they are small. If 
     id: 'bleeding',
     slot: 1,
     title: 'Severe bleeding',
-    kind: 'first-aid',
+    topic: 'first-aid',
     text: `1. Call the emergency number (112, 911, 999).
 2. Protect your hands with gloves or a plastic bag if you can.
 3. Press hard on the wound with a clean cloth, or your hand. Do not let go to look.
@@ -62,7 +73,7 @@ Then lay them down, keep them warm, and watch for shock: pale, cold, sweaty skin
     id: 'choking',
     slot: 2,
     title: 'Choking',
-    kind: 'first-aid',
+    topic: 'first-aid',
     text: `Can they cough or speak? Tell them to keep coughing.
 
 Cannot cough, speak or breathe:
@@ -84,7 +95,7 @@ Alone? Thrust your belly against the back of a chair.
     id: 'burns',
     slot: 3,
     title: 'Burns',
-    kind: 'first-aid',
+    topic: 'first-aid',
     text: `1. Stop the burning. Clothes on fire: stop, drop and roll.
 2. Cool the burn under cool running water for 20 minutes. No ice.
 3. Take off rings, watches and clothing near the burn, unless stuck to it.
@@ -108,7 +119,7 @@ Electrical burn: switch off the power before you touch them.
     id: 'broken-bones',
     slot: 4,
     title: 'Broken bones',
-    kind: 'first-aid',
+    topic: 'first-aid',
     text: `Signs: pain, swelling, a strange shape, or they cannot move or bear weight on it.
 
 1. Do not move them unless they are in danger.
@@ -127,7 +138,7 @@ Do not give food or drink; they may need surgery.
     id: 'stroke',
     slot: 5,
     title: 'Stroke',
-    kind: 'first-aid',
+    topic: 'first-aid',
     text: `Think FAST:
 
 Face: does one side droop when they smile?
@@ -151,7 +162,7 @@ Signs that go away still need a doctor today.
     id: 'allergic-reaction',
     slot: 6,
     title: 'Allergic reaction',
-    kind: 'first-aid',
+    topic: 'first-aid',
     text: `Severe reaction (anaphylaxis) signs:
 - swollen lips, tongue, face or throat
 - trouble breathing, wheezing, hoarse voice
@@ -173,7 +184,7 @@ Even after a good recovery they must go to hospital; it can come back.
     id: 'hypothermia',
     slot: 7,
     title: 'Hypothermia',
-    kind: 'outdoors',
+    topic: 'wilderness',
     text: `Signs: shivering, cold pale skin, clumsy hands, slurred speech, confusion, drowsiness.
 Getting worse: shivering stops, slow breathing, they stop responding.
 
@@ -199,7 +210,7 @@ Prevent it: stay dry, add layers before you get cold, eat and drink often.
     id: 'heat-illness',
     slot: 8,
     title: 'Heat illness',
-    kind: 'outdoors',
+    topic: 'wilderness',
     text: `Heat exhaustion: heavy sweating, headache, dizziness, nausea, cramps, tiredness.
 1. Move to shade or somewhere cool.
 2. Lie down with legs raised. Loosen or take off extra clothing.
@@ -221,7 +232,7 @@ Prevent it: drink before you are thirsty, rest in shade at midday, wear a hat an
     id: 'lost',
     slot: 9,
     title: 'Lost in the wild',
-    kind: 'outdoors',
+    topic: 'wilderness',
     text: `STOP:
 Stop. Sit down and calm down.
 Think. How did you get here? Who knows your plan?
@@ -252,7 +263,7 @@ If you must move:
     id: 'water',
     slot: 10,
     title: 'Finding water',
-    kind: 'outdoors',
+    topic: 'wilderness',
     text: `Where to look:
 - Running streams and springs are best.
 - Rain: catch it with a sheet or jacket.
@@ -276,7 +287,7 @@ Save water by saving sweat: rest in shade in the heat of the day and move in the
     id: 'shelter-and-fire',
     slot: 11,
     title: 'Shelter and fire',
-    kind: 'outdoors',
+    topic: 'wilderness',
     text: `Shelter:
 - Get out of the wind and rain first.
 - The ground steals the most heat: lie on a thick layer of dry leaves, branches or a pack.
@@ -299,7 +310,7 @@ Fire:
     id: 'signalling',
     slot: 12,
     title: 'Signalling for help',
-    kind: 'outdoors',
+    topic: 'wilderness',
     text: `Phone first: call the emergency number (112, 911, 999). Give your location as map coordinates from your phone's maps app.
 
 Three of anything means help:
@@ -326,7 +337,7 @@ Stay near your signals once you have set them out.
     id: 'earthquake',
     slot: 13,
     title: 'Earthquake',
-    kind: 'disaster',
+    topic: 'disaster',
     text: `During the shaking:
 - Drop to your hands and knees.
 - Cover your head and neck, under a sturdy table if one is close.
@@ -345,6 +356,157 @@ Afterwards:
 - Stay out of damaged buildings.
 
 Near the coast: shaking that is strong or lasts a long time can bring a tsunami. Go to high ground or inland at once, without waiting for a warning.
+`,
+  },
+  {
+    id: 'protesting-safely',
+    slot: 14,
+    title: 'Protesting safely',
+    topic: 'personal-safety',
+    text: `Before you go:
+- Go with a buddy. Agree where to meet if you are split up.
+- Tell someone where you will be and when you expect to be back.
+- Write a lawyer's or legal support number on your arm in marker.
+- Bring water, snacks, your medicines, some cash and a paper map. Carry ID if the law where you are says to.
+- Leave behind anything you would not want lost or searched.
+
+Your phone:
+- Safest is to leave it at home, or bring a spare phone with no accounts on it.
+- If you take yours: use a long passcode and turn off face and fingerprint unlock, so no one can unlock it by holding it to you.
+- Turn off location history. Airplane mode stops it talking to phone masts.
+- Log out of apps you will not need.
+
+Clothing:
+- Plain clothes with no logos or slogans that single you out.
+- Cover tattoos and distinctive marks. Tie back long hair.
+- Comfortable closed shoes and layers.
+- Glasses, not contact lenses, in case of tear gas.
+- A face mask protects your health and privacy, where masks are legal.
+
+While there:
+- Know two ways out. Stay near the edges of a big crowd.
+- Stay with your buddy and check on each other.
+- Do not post photos that show other protesters' faces.
+- Follow the marshals. Leave if it becomes unsafe.
+
+Afterwards: leave together, check each other for injuries, and write down anything that happened to you.
+`,
+  },
+  {
+    id: 'nonviolent-action',
+    slot: 15,
+    title: 'Nonviolent action',
+    topic: 'personal-safety',
+    text: `Research on a century of campaigns found that nonviolent movements succeeded about twice as often as violent ones. They draw more people, and repression of peaceful people tends to backfire on those who order it.
+
+Principles:
+- A clear goal that people can agree on.
+- Discipline: no violence, no damage and no insults, even when provoked.
+- Numbers and variety: the more kinds of people take part, the stronger it is.
+- Plan and train. Decide who does what before the day.
+
+Ways to act:
+Protest and persuasion:
+- marches, rallies and vigils
+- petitions, letters and public statements
+- banners, art, music and symbols
+Non-cooperation:
+- strikes and walkouts
+- boycotts of products, firms or events
+- refusing to carry out unjust orders
+Intervention:
+- sit-ins and peaceful occupations
+- blockades
+- building your own alternatives: mutual aid, community services
+
+Tips:
+- Mix methods. Boycotts and stay-at-homes carry less risk than big crowds.
+- Win over onlookers, workers, police and officials; do not make them enemies.
+- Answer repression with calm, and record it.
+- Give people roles: marshals, medics, legal observers, de-escalators, people who speak to the press.
+`,
+  },
+  {
+    id: 'de-escalation',
+    slot: 16,
+    title: 'De-escalating violence',
+    topic: 'personal-safety',
+    text: `Calming someone angry:
+- Stay calm. Speak slowly and quietly.
+- Keep a safe distance and your hands open and visible.
+- Listen, and say back what you hear: "You're angry about..."
+- Do not argue, threaten, point or touch.
+- Offer a way out that saves face.
+- Bring in a marshal or a calm friend if it is not working.
+
+Agitators and provocateurs: people who push a peaceful crowd towards violence, to discredit it or for their own reasons. Watch for anyone who:
+- urges others to throw things or break things
+- brings weapons or objects to throw
+- pushes a group towards police lines or away from the march
+- does damage and then slips back into the crowd
+Judge what people do, never how they look.
+
+What to do:
+- Do not follow calls to violence. Say clearly: "This is a peaceful protest."
+- Tell the marshals or organisers and point the person out.
+- Step away and make space around them, so it is clear they are not part of you. A crowd sitting down shows it is peaceful.
+- Do not grab, fight or unmask anyone; it can turn violent and may be a crime.
+- Record only if it is safe, and film what is done, not bystanders' faces.
+- If violence starts, leave with your buddy.
+`,
+  },
+  {
+    id: 'crowds-and-tear-gas',
+    slot: 17,
+    title: 'Crowds and tear gas',
+    topic: 'personal-safety',
+    text: `In a big crowd:
+- Stay near the edges and know where the exits are.
+- Feel it getting too tight, or the crowd swaying? Move out early, diagonally across the flow.
+- Never push against a crowd surge.
+- Keep your arms up in front of your chest to protect your breathing.
+- If you fall, get up at once. If you cannot, curl on your side and cover your head.
+- Hemmed in by police? Stay calm, stay together, ask the marshals or legal observers what is happening.
+
+Tear gas and pepper spray:
+1. Move away, upwind and to higher ground if you can.
+2. Do not rub your eyes or face.
+3. Blink, and flush your eyes with plenty of clean water, from the inner corner outwards, head tilted.
+4. Take out contact lenses.
+5. Breathe slowly; it feels worse than it is.
+6. Take off clothing that got sprayed and bag it.
+7. Later, shower in cool water first, so it does not open your pores.
+
+Get medical help for trouble breathing, an asthma attack, chest pain, or eyes still painful after an hour.
+
+Hit by a projectile or hurt: see the first aid guides.
+`,
+  },
+  {
+    id: 'police-and-arrest',
+    slot: 18,
+    title: 'Police and arrest',
+    topic: 'personal-safety',
+    text: `Laws differ between countries and regions. Learn your rights where you live from a civil liberties group before you go.
+
+With police:
+- Stay calm, keep your hands visible and do not run.
+- Never resist, even if it feels unfair. Complain later, through a lawyer.
+- Ask: "Am I free to go?" If yes, walk away calmly.
+- In many places you may stay silent and ask for a lawyer. Say: "I want to stay silent. I want a lawyer." Then do not explain or argue.
+- Say: "I do not consent to a search." Do not physically stop one.
+- Give your name or ID if the law requires it.
+- Do not unlock your phone unless the law makes you.
+- Remember names, badge numbers, times and places. Write them down as soon as you can.
+
+If you are arrested:
+- Call the legal support number on your arm.
+- Say nothing about the protest to anyone but your lawyer, not even to people held with you.
+- Ask for any medicine you need.
+
+If you see an arrest:
+- Film from a safe distance, where that is legal.
+- Get the person's name and pass it to legal support.
 `,
   },
 ];
