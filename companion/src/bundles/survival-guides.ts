@@ -155,7 +155,7 @@ While you wait:
 - They stop responding but still breathe: roll them onto their side.
 - They stop breathing normally: start CPR.
 
-Signs that go away still need a doctor today.
+Signs that go away within minutes still need the emergency number: it can be a warning of a stroke to come.
 `,
   },
   {
@@ -217,6 +217,7 @@ Prevent it: stay dry, add layers before you get cold, eat and drink often.
 3. Sip water, or a sports or rehydration drink.
 4. Cool the skin with wet cloths and fanning.
 Better within 30 minutes? Rest for the day.
+Not better after 30 minutes of rest, cooling and drinking? Treat it as heat stroke.
 
 Heat stroke is an emergency: hot skin, confusion, strange behaviour, fits, collapse. They may stop sweating.
 1. Call the emergency number (112, 911, 999).
@@ -314,7 +315,7 @@ Fire:
     text: `Phone first: call the emergency number (112, 911, 999). Give your location as map coordinates from your phone's maps app.
 
 Three of anything means help:
-- 3 whistle blasts, then wait a minute and repeat.
+- 3 whistle blasts, then wait a minute and repeat. In Europe's mountains the signal is 6 blasts in a minute, a minute's pause, then again; 3 blasts answer it.
 - 3 fires in a triangle.
 - 3 flashes of a torch.
 
