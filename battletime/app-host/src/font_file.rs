@@ -10,14 +10,15 @@
 //! carry the whole font, nothing here runs.
 
 use alloc::vec::Vec;
-use core::sync::atomic::{AtomicPtr, AtomicU32, AtomicUsize, Ordering};
+use core::cell::UnsafeCell;
+use core::sync::atomic::{AtomicU32, AtomicUsize, Ordering};
 
 use crate::fonts;
 
 /// Where the companion puts the text font, `fonts/geometric.ntfont`.
 pub const TEXT_FONT_PATH: &str = "/system/font";
 
-/// The most the copy in RAM takes, its header and table included; the memory need counts it with the system's share.
+/// The most the copy in RAM takes, its header and table included, in a buffer of its own outside the heap.
 pub const MOST_BYTES: usize = battletime_runtime::memory_need::TEXT_FONT_BYTES as usize;
 
 /// Reads bytes of the font file from `offset` into `out`, giving how many it read.
@@ -246,7 +247,13 @@ const MOST_ABSENT: usize = 16;
 const TRACKED_GLYPHS: usize = 128;
 
 static READER: AtomicUsize = AtomicUsize::new(0);
-static COPY_START: AtomicPtr<u8> = AtomicPtr::new(core::ptr::null_mut());
+/// The copy's place: a fixed buffer, since a copy moving about the heap would split the free room an app or a module needs whole.
+struct CopyBuffer(UnsafeCell<[u8; MOST_BYTES]>);
+
+// Only `install` writes it, from the one task that builds copies, where no text is being measured or drawn.
+unsafe impl Sync for CopyBuffer {}
+
+static COPY: CopyBuffer = CopyBuffer(UnsafeCell::new([0; MOST_BYTES]));
 static COPY_LENGTH: AtomicUsize = AtomicUsize::new(0);
 /// Characters a lookup missed since the last build, zero for an empty slot.
 static MISSING: [AtomicU32; MOST_MISSING] = [const { AtomicU32::new(0) }; MOST_MISSING];
@@ -357,27 +364,21 @@ pub fn load_missing_glyphs() -> bool {
 
 /// The copy the text font draws from now.
 fn copy() -> &'static [u8] {
-    let start = COPY_START.load(Ordering::Acquire);
-    let length = COPY_LENGTH.load(Ordering::Acquire);
-    if start.is_null() {
-        return &[];
-    }
-    // Only `install` sets these, from a leaked buffer it alone frees.
-    unsafe { core::slice::from_raw_parts(start, length) }
+    let length = COPY_LENGTH.load(Ordering::Acquire).min(MOST_BYTES);
+    // `install` changes the bytes only where nothing reads them.
+    let buffer: &'static [u8; MOST_BYTES] = unsafe { &*COPY.0.get() };
+    &buffer[..length]
 }
 
-/// Makes `font` the copy the text font draws from, then frees the one before.
+/// Makes `font`, which `build` kept within `MOST_BYTES`, the copy the text font draws from.
 fn install(font: Vec<u8>) {
-    let old = copy();
-    let new: &'static [u8] = alloc::boxed::Box::leak(font.into_boxed_slice());
-    fonts::install_text_font(new);
+    let length = font.len().min(MOST_BYTES);
     COPY_LENGTH.store(0, Ordering::Release);
-    COPY_START.store(new.as_ptr() as *mut u8, Ordering::Release);
-    COPY_LENGTH.store(new.len(), Ordering::Release);
-    if !old.is_empty() {
-        // Leaked from a boxed slice of exactly this length above.
-        unsafe { drop(alloc::boxed::Box::from_raw(old as *const [u8] as *mut [u8])) };
-    }
+    // Called only where no text is being measured or drawn, so nothing holds the old bytes.
+    let buffer = unsafe { &mut *COPY.0.get() };
+    buffer[..length].copy_from_slice(&font[..length]);
+    COPY_LENGTH.store(length, Ordering::Release);
+    fonts::install_text_font(copy());
 }
 
 #[cfg(test)]

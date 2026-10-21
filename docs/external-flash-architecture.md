@@ -268,8 +268,10 @@ Docs and comments the code contradicts, as of e30358e4:
 
    Fonts went last, all of them, with no copy kept: the text font left the shared library for
    `/system/font` (4,945 B), and `app-host/src/font_file.rs` keeps only the glyphs drawn lately in
-   the heap, at most 2,048 B, which the system's share of the memory need now counts (the app budget
-   fell from 26,880 B to 24,832 B; every app still fits). On the watch 1,536 B proved too little:
+   RAM, at most 2,048 B, in a static buffer the heap gave up (the app budget fell from 26,880 B to
+   24,832 B; every app still fits). In the heap the copy moved at each build and split the free
+   room: on the watch the verifier module's 15 KB block stopped fitting, so Navigation could not be
+   checked and went back to the face. On the watch 1,536 B proved too little:
    the launcher's names lost letters, as the copy kept the last screen's glyphs before the new
    one's, so the glyphs a screen just missed now come first. The loader costs 3.9 KB of firmware code,
    so the region gains about 1 KB net. The firmware's own pages draw without text while the font

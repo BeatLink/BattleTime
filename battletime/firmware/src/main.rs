@@ -133,7 +133,7 @@ const FIRMWARE_BUILD_DATE: &str = env!("BATTLETIME_BUILD_DATE");
 const DEVICE_NAME: &str = "BattleTime";
 /// The shell's share of the heap, which the open app's widgets and text are allocated from.
 #[cfg(with_shell)]
-const UI_HEAP_SIZE: usize = 20 * 1024 + 256;
+const UI_HEAP_SIZE: usize = 18 * 1024 + 256;
 #[cfg(not(with_shell))]
 const UI_HEAP_SIZE: usize = 0;
 const HEAP_SIZE: usize = storage::HEAP_SIZE + UI_HEAP_SIZE;
