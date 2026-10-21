@@ -287,9 +287,9 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 117 | 0 |
-| `/system/`: the accelerometers' configuration and the shared library's icons, as the companion puts them | 78,054 | 23 |
+| `/system/`: the accelerometers' configuration and the shared library's icons, as the companion puts them | 89,287 | 26 |
 | 14 app images, 739 B (flashlight) to 7,233 B (settings); those of 1 KB or less are records | 29,840 | 14 |
-| **In use** | | **35 of 512: 140 KB of 2 MB, and 1,376 B of records in the 256 KB records ring** |
+| **In use** | | **38 of 512: 152 KB of 2 MB, and 1,376 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
 The rest, almost 2 MB of files and most of the records ring, is free for apps, saved state and
