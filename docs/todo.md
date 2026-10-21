@@ -408,6 +408,11 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   real app screens there through `ScreenRenderer`.
 ## App runtime
 
+- [ ] **Page strings for an app with a lot of text.** Paged apps keep their strings in RAM. Paging
+  them was built (branch `worktree-string-paging`) and left out because it costs more than today's
+  apps save; cut its code and stack cost and group each screen's strings, as
+  [external-flash-architecture.md](external-flash-architecture.md#paging-strings) describes, once an
+  app's strings reach several kilobytes.
 - [ ] **Profiles.** Sets of apps such as work, gaming or comms, picked from the companion app. A
   profile is a small file in external flash listing app ids, their order, the watch face and which
   subscriptions are on. Switching profiles only reads files, so it writes nothing to flash.
