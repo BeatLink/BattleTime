@@ -196,7 +196,8 @@ export type CallControlMessage = { t: 'call'; n: 'ACCEPT' | 'REJECT' | 'IGNORE' 
 // A watch app asking the phone to fetch a URL for it; a plain GET carries no method or body.
 export type HttpRequestMessage = { t: 'http'; url: string; id: string; method?: string; body?: string };
 
-// A watch app speaking on its own channel, such as the remote app's {"t":"app","ch":"remote","d":{"button":2}}.
+// A watch app speaking on its own channel, such as the remote app's {"t":"app","ch":"remote","d":{"button":2}};
+// read it with readAppMessage in app-message.ts.
 export type AppChannelMessage = { t: 'app'; ch: string; d?: unknown };
 
 // Everything the watch can send to the phone.

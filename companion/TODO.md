@@ -101,8 +101,8 @@ messages are the ones it lists as not served yet.
     than 30 seconds ends the calling;
   - with the call set to the emergency number, the dialer opens with it typed in (cancel it there);
   - **Stop SOS** on the SOS screen and in the companion both end the recording and keep the files,
-    and the watch's SOS app goes back to its hold button, at once when connected and on the next
-    connection when not.
+    and the watch hears `{"on":0}` on the `sos` topic and its SOS app goes back to its hold button,
+    at once when connected and on the next connection when not.
 - **A lost phone loses the recording.** Each file is kept only once the SOS stops; short pieces, or an
   upload as it records, would keep the part made before the phone was taken.
 

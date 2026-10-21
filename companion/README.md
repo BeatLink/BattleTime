@@ -354,6 +354,12 @@ the same name, which [src/protocol/requests.ts](src/protocol/requests.ts) matche
 waiting for it. A watch app asks for a page with `{"t":"http","url":..,"id":..}` and gets
 `GB({"t":"http","id":..,"resp":..})` back, but only from the hosts listed in Settings.
 
+App messages, `{"t":"app","ch":<topic>,"d":{...}}` both ways, carry a few numbers and a text to and
+from one watch app. [src/protocol/app-message.ts](src/protocol/app-message.ts) and
+[core/src/protocol/app_message.rs](core/src/protocol/app_message.rs) are the only code that writes
+or reads that line; the daemon's [topic router](core/src/daemon/topics.rs) hands each one from the
+watch to the job (`remote`, `sos`) or plugin that hears its topic.
+
 ## The file service
 
 [src/protocol/file-service.ts](src/protocol/file-service.ts) speaks Adafruit's BLE file transfer

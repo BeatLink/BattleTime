@@ -427,27 +427,12 @@ pub async fn write_app_state(
     id: &str,
     changes: &Value,
 ) -> Result<Value, String> {
-    write_app_state_from(files, store, id, changes, false).await
-}
-
-// As `write_app_state`, but with `missing_is_empty` a state file that cannot be read counts as one
-// holding nothing, so the app opens on its defaults with only the changes it can match.
-pub async fn write_app_state_from(
-    files: &FileClient,
-    store: &SyncStore,
-    id: &str,
-    changes: &Value,
-    missing_is_empty: bool,
-) -> Result<Value, String> {
     if !crate::plugins::manifest::is_plugin_id(id) {
         return Err(format!("\"{id}\" is not an app id."));
     }
     let path = format!("/apps/{id}/state");
-    let entries = match files.read(&path).await {
-        Ok(bytes) => state_file::decode(&bytes).map_err(|error| format!("{path}: {error}"))?,
-        Err(_) if missing_is_empty => Vec::new(),
-        Err(error) => return Err(error.to_string()),
-    };
+    let bytes = files.read(&path).await.map_err(|error| error.to_string())?;
+    let entries = state_file::decode(&bytes).map_err(|error| format!("{path}: {error}"))?;
     let changed = state_file::apply_json(&entries, changes)?;
     files
         .write(&path, &state_file::encode(&changed)?)
@@ -713,27 +698,6 @@ mod tests {
         assert_eq!(report.errors.len(), 1);
         assert!(report.errors[0].contains("/apps/broken/state"));
         assert!(store.get("files/settings/quick_apps").is_some());
-    }
-
-    #[tokio::test]
-    async fn an_app_that_saved_nothing_gets_an_empty_state_when_asked() {
-        let root = tempfile::tempdir().unwrap();
-        let store = SyncStore::new(root.path());
-        let watch = watch();
-        let state = write_app_state_from(
-            &watch.client(),
-            &store,
-            "sos",
-            &json!({ "is_active": false }),
-            true,
-        )
-        .await
-        .unwrap();
-        assert_eq!(state, json!({}));
-        assert_eq!(
-            state_file::decode(&watch.files.lock().unwrap()["/apps/sos/state"]).unwrap(),
-            Vec::new()
-        );
     }
 
     #[tokio::test]

@@ -20,6 +20,7 @@ pub mod settings;
 pub mod socket;
 pub mod sos;
 pub mod state;
+pub mod topics;
 pub mod weather;
 
 use std::path::PathBuf;
@@ -37,6 +38,7 @@ use crate::plugins::host::{HostOutput, PluginHost, WatchData};
 use crate::plugins::http;
 use crate::plugins::runtime::DataWrite;
 use crate::plugins::store::PluginStore;
+use crate::protocol::app_message::{encode_app_message, read_app_message, AppMessage};
 use crate::protocol::battletime::{
     describe_last_restart, read_battery_level, read_capabilities, set_watch_time, Capabilities,
     BATTLETIME_DIAGNOSTICS, BATTLETIME_SERVICE, FILE_TRANSFER, FILE_TRANSFER_SERVICE,
@@ -54,6 +56,7 @@ use link::{Link, SharedLink};
 use replies::{ReplyRouter, REPLY_TIMEOUT};
 use settings::{CoreSettings, SettingsStore};
 use state::{DaemonState, WatchRef};
+use topics::TopicRouter;
 
 // ============================================================================
 // Timing
@@ -123,6 +126,7 @@ pub struct Daemon {
     settings: SettingsStore,
     state: Mutex<DaemonState>,
     router: ReplyRouter,
+    topics: TopicRouter,
     lines: Mutex<LineBuffer>,
     forwarder: Mutex<Forwarder>,
     holds: Mutex<KeeperHolds>,
@@ -205,6 +209,7 @@ impl Daemon {
             settings: SettingsStore::open(setup.data_dir.join("companion").join("settings.json")),
             state: Mutex::new(DaemonState::default()),
             router: ReplyRouter::default(),
+            topics: TopicRouter::default(),
             lines: Mutex::new(LineBuffer::default()),
             forwarder: Mutex::new(Forwarder::default()),
             holds: Mutex::new(KeeperHolds::default()),
@@ -687,7 +692,6 @@ impl Daemon {
     }
 
     fn on_watch_text(&self, text: &str) {
-        self.plugins.on_watch_text(text);
         self.syncer.on_watch_text(text);
         let lines = self.lines.lock().unwrap().push(text);
         for message in lines.iter().filter_map(|line| decode_watch_line(line)) {
@@ -695,11 +699,31 @@ impl Daemon {
         }
     }
 
+    // A receiver of every app message the watch sends on this topic.
+    pub fn subscribe_topic(&self, topic: &str) -> mpsc::UnboundedReceiver<AppMessage> {
+        self.topics.subscribe(topic)
+    }
+
+    // Sends one app message to the watch app its topic names; refused when it is invalid or no watch with the message channel is connected.
+    pub async fn send_app_message(&self, message: &AppMessage) -> Result<(), String> {
+        let line = encode_app_message(message)?;
+        if !self.readiness.borrow().uart() {
+            return Err("Connect to a watch with the message channel first.".into());
+        }
+        self.emit("daemon:sent", json!(line.trim_end()));
+        self.link.write_text(line).await
+    }
+
     fn on_watch_message(&self, message: Value) {
         if self.router.push(&message) {
             return;
         }
         let _ = self.messages.send(message.clone());
+        if let Some(app_message) = read_app_message(&message) {
+            self.topics.deliver(&app_message);
+            self.plugins.on_app_message(&app_message);
+            return;
+        }
         let settings: CoreSettings = self.settings.view();
         match message["t"].as_str().unwrap_or_default() {
             "findPhone" => {
@@ -874,6 +898,24 @@ impl DaemonOutput {
 impl HostOutput for DaemonOutput {
     fn write_to_watch(&self, line: String) {
         self.write_line(line);
+    }
+
+    fn send_app_message(&self, plugin: &str, message: AppMessage) -> Result<(), String> {
+        let daemon = self.daemon.upgrade().ok_or("The companion is shutting down.")?;
+        if !daemon.readiness.borrow().uart() {
+            return Err("The watch is not connected.".into());
+        }
+        let plugin = plugin.to_string();
+        let runtime = daemon.runtime.clone();
+        runtime.spawn(async move {
+            if let Err(error) = daemon.send_app_message(&message).await {
+                daemon.emit(
+                    "plugins:log",
+                    json!({ "id": plugin, "line": format!("error: {error}") }),
+                );
+            }
+        });
+        Ok(())
     }
 
     fn send_to_ui(&self, plugin: &str, message: Value) {

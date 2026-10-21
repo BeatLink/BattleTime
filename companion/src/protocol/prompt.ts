@@ -6,6 +6,7 @@
 import { base64ToBytes } from '@/ble/encoding';
 import { BUNDLED_IMAGES, type BundledImage } from '@/bundles/watch-apps';
 
+import { appMessageNumber, readAppMessage } from './app-message';
 import type { WatchToPhoneMessage } from './gadgetbridge';
 
 export const PROMPT_IMAGE_FILE = 'prompt.ntapp';
@@ -28,13 +29,10 @@ export function bundledPromptImage(bundle: BundledImage[] = BUNDLED_IMAGES): Uin
 
 // True for Yes and false for No, or null when the message is not a well-formed prompt answer.
 export function promptAnswer(message: WatchToPhoneMessage): boolean | null {
-  if (message.t !== 'app' || message.ch !== PROMPT_CHANNEL) {
+  const read = readAppMessage(message);
+  if (!read || read.topic !== PROMPT_CHANNEL) {
     return null;
   }
-  const data = message.d;
-  if (!data || typeof data !== 'object') {
-    return null;
-  }
-  const answer = (data as { answer?: unknown }).answer;
+  const answer = appMessageNumber(read, 'answer');
   return answer === 1 ? true : answer === 0 ? false : null;
 }

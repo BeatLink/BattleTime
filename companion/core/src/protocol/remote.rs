@@ -11,6 +11,7 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
+use crate::protocol::app_message::AppMessage;
 use crate::sync::files::FileClient;
 use crate::web_request::WebAccess;
 
@@ -405,13 +406,11 @@ pub async fn sync_remote_layout(
 pub const REMOTE_CHANNEL: &str = "remote";
 
 // The index of the tapped button, or None when the message is not a well-formed remote tap.
-pub fn remote_tap_index(message: &Value) -> Option<u64> {
-    if message["t"] != "app" || message["ch"] != REMOTE_CHANNEL {
+pub fn remote_tap_index(message: &AppMessage) -> Option<u64> {
+    if message.topic != REMOTE_CHANNEL {
         return None;
     }
-    let button = message["d"].as_object()?.get("button")?.as_f64()?;
-    let whole = button.fract() == 0.0 && button.is_finite();
-    (whole && button >= 0.0).then_some(button as u64)
+    u64::try_from(message.number("button")?).ok()
 }
 
 // ============================================================================
@@ -510,7 +509,8 @@ mod tests {
 
     #[test]
     fn only_a_well_formed_remote_message_is_a_tap() {
-        let tap = |data: Value| json!({ "t": "app", "ch": "remote", "d": data });
+        use crate::protocol::app_message::read_app_message;
+        let tap = |data: Value| read_app_message(&json!({ "t": "app", "ch": "remote", "d": data })).unwrap();
 
         assert_eq!(remote_tap_index(&tap(json!({ "button": 2 }))), Some(2));
         assert_eq!(remote_tap_index(&tap(json!({ "button": 2.0 }))), Some(2));
@@ -519,7 +519,7 @@ mod tests {
         assert_eq!(remote_tap_index(&tap(json!({ "button": "2" }))), None);
         assert_eq!(remote_tap_index(&tap(json!(null))), None);
         assert_eq!(
-            remote_tap_index(&json!({ "t": "app", "ch": "other", "d": { "button": 1 } })),
+            remote_tap_index(&AppMessage::new("other").with_number("button", 1)),
             None
         );
     }

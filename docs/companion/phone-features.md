@@ -108,8 +108,9 @@ Android app, which then, at once:
 emergency number (911 unless changed), switches for the texts and the recording, and the
 permissions it still lacks. The same screen shows a running SOS, a log of each step, and
 **Stop SOS**. Stopping it on the watch, on the SOS screen or here ends the calling and the
-recording. Stopped on the phone, the watch is told too and stops its light, screen and vibration:
-at once while it is connected, else when it next connects.
+recording. Stopped on the phone, the watch is told too, by the app message `{"on":0}` on the `sos`
+topic, and stops its light, screen and vibration: at once while it is connected, else when it next
+connects.
 
 Android sets the limits:
 

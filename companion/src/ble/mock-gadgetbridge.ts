@@ -65,6 +65,9 @@ export class MockGadgetbridge {
         return [JSON.stringify({ t: 'status', bat: 76, mv: 3912, charging: false, steps: 4321 })];
       case 'slots':
         return [this.answerSlots(message)];
+      case 'app':
+        // The watch hands an app message to its app and sends nothing back.
+        return [];
       default:
         // Messages the watch does not answer fall through to the transport's echo.
         return null;

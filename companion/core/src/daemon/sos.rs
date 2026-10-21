@@ -6,9 +6,9 @@
 // call that ends sooner than `ANSWERED_AFTER` counts as unanswered and the next contact is called. It
 // reports to the window under the feature "sosStatus".
 //
-// The watch cannot hear the phone's messages, so an SOS stopped on the phone reaches it as a rewrite of
-// the sos app's state with `is_active` false, which an open app takes up at once. A watch that is away
-// is told when it next connects.
+// An SOS stopped on the phone reaches the watch as the app message {"on":0} on the "sos" topic, which
+// the watch hands to its sos app whether it is open or not. A watch that is away is told when it next
+// connects.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
@@ -16,21 +16,20 @@ use std::time::Duration;
 
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
-use tokio::sync::{broadcast, watch};
+use serde_json::json;
+use tokio::sync::{broadcast, mpsc, watch};
 use tokio::time::Instant;
 
 use super::device::{CallState, DeviceKind};
 use super::{Daemon, Readiness};
+use crate::protocol::app_message::AppMessage;
 
 // ============================================================================
 // Timing and limits
 // ============================================================================
 
-pub const SOS_CHANNEL: &str = "sos";
-
-// The watch app whose state says whether its SOS is on.
-pub const SOS_APP: &str = "sos";
+// The watch's sos app, and the topic it and the phone speak on.
+pub const SOS_TOPIC: &str = "sos";
 
 // A call to a contact that lasts this long counts as answered, and ends the calling.
 pub const ANSWERED_AFTER: Duration = Duration::from_secs(30);
@@ -132,12 +131,17 @@ fn milliseconds_now() -> i64 {
 // Reading the watch
 // ============================================================================
 
-// Whether an sos line asks to start (Some(true)) or stop (Some(false)); None for any other line.
-pub fn sos_request(message: &Value) -> Option<bool> {
-    if message["t"] != "app" || message["ch"] != SOS_CHANNEL {
+// Whether an sos message asks to start (Some(true)) or stop (Some(false)); None for any other message.
+pub fn sos_request(message: &AppMessage) -> Option<bool> {
+    if message.topic != SOS_TOPIC {
         return None;
     }
-    message["d"]["on"].as_i64().map(|on| on != 0)
+    message.number("on").map(|on| on != 0)
+}
+
+// The message that tells the watch's sos app to stop signalling.
+pub fn stop_message() -> AppMessage {
+    AppMessage::new(SOS_TOPIC).with_number("on", 0)
 }
 
 // The text each contact is sent, with a map link when the phone knows where it is.
@@ -155,8 +159,8 @@ pub fn sos_text(location: Option<(f64, f64)>) -> String {
 // The job
 // ============================================================================
 
-// Writes changes into the watch app's state; the daemon's own holds it and rewrites /apps/sos/state.
-pub type StateWriter = Arc<dyn Fn(Value) -> BoxFuture<'static, Result<(), String>> + Send + Sync>;
+// Sends an app message to the watch; the daemon's own sends it over the message channel.
+pub type MessageSender = Arc<dyn Fn(AppMessage) -> BoxFuture<'static, Result<(), String>> + Send + Sync>;
 
 pub struct Sos {
     daemon: Weak<Daemon>,
@@ -164,7 +168,7 @@ pub struct Sos {
     // Counts up on every start and stop, so the steps of an SOS that was stopped give up.
     run: watch::Sender<u64>,
     calls: broadcast::Sender<CallState>,
-    write_state: StateWriter,
+    send_message: MessageSender,
     // The SOS was stopped on the phone and the watch has not yet been told.
     watch_needs_stop: AtomicBool,
     // Held while the watch is being told, so two tellings never overlap.
@@ -174,33 +178,31 @@ pub struct Sos {
 impl Sos {
     // Starts hearing the watch's sos lines on the daemon's runtime.
     pub fn start(daemon: &Arc<Daemon>) -> Arc<Sos> {
-        let syncer = daemon.syncer().clone();
-        let write_state: StateWriter = Arc::new(move |changes| {
-            let syncer = syncer.clone();
+        let weak = Arc::downgrade(daemon);
+        let send_message: MessageSender = Arc::new(move |message| {
+            let weak = weak.clone();
             Box::pin(async move {
-                syncer
-                    .write_app_state_or_create(SOS_APP, &changes)
-                    .await
-                    .map(|_| ())
+                let daemon = weak.upgrade().ok_or("The companion is shutting down.")?;
+                daemon.send_app_message(&message).await
             })
         });
-        Sos::start_with(daemon, write_state)
+        Sos::start_with(daemon, send_message)
     }
 
-    pub(crate) fn start_with(daemon: &Arc<Daemon>, write_state: StateWriter) -> Arc<Sos> {
+    pub(crate) fn start_with(daemon: &Arc<Daemon>, send_message: MessageSender) -> Arc<Sos> {
         let sos = Arc::new(Sos {
             daemon: Arc::downgrade(daemon),
             status: Mutex::new(SosStatus::default()),
             run: watch::channel(0).0,
             calls: broadcast::channel(16).0,
-            write_state,
+            send_message,
             watch_needs_stop: AtomicBool::new(false),
             telling: tokio::sync::Mutex::new(()),
         });
         sos.publish(daemon);
         daemon
             .runtime()
-            .spawn(sos.clone().hear_watch(daemon.watch_messages()));
+            .spawn(sos.clone().hear_watch(daemon.subscribe_topic(SOS_TOPIC)));
         daemon
             .runtime()
             .spawn(sos.clone().tell_watch_on_connect(daemon.readiness()));
@@ -305,13 +307,8 @@ impl Sos {
         *self.run.borrow() == run
     }
 
-    async fn hear_watch(self: Arc<Self>, mut messages: broadcast::Receiver<Value>) {
-        loop {
-            let message = match messages.recv().await {
-                Ok(message) => message,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(broadcast::error::RecvError::Closed) => return,
-            };
+    async fn hear_watch(self: Arc<Self>, mut messages: mpsc::UnboundedReceiver<AppMessage>) {
+        while let Some(message) = messages.recv().await {
             match sos_request(&message) {
                 Some(true) => self.begin(),
                 Some(false) => self.end_from_watch(),
@@ -324,7 +321,7 @@ impl Sos {
     // Telling the watch
     // ========================================================================
 
-    // Turns the watch app's SOS off, if the phone stopped it and the watch serves files now.
+    // Tells the watch app to stop signalling, if the phone stopped the SOS and the watch can hear messages now.
     async fn tell_watch(self: Arc<Self>) {
         let _turn = self.telling.lock().await;
         if !self.watch_needs_stop.load(Ordering::SeqCst) {
@@ -333,7 +330,7 @@ impl Sos {
         let Some(daemon) = self.daemon.upgrade() else {
             return;
         };
-        if !daemon.readiness().borrow().files() {
+        if !daemon.readiness().borrow().uart() {
             self.report(
                 false,
                 "The watch is away; it will stop signalling when it connects.",
@@ -341,8 +338,8 @@ impl Sos {
             return;
         }
         drop(daemon);
-        let writing = (self.write_state)(json!({ "is_active": false, "reached_phone": false }));
-        match writing.await {
+        let sending = (self.send_message)(stop_message());
+        match sending.await {
             Ok(()) => {
                 self.watch_needs_stop.store(false, Ordering::SeqCst);
                 self.report(true, "Told the watch to stop signalling.");
@@ -355,11 +352,11 @@ impl Sos {
     }
 
     async fn tell_watch_on_connect(self: Arc<Self>, mut readiness: watch::Receiver<Readiness>) {
-        // The connection last found serving files, so each connection is tried once.
+        // The connection last found with the message channel, so each connection is tried once.
         let mut tried_on = None;
         loop {
             let ready = readiness.borrow_and_update().clone();
-            if ready.files() && tried_on != Some(ready.epoch) {
+            if ready.uart() && tried_on != Some(ready.epoch) {
                 tried_on = Some(ready.epoch);
                 if self.watch_needs_stop.load(Ordering::SeqCst) {
                     self.clone().tell_watch().await;

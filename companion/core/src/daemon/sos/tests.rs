@@ -14,6 +14,7 @@ use crate::daemon::device::{CallCommand, Device, DeviceAnswer, DeviceKind, Locat
 use crate::daemon::link::Link;
 use crate::daemon::settings::SettingsStore;
 use crate::daemon::DaemonSetup;
+use crate::protocol::app_message::AppMessage;
 use crate::protocol::battletime::Capabilities;
 use crate::protocol::link::WriteMode;
 
@@ -145,10 +146,10 @@ struct Rig {
     daemon: Arc<Daemon>,
     sos: Arc<Sos>,
     phone: Arc<FakePhone>,
-    // Every change written into the watch app's state.
-    written: Arc<Mutex<Vec<Value>>>,
-    // Whether the next writes fail, as over a link that drops.
-    writes_fail: Arc<Mutex<bool>>,
+    // Every app message sent to the watch.
+    sent: Arc<Mutex<Vec<AppMessage>>>,
+    // Whether the next sends fail, as over a link that drops.
+    sends_fail: Arc<Mutex<bool>>,
     _folder: tempfile::TempDir,
 }
 
@@ -170,13 +171,13 @@ fn rig_on(kind: DeviceKind, location: Result<Location, String>, settings: Value)
         },
         Arc::new(NoLink),
     );
-    let written = Arc::new(Mutex::new(Vec::new()));
-    let writes_fail = Arc::new(Mutex::new(false));
-    let (heard, failing) = (written.clone(), writes_fail.clone());
-    let write_state: StateWriter = Arc::new(move |changes| {
+    let sent = Arc::new(Mutex::new(Vec::new()));
+    let sends_fail = Arc::new(Mutex::new(false));
+    let (heard, failing) = (sent.clone(), sends_fail.clone());
+    let send_message: MessageSender = Arc::new(move |message| {
         let fails = *failing.lock().unwrap();
         if !fails {
-            heard.lock().unwrap().push(changes);
+            heard.lock().unwrap().push(message);
         }
         Box::pin(async move {
             if fails {
@@ -186,13 +187,13 @@ fn rig_on(kind: DeviceKind, location: Result<Location, String>, settings: Value)
             }
         })
     });
-    let sos = Sos::start_with(&daemon, write_state);
+    let sos = Sos::start_with(&daemon, send_message);
     Rig {
         daemon,
         sos,
         phone,
-        written,
-        writes_fail,
+        sent,
+        sends_fail,
         _folder: folder,
     }
 }
@@ -242,13 +243,13 @@ fn log_messages(rig: &Rig) -> Vec<String> {
         .collect()
 }
 
-// Says a watch that serves files is connected, on a new connection.
+// Says a watch with the message channel is connected, on a new connection.
 fn connect(rig: &Rig) {
     rig.daemon.readiness.send_modify(|readiness| {
         readiness.epoch += 1;
         readiness.watch_id = Some("watch".to_string());
         readiness.capabilities = Some(Capabilities {
-            files: true,
+            uart: true,
             ..Capabilities::default()
         });
     });
@@ -262,12 +263,12 @@ fn disconnect(rig: &Rig) {
     });
 }
 
-fn written(rig: &Rig) -> Vec<Value> {
-    rig.written.lock().unwrap().clone()
+fn sent(rig: &Rig) -> Vec<AppMessage> {
+    rig.sent.lock().unwrap().clone()
 }
 
-fn stopped_on_watch() -> Value {
-    json!({ "is_active": false, "reached_phone": false })
+fn stopped_on_watch() -> AppMessage {
+    AppMessage::new("sos").with_number("on", 0)
 }
 
 async fn pass(duration: Duration) {
@@ -285,19 +286,12 @@ async fn settle() {
 #[test]
 fn only_sos_lines_with_a_number_start_or_stop_it() {
     assert_eq!(
-        sos_request(&json!({ "t": "app", "ch": "sos", "d": { "on": 1 } })),
+        sos_request(&AppMessage::new("sos").with_number("on", 1)),
         Some(true)
     );
-    assert_eq!(
-        sos_request(&json!({ "t": "app", "ch": "sos", "d": { "on": 0 } })),
-        Some(false)
-    );
-    assert_eq!(sos_request(&json!({ "t": "app", "ch": "sos", "d": {} })), None);
-    assert_eq!(
-        sos_request(&json!({ "t": "app", "ch": "remote", "d": { "on": 1 } })),
-        None
-    );
-    assert_eq!(sos_request(&json!({ "t": "findPhone", "n": true })), None);
+    assert_eq!(sos_request(&stop_message()), Some(false));
+    assert_eq!(sos_request(&AppMessage::new("sos")), None);
+    assert_eq!(sos_request(&AppMessage::new("remote").with_number("on", 1)), None);
 }
 
 #[test]
@@ -465,27 +459,27 @@ async fn a_computer_does_nothing_but_say_it_needs_a_phone() {
 // ============================================================================
 
 #[tokio::test(start_paused = true)]
-async fn stopping_on_the_phone_turns_the_watch_apps_sos_off() {
+async fn stopping_on_the_phone_tells_the_watch_app_to_stop() {
     let rig = rig(two_contacts());
     connect(&rig);
     watch_sends(&rig, 1);
     settle().await;
     rig.sos.end_from_phone();
     settle().await;
-    assert_eq!(written(&rig), [stopped_on_watch()]);
+    assert_eq!(sent(&rig), [stopped_on_watch()]);
     assert_eq!(log_messages(&rig)[0], "Told the watch to stop signalling.");
     assert!(asked(&rig).contains(&"screen on=false record=false".to_string()));
 }
 
 #[tokio::test(start_paused = true)]
-async fn stopping_on_the_watch_writes_nothing_back() {
+async fn stopping_on_the_watch_sends_nothing_back() {
     let rig = rig(two_contacts());
     connect(&rig);
     watch_sends(&rig, 1);
     settle().await;
     watch_sends(&rig, 0);
     settle().await;
-    assert!(written(&rig).is_empty());
+    assert!(sent(&rig).is_empty());
 }
 
 #[tokio::test(start_paused = true)]
@@ -495,32 +489,32 @@ async fn a_watch_that_is_away_is_told_when_it_connects() {
     settle().await;
     rig.sos.end_from_phone();
     settle().await;
-    assert!(written(&rig).is_empty());
+    assert!(sent(&rig).is_empty());
     assert!(log_messages(&rig)[0].starts_with("The watch is away"));
 
     connect(&rig);
     settle().await;
-    assert_eq!(written(&rig), [stopped_on_watch()]);
+    assert_eq!(sent(&rig), [stopped_on_watch()]);
     disconnect(&rig);
     connect(&rig);
     settle().await;
-    assert_eq!(written(&rig).len(), 1);
+    assert_eq!(sent(&rig).len(), 1);
 }
 
 #[tokio::test(start_paused = true)]
 async fn a_failed_telling_is_tried_again_on_the_next_connection() {
     let rig = rig(two_contacts());
     connect(&rig);
-    *rig.writes_fail.lock().unwrap() = true;
+    *rig.sends_fail.lock().unwrap() = true;
     rig.sos.end_from_phone();
     settle().await;
     assert!(log_messages(&rig)[0].starts_with("Could not tell the watch to stop"));
 
-    *rig.writes_fail.lock().unwrap() = false;
+    *rig.sends_fail.lock().unwrap() = false;
     disconnect(&rig);
     connect(&rig);
     settle().await;
-    assert_eq!(written(&rig), [stopped_on_watch()]);
+    assert_eq!(sent(&rig), [stopped_on_watch()]);
 }
 
 #[tokio::test(start_paused = true)]
@@ -531,5 +525,5 @@ async fn a_new_sos_from_the_watch_cancels_an_untold_stop() {
     settle().await;
     connect(&rig);
     settle().await;
-    assert!(written(&rig).is_empty());
+    assert!(sent(&rig).is_empty());
 }

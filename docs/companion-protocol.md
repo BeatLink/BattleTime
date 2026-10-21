@@ -157,6 +157,7 @@ Messages travel over the Nordic UART service, as Gadgetbridge's Bangle.js driver
 | `music`, `call`, `findPhone`, `request`, `app` | watch | [Lines the watch sends](#lines-the-watch-sends) |
 | `slots` | phone, and the watch's reply | [Slots](#slots-served) |
 | `state` | phone | [App state](#app-state-served) |
+| `app` | phone | [App messages](#app-messages-served) |
 | `error` | watch | the answer to a line it cannot read |
 | `alarm`, `steps`, `http`, `info` | | [Not served yet](#other-messages-not-served-yet) |
 
@@ -279,19 +280,44 @@ Watch to phone, sent as apps ask:
 In an `app` line the channel and keys are 1 to 32 letters, digits, `_` or `-`, written out in the
 app; `d` holds up to 4 whole numbers, in the order the app wrote them, or is `{}`. For example the
 remote app's third button sends `{"t":"app","ch":"remote","d":{"button":2}}`. The phone sends no
-reply to these, but `request`.
+reply to these, but `request`; [App messages](#app-messages-served) has both directions.
 
 The companion app reads the `sos` channel itself, from the watch's SOS app.
 `{"t":"app","ch":"sos","d":{"on":1}}` starts an SOS on the phone and `{"on":0}` stops it; see
-[SOS](companion/phone-features.md#sos). An SOS stopped on the phone reaches the watch as a rewrite of
-`/apps/sos/state` with `is_active` false ([App state](#app-state-served)); an app that has saved no
-state yet gets a file holding nothing, so it opens on its defaults.
+[SOS](companion/phone-features.md#sos). An SOS stopped on the phone reaches the watch as the app
+message `{"t":"app","ch":"sos","d":{"on":0}}` on the `sos` topic.
 
 Bangle.js has no message asking the phone again, and Gadgetbridge logs `request` as one it does not
 know and sends nothing; it sends the music and navigation whenever they change. The companion app
 answers `{"t":"request","n":"music"}` with `musicinfo` and `musicstate` for what the phone plays,
 when it forwards music and knows of a track, and `{"t":"request","n":"nav"}` with `{"t":"nav"}`,
 since it follows no navigation, which tells the watch there is none.
+
+### App messages (served)
+
+An app message is a few values for one watch app, sent on its topic, which is the app's id: 1 to
+32 letters, digits, `_` or `-`. It goes both ways on the same line shape.
+
+| Direction | Line | `d` |
+|---|---|---|
+| Watch to phone | `{"t":"app","ch":"<topic>","d":{...}}` | up to 4 whole numbers, from the app's `send_to_phone(topic, data)` |
+| Phone to watch | `GB({"t":"app","ch":"<topic>","d":{...}})` | up to 4 whole numbers and at most 1 text |
+
+- Keys in `d` are 1 to 32 letters, digits, `_` or `-`. A number is a whole number that fits in a
+  signed 32-bit integer; `true` and `false` are read as `1` and `0`. A text is a string, of which
+  the watch keeps the first 120 bytes.
+- The whole line, `GB(` and `)` included but not the newline, is at most 640 bytes of ASCII, with
+  any other character written as `\uXXXX`. The phone refuses to send a longer one.
+- The watch hands a message to the app named by its topic. An open app gets it at once. A closed
+  one is started in the background just long enough to run its message handler, without showing
+  it; when the app is not installed, is turned off, has no handler or cannot be started (the heap
+  is too full, say), the message is dropped.
+- Neither side replies, so the sender never learns whether the app heard it. A message the app
+  must not miss is sent again when it matters, as the companion does for SOS on each connection.
+
+For example `GB({"t":"app","ch":"sos","d":{"on":0}})` stops the SOS app's signalling, and
+`GB({"t":"app","ch":"buzz-back","d":{"count":3,"note":"From the phone"}})` reaches the
+`buzz-back` app with a number and a text.
 
 ### Slots (served)
 

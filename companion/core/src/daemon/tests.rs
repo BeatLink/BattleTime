@@ -497,6 +497,43 @@ async fn messages_no_request_took_reach_the_background_jobs() {
     assert_eq!(messages.recv().await.unwrap()["ch"], "remote");
 }
 
+#[tokio::test(start_paused = true)]
+async fn app_messages_reach_their_topic_and_go_out_only_to_a_connected_watch() {
+    use crate::protocol::app_message::AppMessage;
+    let rig = rig_with(Value::Null, a_battletime_watch);
+    let mut heard = rig.daemon.subscribe_topic("demo");
+
+    rig.daemon.on_link_event(
+        "line",
+        json!("{\"t\":\"app\",\"ch\":\"other\",\"d\":{}}\n{\"t\":\"app\",\"ch\":\"demo\",\"d\":{\"n\":4}}\n"),
+    );
+    assert_eq!(
+        heard.recv().await.unwrap(),
+        AppMessage::new("demo").with_number("n", 4)
+    );
+
+    let message = AppMessage::new("demo").with_text("note", "hi");
+    assert!(rig
+        .daemon
+        .send_app_message(&message)
+        .await
+        .unwrap_err()
+        .contains("Connect to a watch"));
+    rig.daemon.connect("AA:BB", "BattleTime").await.unwrap();
+    pass(Duration::from_secs(3)).await;
+    rig.daemon.send_app_message(&message).await.unwrap();
+    assert_eq!(
+        rig.link.sent_of("app"),
+        [json!({ "t": "app", "ch": "demo", "d": { "note": "hi" } })]
+    );
+    assert!(rig
+        .daemon
+        .send_app_message(&AppMessage::new("bad topic"))
+        .await
+        .unwrap_err()
+        .contains("is not a topic"));
+}
+
 // ============================================================================
 // The device's events
 // ============================================================================

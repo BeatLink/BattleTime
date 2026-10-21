@@ -19,13 +19,14 @@ use std::sync::{Arc, Mutex, Weak};
 use futures::future::BoxFuture;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use tokio::sync::{broadcast, watch};
+use tokio::sync::{mpsc, watch};
 
 use super::device::DeviceKind;
 use super::{Daemon, Readiness};
+use crate::protocol::app_message::AppMessage;
 use crate::protocol::remote::{
     read_remote_action, read_remote_buttons, remote_tap_index, sync_remote_layout, AndroidIntent,
-    BuiltinAction, RemoteAction, RemoteButton, RemoteOnWatch,
+    BuiltinAction, RemoteAction, RemoteButton, RemoteOnWatch, REMOTE_CHANNEL,
 };
 use crate::sync::files::FileClient;
 use crate::web_request::{self, WebReply, WebRequest};
@@ -329,7 +330,7 @@ impl Remote {
         );
         daemon
             .runtime()
-            .spawn(remote.clone().hear_taps(daemon.watch_messages()));
+            .spawn(remote.clone().hear_taps(daemon.subscribe_topic(REMOTE_CHANNEL)));
         remote
     }
 
@@ -457,13 +458,8 @@ impl Remote {
     // Taps
     // ========================================================================
 
-    async fn hear_taps(self: Arc<Self>, mut messages: broadcast::Receiver<Value>) {
-        loop {
-            let message = match messages.recv().await {
-                Ok(message) => message,
-                Err(broadcast::error::RecvError::Lagged(_)) => continue,
-                Err(broadcast::error::RecvError::Closed) => return,
-            };
+    async fn hear_taps(self: Arc<Self>, mut messages: mpsc::UnboundedReceiver<AppMessage>) {
+        while let Some(message) = messages.recv().await {
             let Some(index) = remote_tap_index(&message) else {
                 continue;
             };

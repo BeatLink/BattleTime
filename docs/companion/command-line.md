@@ -154,8 +154,13 @@ battletime find on                        # ring the watch; find off stops it
 battletime vibrate 2
 battletime weather Kingston               # send the current weather for a place
 battletime send '{"t":"vibrate","n":1}'   # any message, as JSON
+battletime message sos '{"on":0}'         # an app message for one watch app, by its topic
 battletime listen --allow example.org     # print what the watch sends, answering its apps' web requests
 ```
+
+`message` sends an [app message](../companion-protocol.md#app-messages-served): up to 4 whole
+numbers (`true` and `false` count as 1 and 0) and at most one text, to the app whose id is the topic.
+It is checked before it is sent, and the watch does not answer it.
 
 ## Files and backups
 
