@@ -255,7 +255,10 @@ Docs and comments the code contradicts, as of e30358e4:
    for a moment, and opening paged holds both images then anyway.
 
    Strings stay in the resident image: paging them was built and measured, then left out, as
-   [Paging strings](#paging-strings) explains. Glyph subsets remain.
+   [Paging strings](#paging-strings) explains. The shell's notifications and quick settings left
+   the firmware for `/system/shell`, which saved 3.5 KB; the shell opens and verifies them like any
+   app, so with stages 4 to 6 the firmware ends 0.7 KB smaller than before the loader. Glyph
+   subsets remain.
 8. **Native code compiled from bytecode**, if an app needs the speed.
 
 ## Paging strings

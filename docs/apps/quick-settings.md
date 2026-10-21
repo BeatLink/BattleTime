@@ -2,7 +2,7 @@
 
 A pull-down shade with the time, the battery and six buttons for the settings changed most often:
 brightness, the flashlight, do not disturb, Bluetooth, the always-on screen and Settings. It is
-built into the firmware, from InfiniTime's QuickSettings screen and Android's pull-down shade.
+the shell's own screen, kept in `/system/shell` rather than `/apps`, from InfiniTime's QuickSettings screen and Android's pull-down shade.
 
 ## Using it
 

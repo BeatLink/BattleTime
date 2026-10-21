@@ -78,7 +78,6 @@ battletime-updates = { path = "../services/updates" }
 
 [build-dependencies]
 battletime-boot = { path = "../boot", features = ["build-script"] }
-battletime-compiler = { path = "../compiler" }
 
 [patch.crates-io]
 # trouble-host with discovery responses that never cut a 128-bit UUID short; see third_party/trouble-host/BATTLETIME.md.

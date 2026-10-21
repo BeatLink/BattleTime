@@ -1,7 +1,7 @@
 # Notifications
 
 Lists the latest notifications from the phone and from apps, newest first, and previews each one as
-it arrives. It is built into the firmware, from InfiniTime's Notifications screen and wasp-os's
+it arrives. It is the shell's own screen, kept in `/system/shell` rather than `/apps`, from InfiniTime's Notifications screen and wasp-os's
 notification list.
 
 ## Using it

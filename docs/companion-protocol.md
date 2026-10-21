@@ -442,6 +442,9 @@ Files the firmware needs that are not apps live under `/system`:
   the watch opens no app. `p256` holds the elliptic-curve maths for pairing, whose call 0 is a
   self-test answering how many microseconds one key exchange took. `test` is the one the `module`
   command above calls to prove the loader.
+- `/system/shell/notifications/app.ntapp` and `/system/shell/quick-settings/app.ntapp`: the
+  shell's own screens, compiled from `shell/`, which the firmware opens from there like any app;
+  while one is missing, the swipe that would open it goes back to the face.
 - `/system/verified`: written by the firmware, never the companion. It names each image the
   verifier module passed by its CRC and length, for this firmware build only, so after an update
   each app shows a Checking page the first time it opens. The firmware writes `/system/modules/crashes` itself, counting the crashes

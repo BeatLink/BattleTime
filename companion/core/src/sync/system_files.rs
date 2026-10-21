@@ -1,5 +1,5 @@
 // The files every watch needs that are not apps, such as each accelerometer's configuration and the shared library's
-// icons, which the firmware no longer carries in its shared library, and the native modules. The companion puts any a watch lacks; `npm run import-system-files` copies
+// icons, which the firmware no longer carries in its shared library, the native modules and the shell's screens. The companion puts any a watch lacks; `npm run import-system-files` copies
 // them into `core/system-files/` from the store folder `tools/build_store.py` fills.
 
 use super::files::{FileClient, FileError};
@@ -14,7 +14,7 @@ pub struct SystemFile {
 }
 
 // Each at its path on the watch, as docs/companion-protocol.md lists them.
-pub const SYSTEM_FILES: [SystemFile; 6] = [
+pub const SYSTEM_FILES: [SystemFile; 8] = [
     SystemFile {
         path: "/system/accelerometer/bma421",
         contents: include_bytes!("../../system-files/accelerometer/bma421"),
@@ -38,6 +38,14 @@ pub const SYSTEM_FILES: [SystemFile; 6] = [
     SystemFile {
         path: "/system/modules/verifier",
         contents: include_bytes!("../../system-files/modules/verifier"),
+    },
+    SystemFile {
+        path: "/system/shell/notifications/app.ntapp",
+        contents: include_bytes!("../../system-files/shell/notifications/app.ntapp"),
+    },
+    SystemFile {
+        path: "/system/shell/quick-settings/app.ntapp",
+        contents: include_bytes!("../../system-files/shell/quick-settings/app.ntapp"),
     },
 ];
 
@@ -105,7 +113,9 @@ mod tests {
                 "/system/icons",
                 "/system/modules/p256",
                 "/system/modules/test",
-                "/system/modules/verifier"
+                "/system/modules/verifier",
+                "/system/shell/notifications/app.ntapp",
+                "/system/shell/quick-settings/app.ntapp"
             ]
         );
         let files = watch.files.lock().unwrap();
@@ -121,6 +131,8 @@ mod tests {
             ("/system/modules/p256", SYSTEM_FILES[3].contents),
             ("/system/modules/test", SYSTEM_FILES[4].contents),
             ("/system/modules/verifier", SYSTEM_FILES[5].contents),
+            ("/system/shell/notifications/app.ntapp", SYSTEM_FILES[6].contents),
+            ("/system/shell/quick-settings/app.ntapp", SYSTEM_FILES[7].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 
@@ -137,6 +149,8 @@ mod tests {
             ("/system/modules/p256", SYSTEM_FILES[3].contents),
             ("/system/modules/test", SYSTEM_FILES[4].contents),
             ("/system/modules/verifier", SYSTEM_FILES[5].contents),
+            ("/system/shell/notifications/app.ntapp", SYSTEM_FILES[6].contents),
+            ("/system/shell/quick-settings/app.ntapp", SYSTEM_FILES[7].contents),
         ]);
         let written = put_missing_system_files(&watch.client()).await.unwrap();
 

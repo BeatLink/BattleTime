@@ -104,10 +104,11 @@ flowchart LR
   the notifications and then the face. A step forward onto the screen just left counts as a step
   back. Reaching the face forgets the way back, and so does turning an app on or off, since that
   moves the launcher's places; with nothing recorded, back goes to the face.
-- **Built-in screens.** The notifications and quick settings are app sources in `shell/`, compiled
-  by `firmware/build.rs` with `battletime-compiler` and included in the firmware, about 2.2 KB
-  together. The shell opens them like any app image but straight from flash, never from `/apps`,
-  so they are not installed packages and the launcher never lists them.
+- **The shell's screens.** The notifications and quick settings are app sources in `shell/`,
+  compiled by `tools/build_store.py` into `/system/shell/<id>/app.ntapp`, about 3.4 KB together,
+  which the companion puts with the other system files. The shell opens them like any app image
+  but from there, never from `/apps`, so they are not installed packages and the launcher never
+  lists them. While one is missing, the swipe that would open it goes back to the face.
 
 ### Side button
 

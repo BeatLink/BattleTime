@@ -219,14 +219,14 @@ struct Visit {
     in_quick_ring: bool,
 }
 
-/// The notifications screen, compiled from `shell/notifications` when the firmware is built.
-static NOTIFICATIONS_IMAGE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/notifications.ntapp"));
+/// The notifications screen, compiled from `shell/notifications` into `/system/shell/notifications/app.ntapp`.
+const NOTIFICATIONS_ID: &str = "notifications";
 
 /// The notifications' screen that previews a notification as it arrives, then goes back by itself.
 const NOTIFICATION_PREVIEW_SCREEN: &str = "preview";
 
-/// The quick settings screen, compiled from `shell/quick-settings` when the firmware is built.
-static QUICK_SETTINGS_IMAGE: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/quick-settings.ntapp"));
+/// The quick settings screen, compiled from `shell/quick-settings` into `/system/shell/quick-settings/app.ntapp`.
+const QUICK_SETTINGS_ID: &str = "quick-settings";
 
 /// What a handler asked the shell to do, carried out once the host call returns.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -778,44 +778,31 @@ impl Shell {
 
         self.showing = showing;
         let installed = &self.system.installed;
-        let (id, built_in) = match showing {
-            Showing::Face | Showing::FaceChooser => (installed.face.clone(), None),
-            Showing::Launcher => (installed.has_launcher.then(|| apps::LAUNCHER_ID.into()), None),
-            Showing::App(place) => (installed.listed_id(place).map(alloc::string::String::from), None),
-            Showing::Notifications => (Some("notifications".into()), Some(NOTIFICATIONS_IMAGE)),
-            Showing::QuickSettings => (Some("quick-settings".into()), Some(QUICK_SETTINGS_IMAGE)),
-            Showing::Temporary => (self.temporary_id.as_deref().map(Into::into), None),
+        let id: Option<alloc::string::String> = match showing {
+            Showing::Face | Showing::FaceChooser => installed.face.clone(),
+            Showing::Launcher => installed.has_launcher.then(|| apps::LAUNCHER_ID.into()),
+            Showing::App(place) => installed.listed_id(place).map(alloc::string::String::from),
+            Showing::Notifications => Some(NOTIFICATIONS_ID.into()),
+            Showing::QuickSettings => Some(QUICK_SETTINGS_ID.into()),
+            Showing::Temporary => self.temporary_id.as_deref().map(Into::into),
         };
         restart::set_open_app(id.as_deref().unwrap_or(""));
         let directory = match showing {
             Showing::Temporary => battletime_packages::TEMPORARY_DIRECTORY,
+            Showing::Notifications | Showing::QuickSettings => battletime_packages::SHELL_SCREENS_DIRECTORY,
             _ => battletime_packages::APPS_DIRECTORY,
         };
         // Where the image lies on the flash, from which a paged app's code is read as it runs.
-        let image_path = match (&id, built_in) {
-            (Some(id), None) => Some(battletime_packages::file_in(
-                directory,
-                id,
-                battletime_packages::IMAGE_FILE,
-            )),
-            _ => None,
+        let image_path = id
+            .as_deref()
+            .map(|id| battletime_packages::file_in(directory, id, battletime_packages::IMAGE_FILE));
+        let Some(image) = id.and_then(|id| apps::read_image(self.files, directory, &id)) else {
+            self.open_failed(showing);
+            return;
         };
-        let image = match built_in {
-            Some(_) => None,
-            None => match id.and_then(|id| apps::read_image(self.files, directory, &id)) {
-                Some(image) => Some(image),
-                None => {
-                    self.open_failed(showing);
-                    return;
-                }
-            },
-        };
-        let bytes = match (&image, built_in) {
-            (Some(image), _) => image.get(),
-            (None, Some(bytes)) => bytes,
-            (None, None) => return,
-        };
-        if built_in.is_none() && self.verify_before_opening(bytes, false).is_err() {
+        let bytes = image.get();
+        let image = Some(image);
+        if self.verify_before_opening(bytes, false).is_err() {
             if let Some(image) = image {
                 image.release();
             }

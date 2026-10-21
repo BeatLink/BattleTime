@@ -81,8 +81,9 @@ Start with [README.md](README.md) and [docs/architecture.md](docs/architecture.m
 - An app's pages run left and right in steps, with a wipe and a page bar, never dots. Scrolling up
   and down is only for lists inside a page.
 - Prefer a toggle in Settings or quick settings over a new app that only switches one thing.
-- The firmware carries only the engine, plus the notifications and quick settings screens from
-  `battletime/shell/`, which it compiles in. No other built-in apps, faces, launcher, icons or fonts,
+- The firmware carries only the engine. The notifications and quick settings screens are compiled
+  from `battletime/shell/` into `/system/shell` on external flash, and rare native code such as the
+  verifier is a module in `/system/modules`. No built-in apps, faces, launcher, icons or fonts,
   and no fallback copies of them. Apps live in `/apps` on external flash; the shared library (its
   font and functions) ships inside the firmware image, after the code, where the image header says.
   Its icons and the accelerometers' configuration live in `/system` on external flash, which the

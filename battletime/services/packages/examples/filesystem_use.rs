@@ -5,7 +5,8 @@
 //!
 //! `ID=FILE` installs an app or face image; `/PATH=FILE` copies any other file, such as a saved state.
 //! `--no-theme` leaves out the all-black theme, so the built-in colours show. Both accelerometers'
-//! configuration files, the shared library's icons and the native modules go in, as the companion
+//! configuration files, the shared library's icons, the shell's notifications and quick settings
+//! and the native modules go in, as the companion
 //! app puts them, unless `--no-accelerometer`, `--no-icons` or `--no-modules` leaves them out to
 //! show a watch without them. The modules are built first with `tools/build_modules.sh`, which needs
 //! `nix develop`; without the verifier module the watch opens no app.
@@ -178,6 +179,12 @@ fn main() {
         );
     }
 
+    // The shell's notifications and quick settings, which the firmware opens from the flash like any app.
+    for screen in battletime_packages::SHELL_SCREENS {
+        let image = shell_screen(screen);
+        let path = battletime_packages::file_in(battletime_packages::SHELL_SCREENS_DIRECTORY, screen, battletime_packages::IMAGE_FILE);
+        write_measured(&mut store, &mut steps, &path, &image);
+    }
     if !options.without_modules {
         for (name, bytes) in built_modules() {
             write_measured(&mut store, &mut steps, &format!("/system/modules/{name}"), &bytes);
@@ -214,6 +221,13 @@ fn main() {
     if let Some(image_path) = options.image_path {
         std::fs::write(&image_path, store.into_flash().bytes).expect("the image is written");
     }
+}
+
+/// The shell's screen `id`, compiled from `shell/<id>/app.tsx`.
+fn shell_screen(id: &str) -> Vec<u8> {
+    let source = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../shell").join(id).join("app.tsx");
+    let (_, output) = battletime_compiler::compile_file(&source).unwrap_or_else(|problem| panic!("{id}: {problem}"));
+    output.image.unwrap_or_else(|| panic!("shell/{id} does not compile"))
 }
 
 /// Each native module by name, built for the watch by `tools/build_modules.sh`.

@@ -64,6 +64,12 @@ pub type AppId = heapless::String<MOST_ID_BYTES>;
 /// Temporary apps' folders, `/temp/<id>/`: the phone writes an image and its data there and runs it without installing it.
 pub const TEMPORARY_DIRECTORY: &str = "/temp";
 
+/// The shell's own screens, notifications and quick settings, each in `/system/shell/<id>/app.ntapp`, put there as system files.
+pub const SHELL_SCREENS_DIRECTORY: &str = "/system/shell";
+
+/// The shell's screens by id, each compiled from `shell/<id>/app.tsx`.
+pub const SHELL_SCREENS: [&str; 2] = ["notifications", "quick-settings"];
+
 // ============================================================================
 // Types
 // ============================================================================

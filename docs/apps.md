@@ -9,9 +9,11 @@ Most apps come from [InfiniTime](https://github.com/InfiniTimeOrg/InfiniTime) an
 [wasp-os](https://github.com/wasp-os/wasp-os), merged into one where both had the same app; each
 app's page says where it came from.
 
-## Built into the firmware
+## The shell's own screens
 
-These screens are part of the firmware, so they are always there and never listed in the launcher.
+These screens belong to the shell, so they are always there and never listed in the launcher. The
+companion app puts them in `/system/shell` with the other system files, and the firmware opens them
+from there like any app.
 
 | Screen | What it does |
 |---|---|

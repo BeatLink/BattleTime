@@ -7,7 +7,8 @@ taken from the docs, and `battletime-store.zip` holds all of it in one file, whi
 downloads from a release. The shared library is written beside them for the companion's bundle, but
 stays out of the list and the zip because it ships inside the firmware. The files every watch needs
 that are not apps, such as the accelerometers' configuration, the shared library's icons and the
-native modules `tools/build_modules.sh` builds, go under `system/` at their paths on the watch, for
+native modules `tools/build_modules.sh` builds and the shell's notifications and quick settings
+screens, go under `system/` at their paths on the watch, for
 the companion's bundle too.
 
 Run it inside `nix develop`; plugins also need `npm ci` in `companion/`, or `--no-plugins`.
@@ -39,6 +40,9 @@ LIBRARY_FILE = "shared.ntlib"
 # The compiler writes the library's icons beside it, and the companion puts them at this path.
 ICONS_FILE = "shared.icons"
 ICONS_PATH = "/system/icons"
+# The shell's own screens, each at /system/shell/<id>/app.ntapp, as battletime_packages::SHELL_SCREENS lists them.
+SHELL_SCREENS_PATH = "/system/shell"
+SHELL_SCREENS = ["notifications", "quick-settings"]
 # The native modules, each at /system/modules/<name>.
 MODULES_PATH = "/system/modules"
 # Files every watch needs that are not apps, by their path on the watch, which the companion puts on it.
@@ -230,6 +234,14 @@ def write_zip(out: Path, names: list) -> None:
             archive.writestr(info, (out / name).read_bytes())
 
 
+def build_shell_screens(compiler: Path, out: Path) -> None:
+    """Compiles the shell's notifications and quick settings into `system/shell/<id>/app.ntapp`, where the firmware opens them."""
+    for screen in SHELL_SCREENS:
+        image = out / SHELL_SCREENS_PATH.lstrip("/") / screen / "app.ntapp"
+        image.parent.mkdir(parents=True, exist_ok=True)
+        run([str(compiler), str(BATTLETIME / "shell" / screen / "app.tsx"), "-o", str(image)], BATTLETIME)
+
+
 def copy_system_files(out: Path) -> None:
     """Copies each system file under `system/`, at its path on the watch, for the companion's bundle."""
     for watch_path, source in SYSTEM_FILES.items():
@@ -261,6 +273,7 @@ def main() -> None:
     run([str(compiler), "library", "-o", str(out / LIBRARY_FILE)], BATTLETIME)
 
     copy_system_files(out)
+    build_shell_screens(compiler, out)
     apps = build_apps(compiler, out)
     plugins = [] if arguments.no_plugins else build_plugins(out)
 

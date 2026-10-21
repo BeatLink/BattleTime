@@ -1,8 +1,8 @@
 # Apps and watch faces
 
-The firmware carries no apps, faces or launcher of its own. Everything you see apart from the
-notifications and quick settings is installed from the companion app into the watch's storage, so
-you choose what is on your watch.
+The firmware carries no apps, faces or launcher of its own. Everything you see is put in the
+watch's storage by the companion app: the notifications and quick settings with the files every
+watch needs, and every other app and face as you choose.
 
 ## Installing from the store
 

@@ -82,7 +82,8 @@ Each layer uses only the layers below it.
   bytecode, the host builds its widgets, sends it events and draws what changed, and the UI toolkit
   draws shapes and text into strips of the screen.
 - **Apps and watch faces** are Preact and Signals source, compiled on the computer by the app
-  compiler. None is built into the firmware except the notifications and quick settings screens.
+  compiler. None is built into the firmware; the notifications and quick settings screens are
+  system files in `/system/shell`.
 
 Beside the layers sit the programs that run before the firmware (the bootloader and the
 reloader, which share the flash layout in `battletime-boot`) and the ones that run on a computer (the
@@ -153,7 +154,7 @@ BattleTime/
     │   ├── steps/          battletime-steps: the step history by hour, the trip count and the step log
     │   ├── task_table/     battletime-task-table: the firmware's tasks with their runs and busy time
     │   └── updates/        battletime-updates: stores an uploaded firmware and hands it to the bootloader
-    ├── shell/          the notifications and quick settings, built into the firmware
+    ├── shell/          the notifications and quick settings, put in /system/shell as system files
     ├── simulator/      battletime-simulator: the drivers and the app host in a desktop window
     ├── site/           the website's MkDocs config, front page and colours
     ├── tests/
@@ -372,8 +373,8 @@ ZephyrLabs' watch faces.
 - **One folder each,** named by its id: an app's source is `apps/<id>/app.tsx` and a face's is
   `faces/<id>/face.tsx`.
 - **On the watch.** `tools/build_store.py` compiles each into `dist/store/`, and the companion app
-  installs it in `/apps/<id>/` over Bluetooth ([app-store.md](app-store.md)). Only `shell/`'s
-  notifications and quick settings are compiled into the firmware.
+  installs it in `/apps/<id>/` over Bluetooth ([app-store.md](app-store.md)). `shell/`'s
+  notifications and quick settings go in `/system/shell` with the system files instead.
 - **`sdk/battletime`** is the `battletime` package both import: its widgets, components, icons and
   shared functions, which the compiler turns into the image's parts, and a browser stand-in for the
   watch, so apps type-check and preview in a browser.

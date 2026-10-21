@@ -3,7 +3,8 @@
 The emulated external flash holds a face, the call app and every module, as `filesystem_use`
 writes it, and no record of verified images, so the face opening at start shows the verifier
 module ran. The script starts the firmware with the emulator's Bluetooth bridge and connects
-through `tools/packages_over_hci.py`, without BlueZ. Installing the call app again must answer
+through `tools/packages_over_hci.py`, without BlueZ. Swiping down twice must open the
+notifications and quick settings, which the firmware no longer carries. Installing the call app again must answer
 with its need once the shell verified it, and the face must be back afterwards. Call 0 must answer 385,
 which it reaches only through its heap, its data and function addresses the loader moved, and
 the P-256 module's self-test must find the Bluetooth specification's DHKey; an
@@ -33,6 +34,7 @@ RECORD_MAGIC = 0x48535243
 HARD_FAULT = 2
 OPEN_APP_AT = 4 * (2 + 8)
 SECONDS_TO_CRASH = 10
+SECONDS_FOR_A_SLIDE = 2
 
 
 def call_line(name, call):
@@ -104,6 +106,18 @@ def main():
                                             f"open app {face!r}"))
 
             started = time.monotonic()
+            engine.command('sysbus.serial1.touch Swipe "down"')
+            shown = check_call.wait_for_open_app(engine, open_app_address, open_app_size,
+                                                 lambda current: current == "notifications", seconds=30)
+            # A swipe during the slide in is not heard.
+            time.sleep(SECONDS_FOR_A_SLIDE)
+            engine.command('sysbus.serial1.touch Swipe "down"')
+            quick = check_call.wait_for_open_app(engine, open_app_address, open_app_size,
+                                                 lambda current: current == "quick-settings", seconds=30)
+            results.append(check_call.check("notifications and quick settings open from /system/shell",
+                                            (shown, quick) == ("notifications", "quick-settings"),
+                                            f"open apps {shown!r}, {quick!r}"))
+
             reply = watch.run_command(packages, call_line("test", 0))
             results.append(check_call.check("call 0 answers 385", '"r":385' in reply,
                                             f"{reply} in {time.monotonic() - started:.1f} s"))

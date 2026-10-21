@@ -34,6 +34,8 @@ describe('putMissingSystemFiles', () => {
       '/system/modules/p256',
       '/system/modules/test',
       '/system/modules/verifier',
+      '/system/shell/notifications/app.ntapp',
+      '/system/shell/quick-settings/app.ntapp',
     ]);
   });
 

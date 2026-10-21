@@ -25,7 +25,7 @@ python3 tools/draw_memory_maps.py
 | Bootloader | `0x00000` | 20 KB | The `embassy-boot` bootloader with its status screen and button menu, 18,576 bytes of it used. There is no SoftDevice and no MBR. |
 | Slot table | `0x05000` | 8 KB | Two pages recording where the update and recovery slots sit in the external flash; see [bootloader.md](bootloader.md#the-slot-table). |
 | Boot state | `0x07000` | 4 KB | The bootloader's record of an update in progress, for swapping and rolling back. |
-| Firmware | `0x08000` | 480 KB | The running firmware, to the end of flash: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`, then the shared library. No app, face, icon or font is built into the code apart from the notifications and quick settings screens (about 2.2 KB, compiled from `shell/`); [What fills the firmware](#what-fills-the-firmware) shows what is. The code and the library share the region, so either can grow into the other's room. |
+| Firmware | `0x08000` | 480 KB | The running firmware, to the end of flash: a 256-byte [image header](bootloader.md#the-image-header), then its code, linked to start at `0x08100`, then the shared library. No app, face, icon or font is built into the code, not even the notifications and quick settings screens, which live in `/system/shell` on the external flash; [What fills the firmware](#what-fills-the-firmware) shows what is. The code and the library share the region, so either can grow into the other's room. |
 
 The shared library sits right after the code, on a word boundary, where the image header says. It
 holds what apps share: images, the app host's text font (4,945 B, one font of lines and arcs that
@@ -53,7 +53,7 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 148.9 KB | 49.2 KB |
+| Firmware (start-up, shell, tasks) | 149.0 KB | 49.2 KB |
 | App host (with `battletime-ui`) | 96.0 KB | 0.0 KB |
 | App runtime | 31.8 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 31.7 KB | 41.3 KB |
@@ -65,10 +65,10 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 | Display, graphics and drivers | 8.4 KB | 3.3 KB |
 | Embassy, allocator and Cortex-M | 8.2 KB | 5.0 KB |
 | Updates (DFU) | 3.3 KB | 2.8 KB |
-| Other constants and padding | 29.1 KB | 14.2 KB |
-| **Code and data** | **440.9 KB** | **153.0 KB** |
+| Other constants and padding | 25.4 KB | 14.2 KB |
+| **Code and data** | **437.2 KB** | **153.0 KB** |
 | Shared library, after the code | 6.6 KB | none |
-| Free of the 480 KB region, after its header | 32.3 KB | 326.7 KB |
+| Free of the 480 KB region, after its header | 36.0 KB | 326.8 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -286,9 +286,9 @@ stopwatch, settings, weather, steps, heart, flashlight, music and calculator), w
 | What | Bytes | File sectors |
 |---|---:|---:|
 | `/settings/system` and `/settings/theme`, kept as records | 117 | 0 |
-| `/system/`: the accelerometers' configuration and the shared library's icons, as the companion puts them | 58,448 | 16 |
-| 12 app images, 739 B (flashlight) to 7,233 B (settings); those of 1 KB or less are records | 26,383 | 12 |
-| **In use** | | **28 of 512: 112 KB of 2 MB, and 1,372 B of records in the 256 KB records ring** |
+| `/system/`: the accelerometers' configuration and the shared library's icons, as the companion puts them | 70,459 | 21 |
+| 14 app images, 739 B (flashlight) to 7,233 B (settings); those of 1 KB or less are records | 29,846 | 14 |
+| **In use** | | **33 of 512: 132 KB of 2 MB, and 1,372 B of records in the 256 KB records ring** |
 <!-- /measure_memory:file-system -->
 
 The rest, almost 2 MB of files and most of the records ring, is free for apps, saved state and
