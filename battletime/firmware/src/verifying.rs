@@ -1,7 +1,8 @@
 //! Verifying app images once, through the verifier module, since the firmware carries no verifier of its own.
 //!
 //! The shell verifies an image after its install, and before it first opens one the record in
-//! `/system/verified` does not hold, such as a temporary app or every app after a firmware update.
+//! `/system/verified` does not hold, such as a temporary app, one installed before the verifier
+//! module was on the watch, or every app once a new verifier module brings new rules.
 //! It does so with the open app closed, which leaves the module its room in the heap, and shows a
 //! page saying so while it works. An image that passes is recorded, so it opens at once afterwards.
 
@@ -14,20 +15,29 @@ use battletime_packages::{
 use battletime_runtime::AppImage;
 
 use super::Shell;
-use crate::{apps, clock, packages};
-
-/// What the record of verified images belongs to: this build, so an update verifies every image again.
-const FIRMWARE_ID: u32 = clock::BUILD_TIME as u32;
+use crate::{apps, packages};
 
 const VERIFIER_MODULE: &str = "verifier";
+const VERIFIER_PATH: &str = "/system/modules/verifier";
 const VERIFY_CALL: u32 = 0;
 const VERIFIED: i32 = 0;
 
 impl Shell {
+    /// What the record of verified images belongs to: the verifier module's CRC, so only new rules check every image again.
+    fn verifier_id(&self) -> Option<u32> {
+        let mut header = [0; battletime_module_abi::HEADER_BYTES];
+        let read = self.files.read_part_now(VERIFIER_PATH, 0, &mut header)?;
+        let header = battletime_module_abi::ModuleHeader::parse(&header[..read]).ok()?;
+        Some(header.crc)
+    }
+
     /// Whether the record holds the image, so it runs without being verified now.
     pub(super) fn is_verified(&self, bytes: &[u8]) -> bool {
+        let Some(verifier) = self.verifier_id() else {
+            return false;
+        };
         let record = self.files.read_now(VERIFIED_PATH).unwrap_or_default();
-        ImageMark::of(bytes).is_some_and(|mark| holds(&record, FIRMWARE_ID, mark))
+        ImageMark::of(bytes).is_some_and(|mark| holds(&record, verifier, mark))
     }
 
     /// Verifies the image unless the record holds it, showing that it does while it works.
@@ -37,8 +47,9 @@ impl Shell {
         installing: bool,
     ) -> Result<(), PackageError> {
         let mark = ImageMark::of(bytes).ok_or(PackageError::CodeFails)?;
+        let verifier = self.verifier_id().ok_or(PackageError::CouldNotVerify)?;
         let record = self.files.read_now(VERIFIED_PATH).unwrap_or_default();
-        if holds(&record, FIRMWARE_ID, mark) {
+        if holds(&record, verifier, mark) {
             return Ok(());
         }
         self.show_checking(bytes, installing);
@@ -52,7 +63,7 @@ impl Shell {
         }
         // Written at once: a write queued here, before the next screen paints, once left the shell and the radio waiting.
         self.files
-            .write_now(VERIFIED_PATH, &with_added(&record, FIRMWARE_ID, mark));
+            .write_now(VERIFIED_PATH, &with_added(&record, verifier, mark));
         Ok(())
     }
 

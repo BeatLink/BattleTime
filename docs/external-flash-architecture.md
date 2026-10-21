@@ -20,7 +20,7 @@ the watch.
 - **RAM can run code.** The MPU has one region, the stack guard, with the default map on
   (`firmware/src/stack_guard.rs`), so code copied to RAM runs, best through the 0x0080_0000 code
   alias. Nothing does so today, and nothing is built position-independent.
-- **RAM is the real limit, not flash.** The heap is 30,976 B, the app budget 25,344 B
+- **RAM is the real limit, not flash.** The heap is 30,976 B, the app budget 24,832 B
   (`runtime/src/memory_need.rs`), the largest app needs about 24.5 KB, and the stack has 2.3 to
   3.9 KB spare. Less than 4 KB is unused. Loaded code and resources have to share the app's room.
 
@@ -161,7 +161,7 @@ Docs and comments the code contradicts, as of e30358e4:
   fills zeros without an error. The shell's waits keep this from happening today: the watch
   counted no busy store call (see [Order of work](#order-of-work)).
 - "About 12 KB of RAM per app" (CLAUDE.md, `docs/app-runtime.md`) appears in code only as a test
-  constant (`harness/tests/quality.rs`); the firmware's limit is 25,344 B.
+  constant (`harness/tests/quality.rs`); the firmware's limit is 24,832 B.
 - [architecture-assessment.md](architecture-assessment.md)'s launcher figure, 40 ms on the bus
   down to 3 ms, has no measurement behind it in code or tests.
 
@@ -231,9 +231,12 @@ Docs and comments the code contradicts, as of e30358e4:
    (15,360 B on the flash) checks an image's code once, in the shell, with the open app closed,
    which leaves it room beside even the largest image (Settings, 7.2 KB) within the app budget. An
    install answers only once that ran, behind an Installing page, and an image it passed is named
-   by CRC and length in `/system/verified`, for this firmware build, so it opens at once
-   afterwards; any other image, a temporary app or every app after an update, is verified before
-   its first open behind a Checking page. Closed apps that are not named wait until they open. On
+   by CRC and length in `/system/verified`, for that verifier module, so it opens at once
+   afterwards; any other image, a temporary app, one installed before the module, or every app once
+   a module with new rules arrives, is verified before its first open behind a Checking page. On
+   the watch the first update to this firmware showed Checking on every app, all installed before
+   the module; the record was then still keyed to the firmware build, which would have done the same
+   at every update, so it is keyed to the module's CRC instead. Closed apps that are not named wait until they open. On
    the watch an install answered once verified; after a firmware update the companion puts the
    system files only once the new firmware runs, so the face fails its first open without the
    verifier, and the shell tries it again once the store has changed. The
@@ -265,8 +268,10 @@ Docs and comments the code contradicts, as of e30358e4:
 
    Fonts went last, all of them, with no copy kept: the text font left the shared library for
    `/system/font` (4,945 B), and `app-host/src/font_file.rs` keeps only the glyphs drawn lately in
-   the heap, at most 1,536 B, which the system's share of the memory need now counts (the app budget
-   fell from 26,880 B to 25,344 B; every app still fits). The loader costs 3.9 KB of firmware code,
+   the heap, at most 2,048 B, which the system's share of the memory need now counts (the app budget
+   fell from 26,880 B to 24,832 B; every app still fits). On the watch 1,536 B proved too little:
+   the launcher's names lost letters, as the copy kept the last screen's glyphs before the new
+   one's, so the glyphs a screen just missed now come first. The loader costs 3.9 KB of firmware code,
    so the region gains about 1 KB net. The firmware's own pages draw without text while the font
    cannot be read, the status page as coloured update steps and a progress bar, the help screen as a
    clock of bars; Bluetooth, updates and diagnostics never needed it. The dot-matrix font was

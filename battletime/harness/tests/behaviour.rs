@@ -1213,12 +1213,17 @@ fn tap_package(watch: &mut TestWatch, name: &str) {
     watch.tap_text(name);
 }
 
+/// The most an app may need, in the whole kilobytes, rounded up, that the Software app shows.
+fn budget_kilobytes() -> u32 {
+    battletime_runtime::memory_need::APP_HEAP_BUDGET_BYTES.div_ceil(1024)
+}
+
 #[test]
 fn the_software_app_lists_every_package_with_its_memory() {
     let watch = TestWatch::open_app("software").unwrap();
 
     assert!(
-        watch.shows_text("Each app may use 27 KB"),
+        watch.shows_text(&format!("Each app may use {} KB", budget_kilobytes())),
         "{:?}",
         watch.visible_texts()
     );
@@ -1280,7 +1285,7 @@ fn the_software_app_shows_the_need_against_the_budget_for_an_app_too_large() {
     tap_package(&mut watch, "Atlas");
 
     assert!(
-        watch.shows_text("Needs 41 KB of 27 KB"),
+        watch.shows_text(&format!("Needs 41 KB of {} KB", budget_kilobytes())),
         "{:?}",
         watch.visible_texts()
     );

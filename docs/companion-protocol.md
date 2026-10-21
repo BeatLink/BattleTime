@@ -449,8 +449,9 @@ Files the firmware needs that are not apps live under `/system`:
   shell's own screens, compiled from `shell/`, which the firmware opens from there like any app;
   while one is missing, the swipe that would open it goes back to the face.
 - `/system/verified`: written by the firmware, never the companion. It names each image the
-  verifier module passed by its CRC and length, for this firmware build only, so after an update
-  each app shows a Checking page the first time it opens. The firmware writes `/system/modules/crashes` itself, counting the crashes
+  verifier module passed by its CRC and length, for that verifier module only, so an app shows a
+  Checking page on its next open only if it was installed before the module, or once a module with
+  new rules arrives; a firmware update that keeps the module checks nothing again. The firmware writes `/system/modules/crashes` itself, counting the crashes
   of each module, and runs no module that crashed the watch twice until its file changes. While a
   module runs, a crash records `mod:<name>` as the open app.
 

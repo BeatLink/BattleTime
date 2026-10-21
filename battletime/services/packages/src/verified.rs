@@ -2,8 +2,8 @@
 //!
 //! The watch's firmware carries no verifier: the shell runs the verifier module once per image, after
 //! an install or before the first open, and records the image here by its CRC and length, which
-//! name its whole contents. The record belongs to one firmware build, so an update checks every
-//! image again, against the new firmware's rules.
+//! name its whole contents. The record belongs to one verifier module, by its CRC, so a module with
+//! new rules checks every image again, while a firmware update that keeps the module checks none.
 
 use alloc::vec::Vec;
 
@@ -44,9 +44,9 @@ fn read_u32(bytes: &[u8], at: usize) -> u32 {
     u32::from_le_bytes([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
 }
 
-/// Whether the record, as the file holds it, names this image for the firmware `firmware_id`.
-pub fn holds(file: &[u8], firmware_id: u32, mark: ImageMark) -> bool {
-    if file.len() < HEADER_BYTES || read_u32(file, 0) != firmware_id {
+/// Whether the record, as the file holds it, names this image for the verifier `verifier_id`.
+pub fn holds(file: &[u8], verifier_id: u32, mark: ImageMark) -> bool {
+    if file.len() < HEADER_BYTES || read_u32(file, 0) != verifier_id {
         return false;
     }
     let wanted = mark.encode();
@@ -56,9 +56,9 @@ pub fn holds(file: &[u8], firmware_id: u32, mark: ImageMark) -> bool {
         .contains(&wanted)
 }
 
-/// The record with `mark` added, newest last; one for another firmware starts afresh.
-pub fn with_added(file: &[u8], firmware_id: u32, mark: ImageMark) -> Vec<u8> {
-    let kept: &[[u8; ENTRY_BYTES]] = match file.len() >= HEADER_BYTES && read_u32(file, 0) == firmware_id {
+/// The record with `mark` added, newest last; one for another verifier starts afresh.
+pub fn with_added(file: &[u8], verifier_id: u32, mark: ImageMark) -> Vec<u8> {
+    let kept: &[[u8; ENTRY_BYTES]] = match file.len() >= HEADER_BYTES && read_u32(file, 0) == verifier_id {
         true => file[HEADER_BYTES..].as_chunks::<ENTRY_BYTES>().0,
         false => &[],
     };
@@ -66,7 +66,7 @@ pub fn with_added(file: &[u8], firmware_id: u32, mark: ImageMark) -> Vec<u8> {
     let others: Vec<&[u8; ENTRY_BYTES]> = kept.iter().filter(|entry| **entry != wanted).collect();
     let skipped = (others.len() + 1).saturating_sub(MOST_IMAGES);
     let mut out = Vec::with_capacity(HEADER_BYTES + ENTRY_BYTES * MOST_IMAGES);
-    out.extend_from_slice(&firmware_id.to_le_bytes());
+    out.extend_from_slice(&verifier_id.to_le_bytes());
     out.extend_from_slice(&[0; HEADER_BYTES - 4]);
     for entry in &others[skipped..] {
         out.extend_from_slice(*entry);

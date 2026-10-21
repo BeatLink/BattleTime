@@ -31,7 +31,7 @@ The shared library sits right after the code, on a word boundary, where the imag
 holds what apps share: components, common functions and the preset themes. The app host's text
 font (4,945 B, one font of lines and arcs that every text size scales, which the full firmware's
 status page draws with too) lives on the external flash at `/system/font`, and only the glyphs in
-use are read into the heap, at most 1,536 B. Bosch's configuration file for each
+use are read into the heap, at most 2,048 B. Bosch's configuration file for each
 accelerometer (6,144 B each) lives on the external flash instead, under `/system/accelerometer`. It arrives with each firmware
 update and is never written on the watch. No apps are kept in internal flash; they live in `/apps`
 on the external flash. See [app-runtime.md](app-runtime.md#the-shared-library).
@@ -54,7 +54,7 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 <!-- measure_memory:firmware -->
 | Component | Full build | Recovery build |
 |---|---:|---:|
-| Firmware (start-up, shell, tasks) | 150.3 KB | 49.2 KB |
+| Firmware (start-up, shell, tasks) | 150.4 KB | 49.2 KB |
 | App host (with `battletime-ui`) | 98.7 KB | 0.0 KB |
 | App runtime | 31.8 KB | 0.0 KB |
 | Bluetooth (controller and TrouBLE) | 31.7 KB | 41.4 KB |
@@ -67,9 +67,9 @@ for size (`opt-level = "z"`) in `firmware/Cargo.toml`, while the rest stay at `"
 | Embassy, allocator and Cortex-M | 8.0 KB | 5.0 KB |
 | Updates (DFU) | 3.3 KB | 2.8 KB |
 | Other constants and padding | 25.4 KB | 14.2 KB |
-| **Code and data** | **441.1 KB** | **153.1 KB** |
+| **Code and data** | **441.3 KB** | **153.1 KB** |
 | Shared library, after the code | 1.7 KB | none |
-| Free of the 480 KB region, after its header | 36.9 KB | 326.7 KB |
+| Free of the 480 KB region, after its header | 36.7 KB | 326.7 KB |
 <!-- /measure_memory:firmware -->
 
 The recovery build (`--features recovery`) leaves out the shell, so the app
@@ -490,8 +490,8 @@ it opens one. The parts, in bytes:
 | Paged code, instead of the image | its resident image, a code cache as large as its longest handler or function and at least 1,024, 160 for the cache's path and list, the widget records of its largest screen with 24 for their window, and 6 for each screen in the screen table; or, if more, the whole image and the resident one together, held while it opens | Chosen only when it makes the total smaller; see [app-runtime.md](app-runtime.md#paged-code) |
 | Library icons | each library icon a screen may show at its size, rounded to 4 bytes, plus 16; one a value picks at 1,040; at most 8,192 | The icons the host reads from `/system/icons` for the screen with the most, their sizes from `LIBRARY_ICON_BYTES`, which a compiler test keeps equal to the icons file: an `Image`, `Icon`, `Button` or `Badge` that names one, or takes its image from an expression in an app that can name a library icon at all (a constant from the library's range in its code, a starting value, an image other than its launcher icon that names one, an icon system value or a call to `weather_icon_at`), the notification, Bluetooth and alarm icons for a `StatusIcons`, the charging bolt for a `Battery` and the 8 KB cap for an `AppList`; each icon is at most 1,024 B |
 
-An app's need must fit `APP_HEAP_BUDGET_BYTES`, 25,344 B: the 30,976 B heap less 5,632 B for the
-system while an app is open, 1,536 B of it the text font's glyphs in use. At rest the system holds the shell's index of app ids, about 12 B an
+An app's need must fit `APP_HEAP_BUDGET_BYTES`, 24,832 B: the 30,976 B heap less 6,144 B for the
+system while an app is open, 2,048 B of it the text font's glyphs in use. At rest the system holds the shell's index of app ids, about 12 B an
 app; the rest of its share is for kept notifications (up to about 1 KB), a small file gathered while it uploads (up to
 1 KB), and lines to and from the companion app.
 

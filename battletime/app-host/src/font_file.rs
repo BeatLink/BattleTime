@@ -183,8 +183,8 @@ pub(crate) struct Built {
     pub absent: Vec<u16>,
 }
 
-/// A copy holding the glyphs of `current` that `was_used` marks, then those of `wanted` read from
-/// the file, then the rest of `current`, as far as `most_bytes` allows; none if the file would not read.
+/// A copy holding the glyphs of `wanted` read from the file, then those of `current` that `was_used`
+/// marks, then the rest of `current`, as far as `most_bytes` allows; none if the file would not read.
 pub(crate) fn build(
     current: &[u8],
     was_used: impl Fn(usize) -> bool,
@@ -218,12 +218,12 @@ pub(crate) fn build(
             kept.insert(place, glyph.clone());
         }
     };
-    // Those used lately first, then the new ones, then the rest while room is left.
+    // The ones the screen just missed first, then those used lately, then the rest while room is left.
+    fresh.iter().for_each(&mut keep);
     held.iter()
         .enumerate()
         .filter(|(index, _)| was_used(*index))
         .for_each(|(_, glyph)| keep(glyph));
-    fresh.iter().for_each(&mut keep);
     held.iter()
         .enumerate()
         .filter(|(index, _)| !was_used(*index))

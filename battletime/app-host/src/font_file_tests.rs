@@ -127,6 +127,33 @@ fn used_glyphs_stay_and_unused_ones_make_room() {
 }
 
 #[test]
+fn a_full_copy_makes_room_for_the_glyphs_the_screen_missed() {
+    let mut reads = 0;
+    let all: Vec<u16> = (0x21..0x7F).collect();
+    let full = build(
+        &[],
+        |_| false,
+        &all,
+        &mut reader_over(WHOLE_FONT, &mut reads),
+        MOST_BYTES,
+    )
+    .unwrap();
+    let held = characters(&full.font);
+    let left_out = *all.iter().find(|character| !held.contains(character)).unwrap();
+
+    let rebuilt = build(
+        &full.font,
+        |_| true,
+        &[left_out],
+        &mut reader_over(WHOLE_FONT, &mut reads),
+        MOST_BYTES,
+    )
+    .unwrap();
+
+    assert!(characters(&rebuilt.font).contains(&left_out));
+}
+
+#[test]
 fn an_unreadable_file_builds_nothing() {
     let mut read_nothing = |_: u32, _: &mut [u8]| None;
 
