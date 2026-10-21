@@ -99,6 +99,7 @@ expect no failures
 | `install <id> ...` | Installs these apps, so a launcher lists them. |
 | `tap X Y`, `tap "text"` | Taps a point, or the middle of the shown widget whose text is exactly that. |
 | `long-press ...`, `double-tap ...` | The same, held or tapped twice. |
+| `press X Y`, `release X Y` | Puts a finger down and leaves it there, through any `wait`, then lifts it; either also takes `"text"`. |
 | `drag X1 Y1 X2 Y2` | Presses, drags in steps and lifts. |
 | `swipe up`, `down`, `left`, `right` | A swipe across the middle of the screen. |
 | `button` | Clicks the side button, which goes back a screen. |

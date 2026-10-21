@@ -42,6 +42,7 @@ These need the phone or computer connected through the companion app.
 | [Notes](apps/notes.md) | A read-only text note sent from the companion, such as a shopping list. |
 | [QR code](apps/qr-code.md) | Up to eight QR codes made in the companion, shown for another phone to scan. |
 | [Prompt](apps/prompt.md) | A yes or no question from the companion, answered on the watch. |
+| [SOS](apps/sos.md) | Hold the red button for five seconds to send the phone an SOS, while the light, screen and motor flash SOS. |
 
 ## Health
 

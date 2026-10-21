@@ -1,0 +1,42 @@
+# Every screen of the SOS app, for docs/apps/sos.md: holding, sent, asking to stop, the signals and no phone.
+open app sos
+expect text "Hold for 5 seconds"
+press 120 120               # a finger on the button
+wait 2s
+expect text "Keep holding"
+expect effect vibrate 60
+snapshot holding
+release 120 120             # lifted too soon, so nothing is sent
+expect text "Hold for 5 seconds"
+wait 6s
+press 120 120               # held until the step after five seconds
+wait 5200ms
+release 120 120
+expect text "SOS sent"
+snapshot sent
+wait 1300ms                 # the first dot of the pattern
+snapshot sent-lit
+tap "Stop"
+expect text "Stop the SOS?"
+snapshot asking-to-stop
+tap 173 81                  # Yes
+expect text "Hold for 5 seconds"
+swipe left                  # to the signals page
+wait 1s
+expect text "Vibrate"
+snapshot signals
+tap "Signal"                # signal without the phone
+wait 200ms
+expect text "Stop"
+snapshot signalling
+tap "Stop"
+expect text "Signal"
+set is_phone_connected false
+swipe right                 # back to the button
+wait 1s
+press 120 120
+wait 5200ms
+release 120 120
+expect text "Phone not connected"
+snapshot not-connected
+expect no failures

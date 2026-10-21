@@ -19,6 +19,7 @@ const NEEDED: &[(&str, &[&str])] = &[
     ("apps/prompt", &["phone_messages"]),
     ("apps/remote", &["phone_messages"]),
     ("apps/settings", &["settings"]),
+    ("apps/sos", &["heart_rate", "phone_messages"]),
     ("apps/software", &["settings"]),
     ("apps/about", &["settings"]),
     ("apps/timer", &["wake", "background"]),

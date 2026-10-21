@@ -151,3 +151,38 @@ fn music_leaves_left_and_right_swipes_to_the_shell_so_the_quick_app_ring_steps_o
     assert_eq!(watch.swipe(Direction::Up), EventResult::Handled);
     assert!(watch.failures().is_empty());
 }
+
+#[test]
+fn the_sos_app_sends_on_after_a_full_hold_and_off_only_when_stopped() {
+    let mut watch = TestWatch::open_app("sos").unwrap();
+
+    watch.press(120, 120);
+    watch.advance(std::time::Duration::from_secs(2));
+    watch.release(120, 120);
+    watch.advance(std::time::Duration::from_secs(6));
+    assert!(watch.phone_lines().is_empty(), "{:?}", watch.phone_lines());
+
+    watch.press(120, 120);
+    watch.advance(std::time::Duration::from_millis(5200));
+    watch.release(120, 120);
+    assert_eq!(
+        watch.phone_lines(),
+        ["{\"t\":\"app\",\"ch\":\"sos\",\"d\":{\"on\":1}}\n"]
+    );
+    assert!(watch.shows_text("SOS sent"), "{:?}", watch.visible_texts());
+
+    watch.reopen();
+    assert_eq!(watch.phone_lines().len(), 1, "{:?}", watch.phone_lines());
+    watch.tap_text("Stop");
+    watch.tap(173, 81);
+    assert_eq!(
+        watch.phone_lines()[1],
+        "{\"t\":\"app\",\"ch\":\"sos\",\"d\":{\"on\":0}}\n"
+    );
+    assert!(
+        watch.shows_text("Hold for 5 seconds"),
+        "{:?}",
+        watch.visible_texts()
+    );
+    assert!(watch.failures().is_empty(), "{:?}", watch.failures());
+}

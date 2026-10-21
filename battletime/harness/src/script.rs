@@ -49,6 +49,9 @@ pub enum TouchKind {
     Tap,
     LongPress,
     DoubleTap,
+    /// A finger put down and left there, for a hold that lasts through `wait`.
+    Press,
+    Release,
 }
 
 /// One argument an effect check wants, as text or as a number.
@@ -336,6 +339,8 @@ fn parse_command(words: &[Word]) -> Result<ScriptCommand, String> {
         "tap" => parse_touch(TouchKind::Tap, name, arguments),
         "long-press" => parse_touch(TouchKind::LongPress, name, arguments),
         "double-tap" => parse_touch(TouchKind::DoubleTap, name, arguments),
+        "press" => parse_touch(TouchKind::Press, name, arguments),
+        "release" => parse_touch(TouchKind::Release, name, arguments),
         "drag" => parse_drag(arguments),
         "swipe" => parse_swipe(arguments),
         "button" => expect_no_arguments(name, arguments, ScriptCommand::PressButton),
@@ -827,6 +832,8 @@ impl ScriptRunner<'_> {
                     TouchKind::Tap => watch.tap(point.x, point.y),
                     TouchKind::LongPress => watch.long_press(point.x, point.y),
                     TouchKind::DoubleTap => watch.double_tap(point.x, point.y),
+                    TouchKind::Press => watch.press(point.x, point.y),
+                    TouchKind::Release => watch.release(point.x, point.y),
                 };
             }
             ScriptCommand::Drag { from, to } => {

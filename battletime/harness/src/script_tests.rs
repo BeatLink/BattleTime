@@ -20,6 +20,7 @@ const taps = signal(0);
 const holds = signal(0);
 const double_taps = signal(0);
 const drags = signal(0);
+const fingers_down = signal(0);
 const notifications = signal(0);
 const divisor = signal(1);
 
@@ -43,10 +44,13 @@ function Scripted() {
         onLongPress={() => { holds.value = holds.value + 1; }}
         onDoubleClick={() => { double_taps.value = double_taps.value + 1; }}
         onDrag={() => { drags.value = drags.value + 1; }}
+        onPress={() => { fingers_down.value = fingers_down.value + 1; }}
+        onRelease={() => { fingers_down.value = fingers_down.value - 1; }}
       >
         Count
       </Button>
       <Button onClick={fail}>Fail</Button>
+      <Label>{`Down ${fingers_down.value}`}</Label>
     </Screen>
   );
 }
@@ -458,6 +462,22 @@ double-tap "Count"
 drag 60 138 180 138
 expect text "Taps 1 Holds 1 Doubles 1"
 expect no text "Drags 0"
+"#,
+    );
+
+    assert_eq!(run.failure, None);
+}
+
+#[test]
+fn a_press_stays_down_through_a_wait_until_released() {
+    let run = run_on_scripted_app(
+        r#"
+press "Count"
+wait 3s
+expect text "Down 1"
+release "Count"
+expect text "Down 0"
+expect text "Taps 0 Holds 0"
 "#,
     );
 

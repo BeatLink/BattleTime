@@ -37,7 +37,7 @@ There are 40 apps, ported from InfiniTime and wasp-os and merged where both had 
 apps of BattleTime's own. Each has a page under [apps.md](../apps.md). Among them:
 
 - **Time:** alarm, timer, stopwatch and pomodoro.
-- **Phone:** call, music, weather, navigation, phone finder, notes, remote and QR code.
+- **Phone:** call, music, weather, navigation, phone finder, notes, remote, QR code and SOS.
 - **Health:** steps, heart rate and sports.
 - **Games:** 2048, snake, paddle, puzzle 15, four in a row, Game of Life, dice and paint.
 - **Tools:** calculator, flashlight, metronome, level, motion, beacon, Morse, survival guides, haiku and more.

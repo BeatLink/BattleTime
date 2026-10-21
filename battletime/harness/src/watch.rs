@@ -317,6 +317,16 @@ impl TestWatch {
         self.send(Touch::Click { x, y })
     }
 
+    /// A finger landing and staying down, until `release` lifts it.
+    pub fn press(&mut self, x: i32, y: i32) -> EventResult {
+        self.send(Touch::Press { x, y })
+    }
+
+    /// A finger lifting, after `press` put it down.
+    pub fn release(&mut self, x: i32, y: i32) -> EventResult {
+        self.send(Touch::Release { x, y })
+    }
+
     /// A finger held still until the panel reports a long press, then lifted.
     pub fn long_press(&mut self, x: i32, y: i32) -> EventResult {
         self.send(Touch::Press { x, y });

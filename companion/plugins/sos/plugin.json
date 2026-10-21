@@ -1,0 +1,12 @@
+{
+  "id": "sos",
+  "name": "SOS",
+  "version": "1.0.0",
+  "description": "Sends the phone an SOS after the red button is held for five seconds, and flashes SOS on the light, screen and motor. Its plugin keeps the app's state in sync with the companion and changes it from here.",
+  "app": "sos",
+  "permissions": {
+    "messages": [],
+    "hosts": [],
+    "data": []
+  }
+}
