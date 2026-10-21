@@ -6,6 +6,7 @@ import { join } from 'node:path';
 
 import { zipSync } from 'fflate';
 
+import { SYSTEM_FILES } from '@/bundles/system-files';
 import { MockLegacyDfuTarget } from '@/dfu/mock-legacy-target';
 import { FileService } from '@/protocol/file-service';
 import { NOTE_FONT_PATH, NOTE_PATH } from '@/protocol/notes';
@@ -63,11 +64,7 @@ describe('the flash command', () => {
     expect(session.sent).toEqual([]);
     expect(session.received.image).toEqual(image);
     expect(session.timeWrites).toHaveLength(1);
-    expect([...session.written.keys()]).toEqual([
-      '/system/accelerometer/bma421',
-      '/system/accelerometer/bma425',
-      '/system/icons',
-    ]);
+    expect([...session.written.keys()]).toEqual(SYSTEM_FILES.map((file) => file.path));
   });
 
   it('restarts a watch still on wasp-os into its bootloader first', async () => {
