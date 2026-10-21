@@ -22,6 +22,7 @@ struct FakeChip {
     busy_polls_left: u8,
     /// The busy polls an erase paused by SUSPEND has left, which RESUME carries on.
     suspended_polls: Option<u8>,
+    suspends: usize,
     status_polls: usize,
     programmed_addresses: Vec<u32>,
     erased_addresses: Vec<u32>,
@@ -37,6 +38,7 @@ impl FakeChip {
             busy_polls_after_each_write: 0,
             busy_polls_left: 0,
             suspended_polls: None,
+            suspends: 0,
             status_polls: 0,
             programmed_addresses: Vec::new(),
             erased_addresses: Vec::new(),
@@ -133,6 +135,7 @@ impl SpiDevice for FakeChip {
                 };
             }
             (SUSPEND, []) => {
+                self.suspends += 1;
                 if self.busy_polls_left > 0 {
                     self.suspended_polls = Some(self.busy_polls_left);
                     self.busy_polls_left = 0;
@@ -441,6 +444,65 @@ fn a_suspended_erase_lets_the_chip_read_and_carries_on_when_resumed() {
     assert_eq!(resumed[1], 0);
     assert!(!flash.erase_has_finished().unwrap());
     assert!(flash.erase_has_finished().unwrap());
+}
+
+#[test]
+fn a_read_pauses_an_erase_that_has_run_and_the_next_check_carries_it_on() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 4;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+    flash.start_erasing_sector(0x7000).unwrap();
+    assert!(!flash.erase_has_finished().unwrap());
+
+    let mut bytes = [0u8; 4];
+    flash.read(0x9000, &mut bytes).unwrap();
+    let carried_on = flash.erase_has_finished().unwrap();
+    let mut checks = 1;
+    while !flash.erase_has_finished().unwrap() {
+        checks += 1;
+    }
+
+    assert_eq!(bytes, [0xFF; 4]);
+    assert!(!carried_on, "the check that carries the erase on is not its end");
+    assert!(checks >= 2);
+    let parts = flash.release();
+    assert_eq!(parts.spi.suspends, 1);
+    assert_eq!(parts.spi.erased_addresses, [0x7000]);
+}
+
+#[test]
+fn an_erase_runs_between_two_pauses() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 6;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+    flash.start_erasing_sector(0x7000).unwrap();
+    assert!(!flash.erase_has_finished().unwrap());
+    let mut bytes = [0u8; 4];
+
+    flash.read(0x9000, &mut bytes).unwrap();
+    assert!(!flash.erase_has_finished().unwrap());
+    flash.read(0x9000, &mut bytes).unwrap();
+
+    // Carried on but not yet checked running, so the second read waited for the erase instead.
+    let parts = flash.release();
+    assert_eq!(parts.spi.suspends, 1);
+}
+
+#[test]
+fn sleeping_carries_a_paused_erase_on_and_waits_for_it() {
+    let mut chip = FakeChip::new();
+    chip.busy_polls_after_each_write = 3;
+    let mut flash = ExternalFlash::new(chip, CountingDelay::default()).unwrap();
+    flash.start_erasing_sector(0x7000).unwrap();
+    assert!(!flash.erase_has_finished().unwrap());
+    flash.read(0x9000, &mut [0u8; 4]).unwrap();
+
+    flash.sleep().unwrap();
+
+    let parts = flash.release();
+    assert!(parts.spi.asleep);
+    assert_eq!(parts.spi.suspended_polls, None);
+    assert_eq!(parts.spi.busy_polls_left, 0);
 }
 
 #[test]

@@ -187,11 +187,24 @@ impl DelayNs for BusyWait {
 // Blocking external flash
 // ============================================================================
 
+/// What the chip may be doing that a call started without waiting for it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Running {
+    Nothing,
+    /// A page program, which ends in under a millisecond, so a read waits for it.
+    Program,
+    /// A sector erase, about 50 ms, which a read may pause once it has run since it began or last carried on.
+    Erase {
+        may_pause: bool,
+    },
+    /// An erase a read paused; the next status check carries it on.
+    PausedErase,
+}
+
 pub struct ExternalFlash<FlashSpi, Delay> {
     spi: FlashSpi,
     delay: Delay,
-    /// An erase or page program started without waiting may still be running in the chip.
-    operation_may_be_running: bool,
+    running: Running,
     /// The chip is in deep power-down, where it ignores every command but the one that wakes it.
     asleep: bool,
 }
@@ -207,7 +220,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
         let mut flash = ExternalFlash {
             spi,
             delay,
-            operation_may_be_running: false,
+            running: Running::Nothing,
             asleep: true,
         };
 
@@ -317,7 +330,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
         self.spi
             .write(&command_with_address(SECTOR_ERASE, address))
             .map_err(Error::Spi)?;
-        self.operation_may_be_running = true;
+        self.running = Running::Erase { may_pause: false };
         Ok(())
     }
 
@@ -343,7 +356,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
         self.spi
             .transaction(&mut [Operation::Write(&header), Operation::Write(data)])
             .map_err(Error::Spi)?;
-        self.operation_may_be_running = true;
+        self.running = Running::Program;
         Ok(())
     }
 
@@ -358,7 +371,7 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
     pub fn resume_operation(&mut self) -> Result<(), Error<FlashSpi::Error>> {
         self.spi.write(&[RESUME]).map_err(Error::Spi)?;
         // A read while paused saw the chip idle, so the driver must wait for the erase again.
-        self.operation_may_be_running = true;
+        self.running = Running::Erase { may_pause: false };
         Ok(())
     }
 
@@ -381,28 +394,65 @@ impl<FlashSpi: SpiDevice, Delay: DelayNs> ExternalFlash<FlashSpi, Delay> {
     }
 
     /// Reads the chip's status once, and says whether the erase or program started without waiting is over.
+    ///
+    /// An erase a read paused carries on here, so the erase's owner, which checks every few milliseconds, keeps it going.
     pub fn operation_has_finished(&mut self) -> Result<bool, Error<FlashSpi::Error>> {
-        if self.operation_may_be_running && self.is_busy()? {
-            return Ok(false);
+        let running = self.running;
+        match running {
+            Running::Nothing => Ok(true),
+            Running::PausedErase => {
+                self.resume_operation()?;
+                Ok(false)
+            }
+            Running::Program | Running::Erase { .. } if self.is_busy()? => {
+                if let Running::Erase { .. } = running {
+                    self.running = Running::Erase { may_pause: true };
+                }
+                Ok(false)
+            }
+            Running::Program | Running::Erase { .. } => {
+                self.running = Running::Nothing;
+                Ok(true)
+            }
         }
-        self.operation_may_be_running = false;
-        Ok(true)
     }
 
     /// Wakes the chip and waits for an erase or program started without waiting, since the chip ignores other commands meanwhile.
     fn finish_running_operation(&mut self) -> Result<(), Error<FlashSpi::Error>> {
         self.wake_if_asleep()?;
-        if self.operation_may_be_running {
+        if self.running == Running::PausedErase {
+            self.resume_operation()?;
+        }
+        if self.running != Running::Nothing {
             self.wait_until_ready()?;
-            self.operation_may_be_running = false;
+            self.running = Running::Nothing;
         }
         Ok(())
     }
 
-    /// Checks a read's range and waits for an erase or program still running, for a caller that sends the read itself.
+    /// Checks a read's range and readies the chip for a caller that sends the read itself.
+    ///
+    /// An erase that has run since it began or last carried on is paused for the read, about 0.1 ms,
+    /// rather than waited out, up to 50 ms; the erase's owner carries it on at its next status check.
+    /// A page program is waited out. The read must not fall in the sector being erased.
     pub fn prepare_read(&mut self, offset: u32, length: usize) -> Result<(), Error<FlashSpi::Error>> {
         check_read_or_write(offset, length)?;
-        self.finish_running_operation()
+        self.wake_if_asleep()?;
+        let running = self.running;
+        match running {
+            Running::Nothing | Running::PausedErase => Ok(()),
+            Running::Erase { may_pause: true } if self.is_busy()? => {
+                self.suspend_operation()?;
+                self.wait_until_ready()?;
+                self.running = Running::PausedErase;
+                Ok(())
+            }
+            Running::Program | Running::Erase { .. } => {
+                self.wait_until_ready()?;
+                self.running = Running::Nothing;
+                Ok(())
+            }
+        }
     }
 
     fn is_busy(&mut self) -> Result<bool, Error<FlashSpi::Error>> {

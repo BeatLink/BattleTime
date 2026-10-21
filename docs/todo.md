@@ -398,11 +398,6 @@ over Bluetooth and the button-hold recovery have both worked on that watch.
   app's saved state, blocks every task for up to a sector erase. Make the shell's loop await its
   store calls, and the app host's `read_file`, which `TextFile` and `file_bytes` use while drawing,
   `async`; the open path's recursion (`open` and `open_failed`) needs reworking first.
-- [ ] **Pause an erase for a read.** The XT25F32B suspends an erase in about 94 µs (0x75, resumed
-  with 0x7A, measured in [external-flash-architecture.md](external-flash-architecture.md)), so a
-  read that finds the chip erasing could pause it instead of waiting up to 50 ms. The driver has
-  `suspend_operation`, `resume_operation` and `read_status_registers`; the store and `display_dma`
-  still wait.
 - [ ] **Signed updates**, through embassy-boot's ed25519 check in `UpdateReceiver::finish`.
 - [ ] **Choose what runs over Bluetooth.** Rolling back to the previous firmware or installing the
   recovery firmware needs the bootloader's button menu. A companion command such as

@@ -194,8 +194,12 @@ Docs and comments the code contradicts, as of e30358e4:
      watch by the bench's `measure_erase_suspend`: a sector erase takes 50.0 ms left alone; asked
      to pause (0x75) about 2 ms in, the chip is idle 94 µs later with status register 2's SUS bit
      set, a read while paused returns the right bytes, and after resuming (0x7A) the erase ends
-     48.1 ms later with the sector erased. The emulator does not model it. So a read need wait at
-     most about 0.1 ms behind an erase; the store does not use this yet.
+     48.1 ms later with the sector erased. The emulator does not model it. The driver now pauses
+     an erase for any read that meets one, once the erase has run since it began or last carried
+     on, and the erase's owner carries it on at its next status check, every 2 ms; so a read, such
+     as paged code drawing while the store erases, waits about 0.1 ms instead of up to 50 ms, and
+     reads in a row cannot hold an erase off. Page programs, under a millisecond, are still waited
+     out.
 2. **Load before painting.** Done for the shared library's icons, the largest part: after layout,
    when a list scrolls and when the launcher's icons arrive, the app host reads the library icons
    the shown widgets draw into the heap, up to 8 KB, and drops the rest, so painting never waits on
