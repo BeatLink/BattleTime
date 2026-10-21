@@ -29,8 +29,8 @@
     }
   };
   for (const level of ['warn', 'error']) {
-    const original = console[level].bind(console);
-    console[level] = (...parts) => {
+    const original = window.console[level].bind(window.console);
+    window.console[level] = (...parts) => {
       original(...parts);
       log(level, parts);
     };
