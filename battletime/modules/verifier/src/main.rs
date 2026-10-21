@@ -11,7 +11,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 
-use battletime_module_abi::{module, Host};
+use battletime_module_abi::{module, Bytes, Host};
 use battletime_runtime::{verify_with, AppImage, CheckedFunctions};
 
 // ============================================================================
@@ -38,22 +38,20 @@ fn verify(image_bytes: &[u8]) -> i32 {
 
 /// # Safety
 ///
-/// The firmware calls it once placed, with its own table and `input` holding `input_length` bytes.
+/// The firmware calls it once placed, with its own table and the image as its input.
 #[no_mangle]
 #[link_section = ".text.module_entry"]
 pub unsafe extern "C" fn module_entry(
     host: &'static Host,
     call: u32,
-    input: *const u8,
-    input_length: usize,
-    _output: *mut u8,
-    _output_length: usize,
+    input: &Bytes,
+    _output: &mut Bytes,
 ) -> i32 {
     if !module::start(host) {
         return HOST_TOO_OLD;
     }
     match call {
-        VERIFY => verify(unsafe { core::slice::from_raw_parts(input, input_length) }),
+        VERIFY => verify(unsafe { module::input(input) }),
         _ => UNKNOWN_CALL,
     }
 }

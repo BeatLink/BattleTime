@@ -3,7 +3,9 @@
 
 The layout matches `battletime_module_abi`: magic "NTMD", format and ABI version, the module's name,
 the image's length (code, read-only data and data), the zeroed data after it, the code's length,
-the entry's offset, the relocation count and a CRC-32 of everything after the 48-byte header. Then
+the entry's offset, the relocation count, the stack the module asks for and a CRC-32 of everything
+after the 52-byte header. A module asks for a stack of its own with a `MODULE_STACK_BYTES` static,
+a multiple of 8; without one it runs on the firmware's. Then
 come the image and one word per relocation: the offset of a 32-bit address, or, with the top bit
 set, the offset of a MOVW whose MOVT's offset is the next word. PC-relative relocations need no
 moving and are left out; any other kind is refused, as the firmware could not place it.
@@ -18,10 +20,11 @@ import zlib
 from pathlib import Path
 
 MAGIC = b"NTMD"
-FORMAT_VERSION = 1
-ABI_VERSION = 1
+FORMAT_VERSION = 2
+ABI_VERSION = 2
 NAME_BYTES = 16
-HEADER = struct.Struct("<4sHH16sIIIIII")
+HEADER = struct.Struct("<4sHH16sIIIIIII")
+STACK_SYMBOL = "MODULE_STACK_BYTES"
 ALIGNMENT_BYTES = 8
 MOVE_PAIR_BIT = 1 << 31
 
@@ -75,6 +78,19 @@ def sections_of(elf: bytes) -> list[Section]:
     entry_size, count, names_index = struct.unpack_from("<HHH", elf, 0x2E)
     names = Section(elf, table_at + names_index * entry_size, None)
     return [Section(elf, table_at + index * entry_size, names.offset) for index in range(count)]
+
+
+def symbol_value(elf: bytes, sections: list[Section], wanted: str) -> int | None:
+    """The address of the symbol named `wanted`, or none."""
+    table = next(section for section in sections if section.kind == SHT_SYMTAB)
+    names = sections[table.link]
+    data = table.data(elf)
+    for at in range(0, len(data), 16):
+        name_at, value = struct.unpack_from("<II", data, at)
+        start = names.offset + name_at
+        if elf[start : elf.index(b"\0", start)].decode(errors="replace") == wanted:
+            return value
+    return None
 
 
 def symbol_sections(elf: bytes, sections: list[Section]) -> list[int]:
@@ -143,6 +159,10 @@ def package(elf: bytes, name: str) -> bytes:
     for section in filled:
         image[section.address : section.address + section.size] = section.data(elf)
     relocations = relocation_words(elf, sections, loaded)
+    stack_at = symbol_value(elf, sections, STACK_SYMBOL)
+    stack_bytes = 0 if stack_at is None else struct.unpack_from("<I", image, stack_at)[0]
+    if stack_bytes % 8:
+        sys.exit(f"{STACK_SYMBOL} must be a multiple of 8")
 
     encoded_name = name.encode()
     if not 0 < len(encoded_name) <= NAME_BYTES:
@@ -158,6 +178,7 @@ def package(elf: bytes, name: str) -> bytes:
         text.size,
         entry,
         len(relocations),
+        stack_bytes,
         zlib.crc32(body),
     )
     return header + body

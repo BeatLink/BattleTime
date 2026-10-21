@@ -7,7 +7,7 @@ use core::{
     sync::atomic::{AtomicPtr, Ordering},
 };
 
-use crate::Host;
+use crate::{Bytes, Host};
 
 static HOST: AtomicPtr<Host> = AtomicPtr::new(core::ptr::null_mut());
 
@@ -22,9 +22,38 @@ pub fn host() -> &'static Host {
     unsafe { &*HOST.load(Ordering::Relaxed) }
 }
 
+/// The bytes the firmware lent as a call's input.
+///
+/// # Safety
+///
+/// `bytes` must be the input the firmware passed to the entry, for that call.
+pub unsafe fn input(bytes: &Bytes) -> &[u8] {
+    match bytes.pointer.is_null() {
+        true => &[],
+        false => unsafe { core::slice::from_raw_parts(bytes.pointer, bytes.length) },
+    }
+}
+
+/// The room the firmware lent for a call's output.
+///
+/// # Safety
+///
+/// `bytes` must be the output the firmware passed to the entry, for that call.
+pub unsafe fn output(bytes: &mut Bytes) -> &mut [u8] {
+    match bytes.pointer.is_null() {
+        true => &mut [],
+        false => unsafe { core::slice::from_raw_parts_mut(bytes.pointer, bytes.length) },
+    }
+}
+
 /// Microseconds since start, wrapping.
 pub fn microseconds() -> u32 {
     (host().microseconds)()
+}
+
+/// Fills `out` with random numbers from the chip's generator.
+pub fn random(out: &mut [u8]) {
+    unsafe { (host().random)(out.as_mut_ptr(), out.len()) }
 }
 
 // ============================================================================

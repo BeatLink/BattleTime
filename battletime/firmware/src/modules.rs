@@ -15,7 +15,7 @@ use battletime_flash_store::FileAccess;
 use battletime_module_abi::{
     code_alias,
     crashes::{crash_tag, module_of_crash, CrashCounts, FILE_BYTES},
-    place, Entry, Host, ModuleError, ModuleHeader, ABI_VERSION, ALIGNMENT_BYTES, HEADER_BYTES,
+    place, Bytes, Entry, Host, ModuleError, ModuleHeader, ABI_VERSION, ALIGNMENT_BYTES, HEADER_BYTES,
 };
 use battletime_packages::commands::MOST_MODULE_NAME_BYTES;
 
@@ -83,6 +83,10 @@ extern "C" fn microseconds() -> u32 {
     embassy_time::Instant::now().as_micros() as u32
 }
 
+unsafe extern "C" fn random(out: *mut u8, length: usize) {
+    battletime_bluetooth::read_random_bytes(unsafe { core::slice::from_raw_parts_mut(out, length) });
+}
+
 static HOST: Host = Host {
     length: core::mem::size_of::<Host>() as u32,
     abi_version: ABI_VERSION as u32,
@@ -90,6 +94,7 @@ static HOST: Host = Host {
     free,
     panic: module_panicked,
     microseconds,
+    random,
 };
 
 // ============================================================================
@@ -99,17 +104,24 @@ static HOST: Host = Host {
 /// A boxed future, polled out of line, so a rare call costs the task that awaits it no code or frame.
 pub type OutOfLine<'call, Output> = Pin<Box<dyn Future<Output = Output> + 'call>>;
 
-/// Runs call `call` of the module `name` on `input`, giving what it answers.
+/// Runs call `call` of the module `name` on `input`, with room for its output in `output`, giving what it answers.
 pub fn call<'call>(
     files: &'call mut impl FileAccess,
     name: &'call str,
     call: u32,
     input: &'call [u8],
+    output: &'call mut [u8],
 ) -> OutOfLine<'call, Result<i32, ModuleFailure>> {
-    Box::pin(run(files, name, call, input))
+    Box::pin(run(files, name, call, input, output))
 }
 
-async fn run(files: &mut impl FileAccess, name: &str, call: u32, input: &[u8]) -> Result<i32, ModuleFailure> {
+async fn run(
+    files: &mut impl FileAccess,
+    name: &str,
+    call: u32,
+    input: &[u8],
+    output: &mut [u8],
+) -> Result<i32, ModuleFailure> {
     let path = module_path(name);
     let file_length = files
         .file_length(&path)
@@ -124,7 +136,13 @@ async fn run(files: &mut impl FileAccess, name: &str, call: u32, input: &[u8]) -
         return Err(ModuleFailure::Stopped);
     }
 
-    let words = file_length.max(header.ram_bytes()).div_ceil(ALIGNMENT_BYTES);
+    let stack = match header.stack_bytes {
+        0 => 0,
+        asked => asked as usize + EXCEPTION_FRAME_BYTES,
+    };
+    let words = file_length
+        .max(header.stack_at() + stack)
+        .div_ceil(ALIGNMENT_BYTES);
     let mut ram: Vec<u64> = Vec::new();
     ram.try_reserve_exact(words).map_err(|_| ModuleFailure::NoRoom)?;
     ram.resize(words, 0);
@@ -137,20 +155,96 @@ async fn run(files: &mut impl FileAccess, name: &str, call: u32, input: &[u8]) -
     }
     let ram_address = bytes.as_ptr() as u32;
     let header = place(bytes, file_length, ram_address).map_err(ModuleFailure::Refused)?;
-
-    Ok(unsafe { enter(name, code_alias(ram_address) + header.entry, call, input) })
+    let stack_top = (stack > 0).then(|| ram_address + (header.stack_at() + stack) as u32);
+    Ok(unsafe {
+        enter(
+            name,
+            code_alias(ram_address) + header.entry,
+            call,
+            input,
+            output,
+            stack_top,
+        )
+    })
 }
 
+/// Room below a module's own stack for the registers an interrupt saves on it before its handler moves to the main stack.
+const EXCEPTION_FRAME_BYTES: usize = 128;
+
 /// Calls the placed module's entry at `entry_address`, naming it for the crash record while it runs.
+///
+/// With `stack_top`, the module runs on its own stack: the process stack pointer is set there and
+/// thread mode moves onto it for the call, while interrupts still run on the main stack.
 #[inline(never)]
-unsafe fn enter(name: &str, entry_address: u32, call: u32, input: &[u8]) -> i32 {
+unsafe fn enter(
+    name: &str,
+    entry_address: u32,
+    call: u32,
+    input: &[u8],
+    output: &mut [u8],
+    stack_top: Option<u32>,
+) -> i32 {
     // The code was written as data, so both finish before the first instruction is fetched.
     cortex_m::asm::dsb();
     cortex_m::asm::isb();
-    let entry: Entry = unsafe { core::mem::transmute::<usize, Entry>(entry_address as usize) };
+    let input = Bytes {
+        pointer: input.as_ptr().cast_mut(),
+        length: input.len(),
+    };
+    let mut output = Bytes {
+        pointer: output.as_mut_ptr(),
+        length: output.len(),
+    };
     restart::set_running_module(Some(crash_tag(name)));
-    let answer = unsafe { entry(&HOST, call, input.as_ptr(), input.len(), core::ptr::null_mut(), 0) };
+    let answer = match stack_top {
+        None => {
+            let entry: Entry = unsafe { core::mem::transmute::<usize, Entry>(entry_address as usize) };
+            unsafe { entry(&HOST, call, &input, &mut output) }
+        }
+        Some(top) => unsafe { call_on_own_stack(entry_address, call, &input, &mut output, top) },
+    };
     restart::set_running_module(None);
+    answer
+}
+
+/// Calls the entry with the process stack pointer at `top` and thread mode on it, then goes back to the main stack.
+#[inline(never)]
+unsafe fn call_on_own_stack(
+    entry_address: u32,
+    call: u32,
+    input: &Bytes,
+    output: &mut Bytes,
+    top: u32,
+) -> i32 {
+    let answer: i32;
+    unsafe {
+        core::arch::asm!(
+            // CONTROL's bit 1 picks the process stack for thread mode; r4 and r5 survive the call.
+            "mrs r4, CONTROL",
+            "msr PSP, {top}",
+            "orr r5, r4, #2",
+            "msr CONTROL, r5",
+            "isb",
+            "blx {entry}",
+            "msr CONTROL, r4",
+            "isb",
+            top = in(reg) top,
+            entry = in(reg) entry_address,
+            inout("r0") &HOST as *const Host => answer,
+            inout("r1") call => _,
+            inout("r2") input as *const Bytes => _,
+            inout("r3") output as *mut Bytes => _,
+            // What a call may change under the procedure call standard, the chip's single-precision registers included.
+            out("r4") _,
+            out("r5") _,
+            out("r12") _,
+            out("lr") _,
+            out("s0") _, out("s1") _, out("s2") _, out("s3") _,
+            out("s4") _, out("s5") _, out("s6") _, out("s7") _,
+            out("s8") _, out("s9") _, out("s10") _, out("s11") _,
+            out("s12") _, out("s13") _, out("s14") _, out("s15") _,
+        );
+    }
     answer
 }
 

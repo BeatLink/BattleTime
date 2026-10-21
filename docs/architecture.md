@@ -202,8 +202,10 @@ them and `tools/package_module.py` packs each into a module file. `battletime-mo
 the file's format, `place`, which turns a file read into the heap into a runnable module by moving
 each address in it by where it landed, the `Host` table of firmware calls a module is given, and
 the crash counts that stop a module which keeps crashing. The firmware's `modules.rs` reads, places
-and calls a module when the packages characteristic asks, through the RAM's code alias, and gives
-its heap back when it returns. [external-flash-architecture.md](external-flash-architecture.md)
+and calls a module through the RAM's code alias, and gives its heap back when it returns. A module
+whose `MODULE_STACK_BYTES` asks for a stack of its own, as `p256` does, gets it in the same block,
+and the loader moves thread mode onto it with the process stack pointer for the call, while
+interrupts stay on the main stack. [external-flash-architecture.md](external-flash-architecture.md)
 explains the design; `modules/test` is the module that proves it.
 
 ## App runtime (`runtime`)

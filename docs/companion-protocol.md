@@ -477,8 +477,10 @@ Files the firmware needs that are not apps live under `/system`:
 - `/system/modules/<name>`: a native module, as `tools/package_module.py` packs it: native code
   the firmware reads into its heap and runs only when asked. `verifier` checks an app's code once,
   after its install or before its first open, since the firmware carries no verifier; without it
-  the watch opens no app. `p256` holds the elliptic-curve maths for pairing, whose call 0 is a
-  self-test answering how many microseconds one key exchange took. `test` is the one the `module`
+  the watch opens no app. `p256` holds the elliptic-curve maths for pairing: call 0 is a
+  self-test answering how many microseconds one key exchange took, 1 makes a key pair from the
+  chip's random numbers, 2 works out the DHKey from our private key and the phone's public key,
+  and 3 makes two key pairs and checks that they agree. `test` is the one the `module`
   command above calls to prove the loader.
 - `/system/font`: the text font, `app-host/fonts/geometric.ntfont`, 4,945 bytes. The firmware
   reads only the glyphs a screen draws; while it is missing, apps show no text and the firmware's
@@ -705,7 +707,7 @@ sends each one in its own turn on the file service.
 | `{"c":"launcher"}` | `{"c":"launcher","ok":1}`; reads `/settings/launcher` again and regroups the launcher, as [Launcher](#launcher) describes |
 | `{"c":"run","id":id}` | `{"c":"run","ok":1,"need":need,"room":budget}` once the shell has opened the temporary app in `/temp/<id>`, as [Temporary apps](#temporary-apps-served) describes |
 | `{"c":"stop"}` | `{"c":"stop","ok":1}`; closes the temporary app if one is open |
-| `{"c":"module","name":name,"call":n}` | `{"c":"module","ok":1,"r":answer}` once the native module `/system/modules/<name>` has run call `n` (0 when left out) and returned `answer`, a signed number. `name` is 1 to 12 letters, digits, `-` and `_`. A module that is missing, damaged, built for another firmware, has no room in the heap or crashed the watch twice answers with `err` instead. A call that crashes restarts the watch, so it never answers |
+| `{"c":"module","name":name,"call":n}` | `{"c":"module","ok":1,"r":answer}` once the native module `/system/modules/<name>` has run call `n` (0 when left out) and returned `answer`, a signed number. `name` is 1 to 12 letters, digits, `-` and `_`. The shell runs it with the open app closed, so the module has its room, then shows the face. A module that is missing, damaged, built for another firmware, has no room in the heap or crashed the watch twice answers with `err` instead. A call that crashes restarts the watch, so it never answers |
 
 Before `install` and `enable` turn an app on, the package manager checks that it fits the heap
 beside everything else, and before `enable` turns one off that the watch keeps a launcher and a

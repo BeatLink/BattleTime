@@ -249,12 +249,19 @@ Docs and comments the code contradicts, as of e30358e4:
    index was needed, as paging found. The rest of the install, the facts and id checks, could join
    the module later, for 2 to 4 KB more, while listing, turning apps on and off and the launcher's
    order stay in the firmware, which the shell needs at every turn.
-6. **P-256 as a module:** done ahead of pairing. `modules/p256` (8,548 B on the flash, none in the
+6. **P-256 as a module:** done ahead of pairing. `modules/p256` (10,948 B on the flash, none in the
    firmware) holds the `p256` crate's ECDH, the one TrouBLE's security feature uses. Its call 0
    works out the DHKey of the Bluetooth specification's P-256 sample data and answers the
-   microseconds it took: 225 ms on the watch, from the code alias, and 240 ms in the emulator. Run from the packages command it leaves 2.3 KB of stack spare. Pairing
-   will add calls that take a private key and the phone's public key in and give the DHKey out,
-   and a random key pair, once the host table offers the radio's random numbers.
+   microseconds it took: 225 ms on the watch, from the code alias, and 240 ms in the emulator.
+   Call 1 makes a key pair from the chip's random numbers, which the host table now offers (ABI
+   2), call 2 takes our private key and the phone's public key and gives the DHKey, and call 3
+   checks two fresh key pairs agree (0.97 s in the emulator for four multiplications). Its maths
+   takes about 5 KB of stack, more than the firmware's leaves, so it runs on 5.5 KB of its own:
+   ABI 2 lets a module ask for a stack, which the loader puts after its RAM and moves thread mode
+   onto with the process stack pointer, while interrupts stay on the main stack; the main stack
+   keeps 2.8 KB spare. With that stack the module needs about 16 KB of heap, as the verifier does,
+   so the shell runs a module call with the open app closed, as pairing will while it shows its
+   passkey.
 7. **Paged bytecode functions and glyph subsets**, and the shell's screens as bytecode. Paged code
    is done ([app-runtime.md](app-runtime.md#paged-code)), ahead of the stages before it, while
    apps are still small: an app whose need is smaller that way keeps its expressions, handlers and functions on

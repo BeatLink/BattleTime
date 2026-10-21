@@ -11,7 +11,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use battletime_module_abi::{module, Host};
+use battletime_module_abi::{module, Bytes, Host};
 
 // ============================================================================
 // The calls
@@ -57,10 +57,8 @@ fn sum_of_squares() -> i32 {
 pub unsafe extern "C" fn module_entry(
     host: &'static Host,
     call: u32,
-    _input: *const u8,
-    _input_length: usize,
-    _output: *mut u8,
-    _output_length: usize,
+    _input: &Bytes,
+    _output: &mut Bytes,
 ) -> i32 {
     if !module::start(host) {
         return HOST_TOO_OLD;

@@ -1407,7 +1407,8 @@ impl Shell {
             Change::RunTemporary(id) => self.run_temporary(id),
             Change::StopTemporary => self.stop_temporary(),
             Change::VerifyInstall { id, need_bytes } => self.verify_install(id, need_bytes),
-            Change::None | Change::Apps | Change::RunModule(_) => {}
+            Change::RunModule(module_call) => self.run_module_command(module_call),
+            Change::None | Change::Apps => {}
         }
     }
 

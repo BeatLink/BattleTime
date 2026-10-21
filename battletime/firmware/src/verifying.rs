@@ -8,7 +8,7 @@
 
 use battletime_crash_record::screen::{self, Page};
 use battletime_packages::{
-    commands::install_reply,
+    commands::{install_reply, module_reply, ModuleCall},
     verified::{holds, with_added, ImageMark, VERIFIED_PATH},
     AppId, PackageError, APPS_DIRECTORY,
 };
@@ -82,6 +82,21 @@ impl Shell {
                 let _ = screen::draw(&mut *display.borrow_mut(), &page);
             });
         });
+    }
+
+    /// Runs a module call the phone asked for with every app closed, so the module has its room, answers, then shows the face.
+    pub(super) fn run_module_command(&mut self, module_call: ModuleCall) {
+        self.close_everything();
+        let outcome = match self
+            .files
+            .call_module_now(&module_call.name, module_call.call, &[])
+        {
+            Some(Ok(answer)) => Ok(answer),
+            Some(Err(failure)) => Err(failure.describe()),
+            None => Err("the store is busy"),
+        };
+        packages::send_reply(module_reply(outcome));
+        self.reload_apps();
     }
 
     /// Verifies a newly installed app with every app closed, answers the phone, then shows the face as after any install.

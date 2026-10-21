@@ -27,7 +27,7 @@ fn file_holding(image: &[u8], relocations: &[u32]) -> Vec<u8> {
     let mut name = [0u8; NAME_BYTES];
     name[..4].copy_from_slice(b"test");
     file.extend_from_slice(&name);
-    for word in [image.len() as u32, 8, 8, 1, relocations.len() as u32, 0] {
+    for word in [image.len() as u32, 8, 8, 1, relocations.len() as u32, 0, 0] {
         file.extend_from_slice(&word.to_le_bytes());
     }
     file.extend_from_slice(image);
@@ -62,6 +62,27 @@ fn reads_the_header_a_packaged_module_carries() {
     assert_eq!(header.name(), "test");
     assert_eq!(header.ram_bytes(), 24);
     assert_eq!(header.file_bytes(), file.len());
+}
+
+#[test]
+fn its_stack_follows_its_ram_on_an_alignment_boundary() {
+    let mut file = module_file(&[]);
+    file[STACK_BYTES_AT..STACK_BYTES_AT + 4].copy_from_slice(&1024u32.to_le_bytes());
+
+    let header = ModuleHeader::parse(&file).unwrap();
+
+    assert_eq!(header.stack_at(), 24);
+    assert_eq!(header.running_bytes(), 24 + 1024);
+}
+
+#[test]
+fn refuses_a_stack_too_large_or_out_of_line() {
+    for stack_bytes in [MOST_STACK_BYTES + 8, 1020] {
+        let mut file = module_file(&[]);
+        file[STACK_BYTES_AT..STACK_BYTES_AT + 4].copy_from_slice(&stack_bytes.to_le_bytes());
+
+        assert_eq!(ModuleHeader::parse(&file), Err(ModuleError::BadStack));
+    }
 }
 
 #[test]

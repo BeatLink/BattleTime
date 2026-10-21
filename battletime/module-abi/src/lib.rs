@@ -21,7 +21,7 @@ use battletime_boot::migration::{crc32, CRC32_INITIAL};
 // ============================================================================
 
 /// The ABI a module is built for; a module built for another is refused.
-pub const ABI_VERSION: u16 = 1;
+pub const ABI_VERSION: u16 = 2;
 
 /// The firmware calls a module may make, in an order that only grows, so `length` tells which it has.
 #[repr(C)]
@@ -37,25 +37,38 @@ pub struct Host {
     pub panic: extern "C" fn() -> !,
     /// Microseconds since start, wrapping.
     pub microseconds: extern "C" fn() -> u32,
+    /// Fills `length` bytes from `out` with random numbers from the chip's generator, for keys.
+    pub random: unsafe extern "C" fn(out: *mut u8, length: usize),
+}
+
+/// A run of bytes the firmware lends a call: its input, or room for its output.
+#[repr(C)]
+pub struct Bytes {
+    pub pointer: *mut u8,
+    pub length: usize,
+}
+
+impl Bytes {
+    /// No bytes, for a call that takes or gives none.
+    pub const EMPTY: Bytes = Bytes {
+        pointer: core::ptr::null_mut(),
+        length: 0,
+    };
 }
 
 /// A module's entry: the call's number, its input and room for its output; a negative answer is a failure.
-pub type Entry = unsafe extern "C" fn(
-    host: &'static Host,
-    call: u32,
-    input: *const u8,
-    input_length: usize,
-    output: *mut u8,
-    output_length: usize,
-) -> i32;
+///
+/// Four arguments, so all go in registers, whichever stack the module runs on.
+pub type Entry =
+    unsafe extern "C" fn(host: &'static Host, call: u32, input: &Bytes, output: &mut Bytes) -> i32;
 
 // ============================================================================
 // The module file
 // ============================================================================
 
 pub const MAGIC: [u8; 4] = *b"NTMD";
-pub const FORMAT_VERSION: u16 = 1;
-pub const HEADER_BYTES: usize = 48;
+pub const FORMAT_VERSION: u16 = 2;
+pub const HEADER_BYTES: usize = 52;
 /// The longest module name, which the crash record also holds.
 pub const NAME_BYTES: usize = 16;
 /// The alignment the firmware gives a module's RAM, which no section of it may exceed.
@@ -69,7 +82,11 @@ const ZEROED_BYTES_AT: usize = 28;
 const CODE_BYTES_AT: usize = 32;
 const ENTRY_AT: usize = 36;
 const RELOCATION_COUNT_AT: usize = 40;
-const CRC_AT: usize = 44;
+const STACK_BYTES_AT: usize = 44;
+const CRC_AT: usize = 48;
+
+/// The most stack a module may ask for.
+pub const MOST_STACK_BYTES: u32 = 8 * 1024;
 
 /// Why a module file was refused.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -84,6 +101,8 @@ pub enum ModuleError {
     BadEntry,
     /// The file names another module than the one asked for.
     OtherName,
+    /// The stack it asks for is too large or out of line.
+    BadStack,
 }
 
 impl ModuleError {
@@ -97,6 +116,7 @@ impl ModuleError {
             ModuleError::BadRelocation => "the module has an address it cannot place",
             ModuleError::BadEntry => "the module's entry lies outside its code",
             ModuleError::OtherName => "the module file holds another module",
+            ModuleError::BadStack => "the module asks for a stack it cannot have",
         }
     }
 }
@@ -114,6 +134,8 @@ pub struct ModuleHeader {
     /// Where the entry lies in the image, with the Thumb bit set.
     pub entry: u32,
     pub relocation_count: u32,
+    /// The stack the module runs on, in its own RAM, or 0 to run on the firmware's.
+    pub stack_bytes: u32,
     pub crc: u32,
 }
 
@@ -149,8 +171,12 @@ impl ModuleHeader {
             code_bytes: read_u32(bytes, CODE_BYTES_AT),
             entry: read_u32(bytes, ENTRY_AT),
             relocation_count: read_u32(bytes, RELOCATION_COUNT_AT),
+            stack_bytes: read_u32(bytes, STACK_BYTES_AT),
             crc: read_u32(bytes, CRC_AT),
         };
+        if header.stack_bytes > MOST_STACK_BYTES || header.stack_bytes % ALIGNMENT_BYTES as u32 != 0 {
+            return Err(ModuleError::BadStack);
+        }
         let entry_offset = header.entry & !1;
         if header.entry & 1 == 0
             || entry_offset >= header.code_bytes
@@ -175,6 +201,16 @@ impl ModuleHeader {
     /// The RAM the placed module takes: its image and zeroed data.
     pub fn ram_bytes(&self) -> usize {
         self.image_bytes as usize + self.zeroed_bytes as usize
+    }
+
+    /// Where its stack starts in its RAM, on an alignment boundary after its image and zeroed data.
+    pub fn stack_at(&self) -> usize {
+        self.ram_bytes().next_multiple_of(ALIGNMENT_BYTES)
+    }
+
+    /// The RAM the module needs while it runs: its image, zeroed data and stack.
+    pub fn running_bytes(&self) -> usize {
+        self.stack_at() + self.stack_bytes as usize
     }
 }
 

@@ -270,7 +270,8 @@ fn read_device_address() -> [u8; ADDRESS_LENGTH] {
     [low[0], low[1], low[2], low[3], high[0], high[1] | 0xC0]
 }
 
-fn read_random_bytes(destination: &mut [u8]) {
+/// Fills `destination` from the chip's random number generator, with its bias correction on.
+pub fn read_random_bytes(destination: &mut [u8]) {
     let generator = pac::RNG;
     generator.config().write(|config| config.set_dercen(true));
     generator.tasks_start().write_value(1);

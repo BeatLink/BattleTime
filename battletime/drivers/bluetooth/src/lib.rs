@@ -24,7 +24,7 @@ pub use packets::Channel;
 
 #[cfg(target_os = "none")]
 pub use nrf_radio::{
-    check_supervision, radio_progress, start, NrfRadio, RadioInterruptHandler, RadioPeripherals,
+    check_supervision, radio_progress, read_random_bytes, start, NrfRadio, RadioInterruptHandler, RadioPeripherals,
 };
 
 #[cfg(test)]

@@ -1023,7 +1023,7 @@ impl Files {
         call: u32,
         input: &[u8],
     ) -> Option<Result<i32, crate::modules::ModuleFailure>> {
-        self.now(|store| block_on(crate::modules::call(store, name, call, input)))
+        self.now(|store| block_on(crate::modules::call(store, name, call, input, &mut [])))
     }
 
     pub fn read_now(&self, path: &str) -> Option<alloc::vec::Vec<u8>> {
@@ -1390,17 +1390,7 @@ impl Files {
     async fn run_packages_command_on(&self, store: &mut WatchStore, line: &[u8]) -> Change {
         let library_version =
             crate::apps::shared_library().and_then(battletime_packages::library::library_version);
-        let change =
-            battletime_packages::commands::handle_command(line, store, library_version, &mut ToBluetooth)
-                .await;
-        let Change::RunModule(module_call) = change else {
-            return change;
-        };
-        let outcome = crate::modules::call(store, &module_call.name, module_call.call, &[]).await;
-        let reply =
-            battletime_packages::commands::module_reply(outcome.map_err(|failure| failure.describe()));
-        packages::send_reply(reply);
-        Change::None
+        battletime_packages::commands::handle_command(line, store, library_version, &mut ToBluetooth).await
     }
 
     /// Counts a crash inside a native module that this start found, so one that keeps crashing stops being run.
@@ -1539,11 +1529,12 @@ pub async fn run_storage(files: &'static Files) {
                 foreground::wait_for_a_pause().await;
                 let change = alloc::boxed::Box::pin(files.run_packages_command(&line)).await;
                 match change {
-                    Change::None | Change::RunModule(_) => {}
+                    Change::None => {}
                     Change::Apps => packages::CHANGED.signal(change),
-                    Change::RunTemporary(_) | Change::StopTemporary | Change::VerifyInstall { .. } => {
-                        packages::TEMPORARY.signal(change)
-                    }
+                    Change::RunTemporary(_)
+                    | Change::StopTemporary
+                    | Change::VerifyInstall { .. }
+                    | Change::RunModule(_) => packages::TEMPORARY.signal(change),
                 }
             }
         }

@@ -7,7 +7,8 @@ through `tools/packages_over_hci.py`, without BlueZ. Swiping down twice must ope
 notifications and quick settings, which the firmware no longer carries. Installing the call app again must answer
 with its need once the shell verified it, and the face must be back afterwards. Call 0 must answer 385,
 which it reaches only through its heap, its data and function addresses the loader moved, and
-the P-256 module's self-test must find the Bluetooth specification's DHKey; an
+the P-256 module's self-test must find the Bluetooth specification's DHKey, and two key pairs
+from the chip's random numbers must agree on theirs; an
 unknown call must answer -1, and a missing module an error. Call 2 then runs an undefined
 instruction, and the crash record in RAM must name a HardFault inside `mod:test`.
 
@@ -124,6 +125,11 @@ def main():
             reply = watch.run_command(packages, call_line("p256", 0))
             answer = reply.split('"r":')[-1].rstrip("}") if '"r":' in reply else ""
             results.append(check_call.check("the P-256 module works out the specification's DHKey",
+                                            answer.lstrip("-").isdigit() and int(answer) > 0,
+                                            f"{reply}, microseconds when positive"))
+            reply = watch.run_command(packages, call_line("p256", 3))
+            answer = reply.split('"r":')[-1].rstrip("}") if '"r":' in reply else ""
+            results.append(check_call.check("two random P-256 key pairs reach the same DHKey",
                                             answer.lstrip("-").isdigit() and int(answer) > 0,
                                             f"{reply}, microseconds when positive"))
             reply = watch.run_command(packages, call_line("test", 7))
