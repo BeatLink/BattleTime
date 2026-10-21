@@ -238,7 +238,9 @@ pub(crate) fn build(
 // The copy the text font draws from
 // ============================================================================
 
-const MOST_MISSING: usize = 32;
+const MOST_MISSING: usize = 64;
+/// The most times a layout or a page reads glyphs and goes again, for screens that miss more than one read takes.
+pub const MOST_PASSES: usize = 4;
 const MOST_ABSENT: usize = 16;
 /// The copy's glyphs whose use is tracked; it never holds more than this many.
 const TRACKED_GLYPHS: usize = 128;
@@ -312,7 +314,7 @@ pub fn has_missing_glyphs() -> bool {
     MISSING.iter().any(|slot| slot.load(Ordering::Relaxed) != 0)
 }
 
-/// Reads the glyphs lookups missed and builds the copy again; gives whether the font changed, so the caller lays out or draws again.
+/// Reads the glyphs lookups missed and builds the copy again; gives whether it gained any, so the caller lays out or draws again.
 ///
 /// Call it only where no text is being measured or drawn, since the old copy goes away.
 pub fn load_missing_glyphs() -> bool {
@@ -344,8 +346,13 @@ pub fn load_missing_glyphs() -> bool {
         let place = NEXT_ABSENT.fetch_add(1, Ordering::Relaxed) % MOST_ABSENT;
         ABSENT[place].store(character as u32, Ordering::Relaxed);
     }
+    // When no missed glyph found room, nothing would draw differently, so the caller need not go again.
+    let gained = glyphs_of(&built.font)
+        .iter()
+        .any(|glyph| wanted.contains(&glyph.character))
+        || current.is_empty();
     install(built.font);
-    true
+    gained
 }
 
 /// The copy the text font draws from now.
